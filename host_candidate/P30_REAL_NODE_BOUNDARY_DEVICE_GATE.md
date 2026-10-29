@@ -52,10 +52,33 @@ attestation. Android isolated_app AID ranges 99000..99999 make Node 99050
 compatible with genuine isolated UID, but strict proof remains P30's
 Binder Message.sendingUid / Worker / Child three-way comparison.
 
-P30_BUILD=CI_PENDING
-P30_PRIVATE_DRAFT=CI_PENDING
+P30_BUILD=PASS_ORIGINAL_ELF_16K_SIGNING_ZERO_PERMISSIONS
+P30_PRIVATE_DRAFT=PASS_PRIVATE_UNPUBLISHED_THREE_ASSETS
 P30_ANDROID_API36_REAL_NODE_CHILD_UID_MATCH=NOT_TESTED
 P30_NODE_TCP_EACCES_REPRODUCED=NOT_TESTED
 P30_CANARY_HOST_POSITIVE_CONTROL=NOT_TESTED
 P30_DSH_V139_FULL_HOST_ISOLATION=NOT_PROVEN
 P30_DSH_V139_RELEASE=BLOCKED
+
+## P30 actual build, Draft verification and P29 clean-up (2026-10-29)
+
+Real GitHub Actions job PASS:
+https://github.com/u2584604327-a11y/dshe/actions/runs/40872161286
+
+- Original v138 signed APK and derived 11 ARM64 ELF SHA checks PASS.
+- Four independent static gates: exact 11 native libs, ZIP STORED 16KiB
+  alignment, explicit zero permissions, and new independent P30 package.
+- Java API34+ compilation, APK signature, zipalign and signed permissions PASS.
+- Private GitHub Draft Release created with exact 3 assets (APK ~97 MB,
+  checksum and README) and verified unpublished.
+- P29 completed Draft deleted after confirming all expected old assets.
+  Private GitHub release query observed one P30 Draft and no P29 Draft.
+- P30 owner-initiated Android36 real device retest has NOT yet happened.
+- Neither original DSH installer nor production signing keys changed.
+
+Owner-only verified private link:
+https://github.com/u2584604327-a11y/dshe/releases/tag/untagged-823b90dcb874119d3fca
+
+P30_REAL_ANDROID36_BINDER_CHILD_UID_CANARY=AWAITING_OWNER_REPORT
+P30_ORIGINAL_NODE_FILES_NETWORK_PERMISSIONS=AWAITING_OWNER_REPORT
+P30_FULL_DSH_HOST_AND_V139=BLOCKED
