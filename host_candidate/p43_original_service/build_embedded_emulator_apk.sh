@@ -24,7 +24,7 @@ python host_candidate/p43_original_service/inject_original_manifest.py inject \
 # but its rebuilt APK contains a *plain-text* Manifest! Compile ONLY that XML
 # with aapt, then replace the invalid plaintext ZIP member with binary AXML.
 "$BT/aapt" package -f -M "$DIR/decoded/AndroidManifest.xml" \
-  -I "$SDK/platforms/android-35/android.jar" -F "$DIR/manifest-only.apk"
+  -I "$SDK/platforms/android-35/android.jar" -I "$ORIGINAL" -F "$DIR/manifest-only.apk"
 python - "$DIR/manifest-only.apk" "$DIR/manifest-binary" <<'PY'
 import pathlib,sys,zipfile
 with zipfile.ZipFile(sys.argv[1]) as z:
