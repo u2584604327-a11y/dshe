@@ -91,7 +91,13 @@ public final class DshInstrumentation extends Instrumentation {
       Class.forName("com.dsh.p1.ApprovedDiagnosticSendGate",true,activity.getClassLoader());
 
       phase="NATIVE_PINNED_QUEUE";
-      File root=activity.getFilesDir();
+      // Use a native-owned 0700 root, never the shared app filesDir itself.
+      // P5 correctly rejects group/other writable roots rather than
+      // silently weakening symlink/ownership hardening.
+      File root=new File(activity.getFilesDir(),"p5_native_private_root");
+      if(!root.isDirectory()&&!root.mkdir())
+        throw new AssertionError("Could not create disposable native root");
+      Os.chmod(root.getAbsolutePath(),0700);
       folder=new File(root,"p5_instrumentation_fixture");
       if(!folder.isDirectory()&&!folder.mkdir())
         throw new AssertionError("Could not create disposable fixture directory");
@@ -158,6 +164,10 @@ public final class DshInstrumentation extends Instrumentation {
         for(String name:new String[]{"review-safe.json","review-untrusted.json"})
           new File(folder,name).delete();
         folder.delete();
+        // The dedicated fixture root is ours and contains no app-owned data.
+        File privateRoot=folder.getParentFile();
+        if(privateRoot!=null&&"p5_native_private_root".equals(privateRoot.getName()))
+          privateRoot.delete();
       }
     }
   }
