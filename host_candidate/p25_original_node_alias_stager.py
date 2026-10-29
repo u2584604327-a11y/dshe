@@ -63,14 +63,20 @@ def main():
  if len(expected)!=EXPECTED_NON_PLATFORM:raise ValueError("LIBRARY_COUNT_CHANGED")
  original_meta={}
  soname_mismatches=[]
+ original_missing_sonames=[]
  for name in sorted(expected):
   if not re.fullmatch(r"lib[A-Za-z0-9_.+-]+\.so(?:\.[0-9][0-9.]*)?",name):
    raise ValueError("BAD_ORIGINAL_NEEDED_SONAME")
   blob=(source/name).read_bytes()
   sonames,needed=inspect(blob)
   if len(sonames)!=1 or sonames[0]!=name:
-   observed=sonames[0] if len(sonames)==1 else "MISSING_OR_MULTIPLE"
-   soname_mismatches.append({"needed_name":name,"actual_soname":observed})
+   # Exact original v138 exception: libsqlite3.so has no DT_SONAME.
+   # Bionic may use basename fallback, but actual ARM64 resolution is NOT PROVEN.
+   if name=="libsqlite3.so" and len(sonames)==0:
+    original_missing_sonames.append(name)
+   else:
+    observed=sonames[0] if len(sonames)==1 else "MISSING_OR_MULTIPLE"
+    soname_mismatches.append({"needed_name":name,"actual_soname":observed})
   if any(dep not in expected and dep not in ANDROID_PLATFORM for dep in needed):
    raise ValueError("TRANSITIVE_NEEDED_NOT_PRESENT_"+name)
   original_meta[name]={"sha256":sha256(blob),"needed":needed}
@@ -112,7 +118,7 @@ def main():
   if sha256(dest_path.read_bytes())!=original_meta[name]["sha256"]:
    raise ValueError("ALIAS_COPY_CHANGED_ORIGINAL_ELF_BYTES")
   sonames,_=inspect(dest_path.read_bytes())
-  if sonames!=[name]:
+  if sonames!=[name] and not (name=="libsqlite3.so" and sonames==[]):
    raise ValueError("ALIAS_COPY_CHANGED_EMBEDDED_SONAME")
  if sha256((destination/NODE).read_bytes())!=ORIGINAL_NODE_SHA:
   raise ValueError("ORIGINAL_EXECUTABLE_BYTES_CHANGED_ON_ALIAS_STAGE")
@@ -124,6 +130,8 @@ def main():
   "versioned_soname_count":len(versioned),
   "all_alias_filenames_end_with_so":True,
   "all_dependency_ELF_bytes_and_internal_sonames_preserved":True,
+  "original_missing_soname_exception":original_missing_sonames,
+  "original_libsqlite3_filename_fallback_runtime":"NOT_TESTED",
   "soname_to_installer_filename":alias,
   "original_library_sha256":{n:original_meta[n]["sha256"] for n in sorted(expected)},
   "preload_dependency_first_order_versioned":preload,
@@ -140,6 +148,7 @@ def main():
  print("P25_ORIGINAL_ARM64_NODE_BYTES_UNCHANGED=PASS")
  print("P25_ORIGINAL_10_LIBRARY_BYTES_SONAMES_PRESERVED=PASS")
  print("P25_ANDROID_INSTALLER_EXTRACTABLE_ALIAS_NAMES=PASS_10")
+ print("P25_ORIGINAL_LIBSQLITE3_HAS_NO_SONAME=STATIC_EXCEPTION_RUNTIME_BLOCKED")
  print("P25_VERSIONED_DEPENDENCY_PRELOAD_PLAN=STATIC_PASS_6")
  print("P25_ORIGINAL_ARM64_NODE_ISOLATED_BOOT=NOT_TESTED")
 if __name__=="__main__":main()
