@@ -144,8 +144,12 @@ def inspect(original):
         if not observed.get(pc, "").startswith(expected):
             raise ValueError("P39_ORIGINAL_ENGINE_LIFECYCLE_DRIFT_" + str(pc))
     starts = [c for c in callsites if c["callee"] == "Ljava/lang/ProcessBuilder;->start()"]
-    if len(starts) != 1 or starts[0]["method"] != TARGET or starts[0]["pc"] != START_PC:
-        raise ValueError("P39_ENGINE_START_NOT_UNIQUE")
+    primary_starts = [c for c in starts
+                      if c["method"] == TARGET and c["pc"] == START_PC]
+    if len(primary_starts) != 1:
+        raise ValueError("P39_PRIMARY_ENGINE_SPAWN_ANCHOR_NOT_UNIQUE")
+    # P35 proved one start in a selected coroutine, NOT in all EngineManager
+    # closures. Preserve all other starts as separate hard-blocked callsites.
     callsites.sort(key=lambda c: (c["method"], c["pc"]))
     # Focus: exact Java Process methods needed by original engine, not all app.
     needed = sorted({c["callee"] for c in callsites
@@ -160,6 +164,11 @@ def inspect(original):
         "engine_family_methods_inspected": len(selected),
         "engine_family_methods_with_process_calls": len(method_summaries),
         "direct_interesting_callsite_count": len(callsites),
+        "engine_family_processbuilder_start_sites_total": len(starts),
+        "other_engine_family_processbuilder_start_sites": [
+            c for c in starts if c["method"] != TARGET or c["pc"] != START_PC
+        ][:40],
+        "other_engine_start_sites_must_not_be_globally_hooked": True,
         "original_java_process_and_stream_apis": needed,
         "engine_method_summaries": method_summaries[:100],
         "exact_direct_callsites": callsites[:250],
@@ -188,6 +197,8 @@ def main():
         "P39_PRIMARY_PROCESS_START_OPCODE": r["primary_start_opcode"],
         "P39_ENGINE_FAMILY_METHODS_SCANNED": r["engine_family_methods_inspected"],
         "P39_PROCESS_SURFACE_CALLSITES": r["direct_interesting_callsite_count"],
+        "P39_ENGINE_FAMILY_PROCESSBUILDER_START_SITES": r["engine_family_processbuilder_start_sites_total"],
+        "P39_OTHER_PROCESSBUILDER_START_SITES": r["other_engine_family_processbuilder_start_sites"],
         "P39_REQUIRED_JAVA_PROCESS_METHODS": r["original_java_process_and_stream_apis"],
         "P39_SOURCE_ONLY_NO_ART_DEX_PATCH": "YES",
         "P39_NATIVE_DSH_HOST_WIRING": "NOT_IMPLEMENTED",
