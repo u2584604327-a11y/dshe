@@ -1,6 +1,8 @@
 name: APK baseline identity audit (no signing)
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       baseline:
@@ -20,17 +22,25 @@ concurrency:
 
 jobs:
   identity-only:
+    if: github.event_name == 'workflow_dispatch' || github.event.release.tag_name == 'dsh-baseline-v135' || github.event.release.tag_name == 'dsh-p0-v138'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      BASELINE: ${{ inputs.baseline }}
+      BASELINE: ${{ inputs.baseline || 'auto' }}
     steps:
       - name: Download original release asset (private repository only)
         shell: bash
         run: |
           set -euo pipefail
+          if [ "$BASELINE" = auto ]; then
+            case "$GITHUB_REF_NAME" in
+              dsh-baseline-v135) BASELINE=v135 ;;
+              dsh-p0-v138) BASELINE=v138 ;;
+              *) echo "::error::Unexpected release tag"; exit 1 ;;
+            esac
+          fi
           case "$BASELINE" in
             v135)
               TAG=dsh-baseline-v135
