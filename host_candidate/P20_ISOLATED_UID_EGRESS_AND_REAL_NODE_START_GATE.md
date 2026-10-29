@@ -13,7 +13,7 @@ Date: 2026-10-29. **Not** a full DSH APK and **not** a VM implementation.
 - New package com.dsh.p20.boundary, not com.dsh.android.
 - Host process explicitly has Android INTERNET permission.
 - Host **successfully connects to its own 127.0.0.1 ephemeral listener** (positive control).
-- Host generates a three-byte synthetic random-named PRIVATE application canary
+- Host generates a three-byte fixed-name synthetic PRIVATE application canary
   under its own files directory with mode 0600, validates it exists.
 - A bound service is marked android:isolatedProcess=true and android:exported=false.
 - Host passes ONLY its synthetic test path and loopback port to this worker.
@@ -65,8 +65,14 @@ Date: 2026-10-29. **Not** a full DSH APK and **not** a VM implementation.
 6. Signing key remains off GitHub, Actions, release artifacts and PR history.
 
 Status:
-P20_ANDROID35_DISPOSABLE_HOST_NETWORK_VS_ISOLATED_WORKER=CI_PENDING
+P20_ANDROID35_DISPOSABLE_HOST_NETWORK_VS_ISOLATED_WORKER=CI_REQUIRED_BEFORE_PASS
 P20_REAL_NODE_ARM64_EXECUTE_IN_ISOLATED_UID=NOT_IMPLEMENTED
 P20_PRODUCTION_DSH_NODE_MIGRATION=NO
 P20_DSH_REAL_PHONE_UPGRADE=NO
 P20_RELEASE=BLOCKED
+
+## CI execution history
+
+- First Android35 run 40844452399: FAILED at test-host setup; no isolation result.
+- Second Android35 run 40844827730: FAILED with Android `NetworkOnMainThreadException` during host-positive-control socket creation. This was a test design defect, not a UID isolation finding.
+- Candidate follow-up moves both host and isolated socket operations to bounded worker threads. Treat outcome as UNKNOWN until the exact new run finishes and all mandatory markers pass.
