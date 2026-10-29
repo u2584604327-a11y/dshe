@@ -12,9 +12,11 @@ from patch_privacy import apply_privacy
 from verify_p6_asset_preimages import EXPECTED_P6,EXPECTED_PATHS,sha_file
 from patch_logs_metadata_only import patch as patch_p11_logs
 from patch_token_usage_p14 import patch as patch_p14_token
+from patch_privileged_tools_p18 import patch_both as patch_p18_tools
 from p13_manifest_inject import inject as inject_p13_manifest
 P11_LOG_ZIP_SHA="29bcf54bb00ea989516b8bc7bdeb6bbd68f9a11a85082273399eb3597cdd76a0"
 P14_BROWSER_TOOL_SHA="be8201f11c7a12478d0552efaf129becde6d104ef2da203c2433b3dfc397a69f"
+P18_PRIVILEGED_TOOL_SHAS={"assets/shell-tool.zip":"51dac0e5c82a38e03318535b6d0d1ac9fe52d2b020ba508efc82af0947df1187","assets/root-tool.zip":"8f54d9871357a79df0acb997169becc03282eb64f3e191ff0cdba4bf7492b7f1"}
 from patch_native_export_reply import apply as patch_p8_export
 P1_SAFE_SHA="8565675b7da207e858f1c3dd69896ce5a68015a24605157a4a11b259218119b6"
 P2_BROWSER_SAFE_SHA="e392e65bf7592ddd9531af81459e678d1462423abed526d5eeddac248ab158a4"
@@ -74,6 +76,9 @@ def assemble(apkpath,p6path,p5path,outpath):
         if b"bundlePath: { type: 'string' }" in patched_log_js.encode("utf-8"):
             raise ValueError("P7_AI_VISIBLE_PATH_SCHEMA_STILL_PRESENT")
         overlays[P7_LOG_TOOL_PATH]=patched_log_plugin
+        p18=patch_p18_tools({name:original.read(name) for name in P18_PRIVILEGED_TOOL_SHAS})
+        if {n:hash_bytes(pair[0]) for n,pair in p18.items()}!=P18_PRIVILEGED_TOOL_SHAS:
+            raise ValueError("P18_UNTRUSTED_SHELL_ROOT_POLICY_OUTPUT_NOT_PINNED")
         p1,p1_report=deny(original.read("classes.dex"))
         if hash_bytes(p1)!=P1_SAFE_SHA or p1_report["TRY_START_END_AND_HANDLER_ALIGNMENT"]!="PASS_STATIC":
             raise ValueError("P1_ART_SAFE_PREIMAGE_OR_TRY_BOUNDARY_FAIL")
@@ -111,6 +116,8 @@ def assemble(apkpath,p6path,p5path,outpath):
                     data=p14_browser if name=="assets/browser-tool.zip" else candidate
                 elif name==P7_LOG_TOOL_PATH:
                     data=patched_log_plugin
+                elif name in p18:
+                    data=p18[name][0]
                 elif name=="AndroidManifest.xml":data=new_manifest
                 elif name=="classes.dex":data=modified
                 elif not member.is_dir():unchanged+=1
@@ -122,10 +129,12 @@ def assemble(apkpath,p6path,p5path,outpath):
             if merged.testzip():raise AssertionError("FUSED_APK_CRC_FAIL")
             if len(merged.namelist())!=len(set(merged.namelist())):raise AssertionError("DUPLICATE_OUTPUT_NAMES")
             for name in names:
-                if name in overlays or name in ("classes.dex","AndroidManifest.xml","META-INF/MANIFEST.MF") or SIGNATURE_META.fullmatch(name):continue
+                if name in overlays or name in p18 or name in ("classes.dex","AndroidManifest.xml","META-INF/MANIFEST.MF") or SIGNATURE_META.fullmatch(name):continue
                 if merged.read(name)!=original.read(name):raise AssertionError("UNMODIFIED_APK_ENTRY_CHANGED_"+name)
             if hash_bytes(merged.read("classes.dex"))!=P10_DEX_SHA:raise AssertionError("PATCHED_DEX_CHANGED")
             if merged.read("AndroidManifest.xml")!=new_manifest:raise AssertionError("P13_MANIFEST_CHANGED")
+            for name, (blob,js) in p18.items():
+                if merged.read(name)!=blob:raise AssertionError("P18_PRIVILEGED_TOOL_OUTPUT_CHANGED_"+name)
             if merged.read("classes3.dex")!=addon:raise AssertionError("P5_DEX_CHANGED")
             for name in EXPECTED_PATHS|{P7_LOG_TOOL_PATH}:
                 expected=p14_browser if name=="assets/browser-tool.zip" else overlays[name]
@@ -153,6 +162,9 @@ def assemble(apkpath,p6path,p5path,outpath):
       "P11_SUMMARY_ONLY_LOG_TOOL_SHA256":hash_bytes(patched_log_plugin),
       "P14_LAN_TOKEN_USAGE_BROWSER_ASSET_SHA256":hash_bytes(p14_browser),
       "P14_TOKEN_USAGE":"PROVIDER_OR_ESTIMATE_OR_UNAVAILABLE",
+      "P18_LEGACY_ADB_SHELL_ROOT_TOOLS":"UNREGISTERED_FAIL_CLOSED",
+      "P18_PRIVILEGED_TOOL_SHA256":{n:hash_bytes(p18[n][0]) for n in sorted(p18)},
+      "P18_GENERIC_BASH_NODE_SAME_UID":"NOT_ISOLATED",
       "P7_AI_VISIBLE_DIAGNOSTIC_PATH":"REDACTED",
       "P11_MODEL_RAW_LOG_CRASH_EXPORT":"DENIED_BEFORE_MAILBOX",
       "P7_NATIVE_MAILBOX_FILE_PATH":"UNVERIFIED_PRIVACY",
