@@ -32,6 +32,9 @@ public final class P20IsolatedWorker extends Service {
       // Strictly a synthetic file within the disposable test package.
       if(!path.endsWith("/files/p20-synthetic-host-canary.tmp") ||
          port<1 || port>65535)return;
+      final Messenger replyTarget=request.replyTo;
+      // Network/Socket operations must run off Android's main looper.
+      new Thread(()->{
       boolean fileReadable=false;
       try(FileInputStream stream=new FileInputStream(path)){
         fileReadable=stream.read()>=0;
@@ -58,7 +61,8 @@ public final class P20IsolatedWorker extends Service {
       report.putBoolean("networkDeniedByOS",networkDeniedByOS);
       Message reply=Message.obtain(null,PROBE);
       reply.setData(report);
-      try{request.replyTo.send(reply);}catch(Exception ignored){}
+      try{replyTarget.send(reply);}catch(Exception ignored){}
+      },"p20-isolated-network-permission-probe").start();
     }
   });
   @Override public IBinder onBind(Intent intent){
