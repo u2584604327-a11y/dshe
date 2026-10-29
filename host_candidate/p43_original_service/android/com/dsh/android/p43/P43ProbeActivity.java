@@ -14,6 +14,7 @@ public final class P43ProbeActivity extends Activity {
   private final Handler main=new Handler(Looper.getMainLooper());
   private final StringBuilder status=new StringBuilder();
   private String session;
+  private final P44VirtualDeviceProfile simulatedProfile=P44VirtualDeviceProfile.syntheticDemo();
   private TextView label;
   private boolean bound,received,failed;
   private Messenger remote;
@@ -35,7 +36,20 @@ public final class P43ProbeActivity extends Activity {
          !session.equals(m.getData().getString("session"))) {
         fail("UID_OR_SESSION_INVALID");return;
       }
+      final Bundle response;
+      try {response=m.getData();} catch(RuntimeException malformed) {
+        fail("INVALID_PROFILE_REPLY");return;
+      }
+      if(!simulatedProfile.fingerprint().equals(response.getString("p44_profile_hash")) ||
+         response.getBoolean("p44_is_real_virtual_machine",true) ||
+         response.getBoolean("p44_hardware_identity_changed",true)) {
+        fail("PROFILE_TAMPER_OR_UNAUTHORIZED_CLAIM");return;
+      }
       received=true;
+      log("P44_ORIGINAL_DSH_PROFILE_TO_ISOLATED_WORKER=PASS");
+      log("P44_HOST_SELECTED_VIRTUAL_PROFILE_HASH_VALIDATED=PASS");
+      log("P44_ACTUAL_SYSTEM_VM=NO");
+      log("P44_REAL_DEVICE_IDENTITY_MODIFIED=NO");
       log("P43_REAL_ORIGINAL_APK_BINDER_ISOLATED_UID=PASS");
       log("P43_ORIGINAL_DSH_APPLICATION_AND_ISOLATED_SERVICE_BOUND=PASS");
       log("P43_REAL_NODE_IN_ORIGINAL_ENGINE=NO");
@@ -47,6 +61,7 @@ public final class P43ProbeActivity extends Activity {
       remote=new Messenger(binder);
       Message m=Message.obtain(null,P43IsolatedWorker.INIT);
       Bundle b=new Bundle();b.putString("session",session);
+      b.putString("p44_profile",simulatedProfile.wire());
       m.replyTo=replies;m.setData(b);
       try{remote.send(m);}catch(RemoteException e){fail("BINDER_SEND_FAILED");}
     }
