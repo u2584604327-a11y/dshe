@@ -23,22 +23,17 @@ fi
 if probe_status 'P34_REAL_BINDER_APPROVED_ONCE=PASS';then
   echo "P34_UNAUTHORIZED_APPROVAL_BEFORE_UI=FAIL";exit 1
 fi
-# Discover the actual native trusted Button using Android UI hierarchy,
-# rather than assuming a phone-size/density-specific screen coordinate.
-adb shell uiautomator dump /sdcard/p34-ui.xml >/dev/null
-adb exec-out cat /sdcard/p34-ui.xml > .p34tmp/ui.xml
-COORDS="$(python3 - <<'PY'
-import xml.etree.ElementTree as ET, re
-root=ET.parse(".p34tmp/ui.xml").getroot()
-hits=[x for x in root.iter("node")
-      if x.attrib.get("content-desc")=="P34_NATIVE_APPROVE_ONCE"]
-if len(hits)!=1:raise SystemExit("P34_UI_APPROVE_BUTTON_NOT_UNIQUE")
-b=hits[0].attrib.get("bounds","")
-m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",b)
-if not m:raise SystemExit("P34_UI_BOUNDING_BOX_UNVERIFIED")
-a,b,c,d=map(int,m.groups())
-if c<=a or d<=b:raise SystemExit("P34_UI_EMPTY_BUTTON_BOUNDS")
-print((a+c)//2,(b+d)//2)
+# The P34 test Activity consists solely of a full-screen trusted native Button.
+# Compute screen center without UIAutomator (which can background/relaunch it).
+SIZE="$(adb shell wm size | tr -d '\r' | tail -n 1)"
+COORDS="$(P34_SCREEN_SIZE="$SIZE" python3 - <<'PY'
+import os,re
+s=os.environ["P34_SCREEN_SIZE"]
+m=re.search(r"(\d{3,5})x(\d{3,5})",s)
+if not m:raise SystemExit("P34_SCREEN_DIMENSION_UNVERIFIED")
+w,h=map(int,m.groups())
+if w<320 or h<500:raise SystemExit("P34_SCREEN_DIMENSION_INVALID")
+print(w//2,h//2)
 PY
 )"
 read -r X Y <<< "$COORDS"
