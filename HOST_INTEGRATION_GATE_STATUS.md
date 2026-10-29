@@ -513,3 +513,28 @@ FINAL_RELEASE_GATE=BLOCKED_STRICT_ISOLATION_AND_APPROVED_SEND_AND_SIGNATURE
 ```
 
 Full scope and failure distinctions are in host_candidate/P14_P16_SECURITY_AND_DEVICE_MODE_STATUS.md. Build/test APKs were temporarily signed and deleted in isolated Actions; no original app keys, account tokens, private APKs or diagnostic data were released.
+
+## P17 authenticated Android IPC and P18 privileged tool deny (2026-10-29)
+
+- Reviewed Android official `isolatedProcess`, Shelter Work Profile, Google gVisor's Gofer architecture and Android AVF/Microdroid system API restrictions; see [P17 architecture](host_candidate/P17_SANDBOX_ARCHITECTURE_AND_MIGRATION_GATES.md). These architectures are **not equivalent**. AVF is not unrestricted for a normal APK and Android WebView UA spoofing is not a real iOS/Windows VM.
+- P17 native one-shot `METADATA_COUNT` capability ledger uses 256-bit cryptographic tokens, monotonic expiry <=30 seconds, Android UID binding, single consumption, revoke-all on service death, deny replay, reject arbitrary filesystem and network scopes. Wrong UID or scope burns the grant.
+- P17 Java unit and real Android 35 **Messenger.sendingUid** authenticated UI gesture test: https://github.com/u2584604327-a11y/dshe/actions/runs/40836348358 **SUCCESS**, both jobs. A disposable distinct isolated UID worker is actually involved in the Binder IPC, the test uses a real simulated touch on the test-only approval button, and pre-approval, one shot, replay and raw file denial paths were asserted. This is a standalone test APK, NOT the original DSH Node engine.
+- Inspecting exact SHA-pinned signed v138 assets surfaced **critical model-facing privilege escape**: `shell` registered a path to UID 2000 through adbd; `root` registered UID 0 through `su` when available. Original plugin comments explicitly admit sandbox bypass for these paths.
+- P18 source-only `assets/shell-tool.zip` and `assets/root-tool.zip` JS patches disable tool registration before any runner/ADB/su call and add direct-execute denial. P18 original nested ZIP preimages and untouched package metadata checked; Node runtime registration test https://github.com/u2584604327-a11y/dshe/actions/runs/40836893499 **SUCCESS**. Patched SHA256: shell `51dac0e5c82a38e03318535b6d0d1ac9fe52d2b020ba508efc82af0947df1187`, root `8f54d9871357a79df0acb997169becc03282eb64f3e191ff0cdba4bf7492b7f1`.
+- P18 resources integrated into experimental P13/P14 Android fusion. Actual Android35 ART/startup and native UI regression is https://github.com/u2584604327-a11y/dshe/actions/runs/40837022330. **Do not claim P18 Android PASS before that run completes successfully.**
+- **Explicit feature tradeoff:** original AI `shell` and `root` model tools are disabled in the experimental candidate until native broker capability integration. This is intentional temporary feature reduction in strict mode; user must be told. Original installed v138 is unchanged.
+- **Critical unresolved bypass:** ordinary app-UID `bash`, Node `child_process` and other same-UID filesystem/network/localhost/ADB helpers remain; P18 alone is not a full VM/Node sandbox. No real DSH Node/payload migration to isolated UID, WebView per-profile storage isolation, user data upgrade or original-certificate v139 release.
+
+```text
+P17_AUTHENTICATED_BINDER_IPC_AND_UI_GESTURE=PASS_ANDROID35_STANDALONE
+P17_ONE_SHOT_REPLAY_REVOCATION_SCOPE=PASS
+P17_ORIGINAL_DSH_NODE_ISOLATED_UID=NOT_IMPLEMENTED
+P18_UID2000_SHELL_PLUGIN=DISABLED_CANDIDATE
+P18_UID0_ROOT_PLUGIN=DISABLED_CANDIDATE
+P18_NODE_TOOL_TEST=PASS
+P18_COMBINED_ANDROID35_ART_UI=CHECK_REAL_ACTIONS
+P18_GENERAL_BASH_CHILD_PROCESS_FILES_NETWORK=NOT_CLOSED
+P18_ORDINARY_USER_ATTACHMENTS=SOURCE_UNCHANGED_RUNTIME_NOT_VERIFIED
+FIXED_CERTIFICATE_SIGNED_V139_APK=NOT_BUILT
+PRODUCTION_RELEASE=BLOCKED_STRICT_ISOLATION_NATIVE_SEND_SIGNING
+```
