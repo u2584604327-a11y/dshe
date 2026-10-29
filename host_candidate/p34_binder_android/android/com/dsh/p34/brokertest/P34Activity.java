@@ -69,6 +69,7 @@ public final class P34Activity extends Activity {
   }
   @Override protected void onStop(){
     trusted.onTrustedUiBackground();
+    Log.i(TAG,"P34_HOST_BACKGROUND_REVOKE_INVOKED=PASS");
     super.onStop();
   }
   @Override public void onDestroy(){
