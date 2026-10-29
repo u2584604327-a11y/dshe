@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'host_candidate/p21_real_arm64_loader_pack.py'
+      - 'host_candidate/p21_align_unsigned_native_apk.py'
       - 'host_candidate/p21_original_node/**'
       - '.github/workflows/p21-original-arm64-node-staging.yml'
   workflow_dispatch:
@@ -84,9 +85,21 @@ jobs:
             -F out/p21/probe-unsigned.apk
           (cd out/p21/dex && zip -q -j ../probe-unsigned.apk classes.dex)
           (cd out/p21/native && zip -q -0 -r ../probe-unsigned.apk lib)
-          "$SDK/build-tools/35.0.0/zipalign" -f 4 \
-            out/p21/probe-unsigned.apk out/p21/probe-aligned-unsigned.apk
+          # Align ALL native ELF entries, including the six version-suffixed
+          # DT_NEEDED libraries that API35 extractNativeLibs does not copy.
+          python3 host_candidate/p21_align_unsigned_native_apk.py \
+            out/p21/probe-unsigned.apk \
+            --out out/p21/probe-aligned-unsigned.apk \
+            --report out/p21/zip-alignment.json
           "$SDK/build-tools/35.0.0/zipalign" -c 4 out/p21/probe-aligned-unsigned.apk
+          python3 - <<'PY'
+          import json,pathlib
+          result=json.loads(pathlib.Path('out/p21/zip-alignment.json').read_text())
+          assert result['P21_ZIP_NATIVE_LIB_ENTRIES']==11
+          assert result['P21_VERSIONED_LIBS_ALIGNED_4096']==6
+          assert result['P21_NODE_REAL_EXECUTION']=='NOT_TESTED'
+          print('P21_ALL_11_APK_NATIVE_ELF_ZIP_ENTRIES_ALIGNED_4096=PASS')
+          PY
           unzip -p out/p21/probe-aligned-unsigned.apk \
             lib/arm64-v8a/libdshnode_p21_exec.so | sha256sum \
               | grep -Fq 'a0d21a1589312919114b24a5cc520c30ab7f26f9985b3f0c643c153172ebd1e6'
@@ -98,6 +111,8 @@ jobs:
           fi
           echo 'P21_ANDROID35_STANDALONE_JAVA_COMPILED=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P21_UNSIGNED_ARM64_ABI_PACKAGE=PASS_STATIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P21_UNCOMPRESSED_4096_ALIGNED_VERSIONED_LIBS=PASS_STATIC' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P21_APK_ZIP_RUNTIME_LIB_SEARCH=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
       - name: Destroy private input and executable test package
         if: always()
         shell: bash
