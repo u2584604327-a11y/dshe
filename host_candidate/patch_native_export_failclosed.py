@@ -46,8 +46,8 @@ def apply(source):
         raise ValueError("NATIVE_EXPORT_FAILURE_BRANCH_NOT_VERIFIED")
     off=CODE_OFF+16+BEGIN
     output=bytearray(source)
-    # 0x3012 = const/4 v3, #+0. Remaining code units are ordinary NOPs.
-    output[off:off+8]=struct.pack("<4H",0x3012,0,0,0)
+    # 0x0312 = const/4 v3, #+0. Remaining code units are ordinary NOPs.
+    output[off:off+8]=struct.pack("<4H",0x0312,0,0,0)
     output[12:32]=hashlib.sha1(output[32:]).digest()
     struct.pack_into("<I",output,8,zlib.adler32(output[12:]) & 0xffffffff)
     output=bytes(output)
@@ -58,7 +58,7 @@ def apply(source):
     modified=[m for cls in after.get_classes() if cls.get_name()==OWNER
               for m in cls.get_methods() if m.get_name()==METHOD and m.get_descriptor()==SIGNATURE][0]
     ai={pc:x for pc,x in modified.get_instructions_idx()}
-    if ai[BEGIN].get_name()!="const/4" or struct.unpack_from("<H",output,off)[0]!=0x3012:
+    if ai[BEGIN].get_name()!="const/4" or struct.unpack_from("<H",output,off)[0]!=0x0312:
         raise AssertionError("EXPORT_NULL_RETURN_NOT_PRESERVED")
     if any(ai[pc].get_name()!="nop" for pc in (118,120,122)):
         raise AssertionError("EXPORT_CALL_BYTES_NOT_NOP")
