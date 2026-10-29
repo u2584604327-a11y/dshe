@@ -345,3 +345,42 @@ P5_ONE_SHOT_SEND_CONNECTED=NO
 ORIGINAL_CERT_V139_APK=NO
 PHONE_V138_UNCHANGED=YES
 ```
+
+## P11 + P5 trusted-native-dialog Android35 runtime proof — PASS (2026-10-29)
+
+Authoritative private GitHub Actions: https://github.com/u2584604327-a11y/dshe/actions/runs/40823908102 — **SUCCESS**
+
+This run used the exact SHA-pinned original v138 APK, the ART-safe P1–P10 main DEX, all original P5 Android classes compiled into `classes3.dex`, the P6 assets, and the P11 safe summary-only `assets/logs-tool.zip` replacement (SHA256 `29bcf54bb00ea989516b8bc7bdeb6bbd68f9a11a85082273399eb3597cdd76a0`). Both the main package and the instrumentation test package were signed with the **same disposable nonproduction key** inside an isolated runner. No original signing certificate/key was used.
+
+### Concrete Android 35 results
+
+- `ANDROID_ART_OFFLINE_PACKAGE_COMPILE=PASS`.
+- `DISPOSABLE_ANDROID_EMULATOR_LAUNCH=PASS`.
+- P5 `AndroidFdQueue` constructor **and descriptor-pinned read of exact synthetic `dsh-safe-diagnostic-v1` fixture = PASS**.
+- P5 `NativeDiagnosticReview` **real Android `AlertDialog` shown with the fail-closed sending notice = PASS**. To avoid a false negative from a non-visible Accessibility tree, test-only instrumentation checks the actual `AlertDialog.isShowing()` and known fixed notice text on the UI thread. This bypasses **only the test's visibility detector**, not any app privacy/permission check.
+- Malformed schema fixture triggered `NativeDiagnosticReview`'s native `DENIED/preview/UNSUPPORTED_OR_CHANGED_FILE` audit callback = PASS.
+- `P5_NETWORK_SEND=NOT_CONNECTED`; no HTTP request, no real diagnostic bundle or user app data used.
+- `LEGACY_HOST_BUTTON_WIRED=NO` is still a hard blocker: P5 UI was invoked directly by **temporary test instrumentation**, not by `LogViewerActivity`. No user-accessible P5 UI feature has been added to the installed app.
+- Test used a dedicated app-owned mode **0700** private queue root. Earlier test attempt against the ordinary `filesDir` failed the intentionally strict P5 group/other-writable directory ownership gate; security checks were **not relaxed**.
+- P11 `summary` numeric-only Node policy had independently passed a synthetic canary reply test in https://github.com/u2584604327-a11y/dshe/actions/runs/40822332733. This runtime run proves P11's resource was structurally incorporated in the lab APK; it does **not** prove all generic same-UID Node exfiltration has been stopped.
+- The temporary app/test APKs and the ephemeral key were deleted by the CI runner. APK `versionCode` remains **138** for lab testing; user phone unchanged.
+
+### Latest verified status
+
+```text
+P10_ORIGINAL_DIRECT_ZIP_CALLS=ZERO_STATIC
+P11_NODE_LOGS_TOOL_SUMMARY_ONLY=PASS_NODE_CANARY_TEST
+P11_ANDROID_APK_RESOURCE_FUSED=PASS
+P5_NATIVE_FD_PINNED_QUEUE_READ=PASS_ANDROID35_FIXTURE
+P5_NATIVE_DIALOG_SHOWN=PASS_ANDROID35_INSTRUMENTATION
+P5_UNSUPPORTED_REPORT_DENIED=PASS_ANDROID35_INSTRUMENTATION
+P5_LEGACY_ACTIVITY_USER_BUTTON_CONNECTED=NO
+P5_APPROVED_ONE_SHOT_TRANSPORT_CONNECTED=NO
+ALL_NODE_GENERIC_FS_NETWORK_EGRESS_BLOCKED=NO
+APP_WEBVIEW_STORAGE_ISOLATION=NOT_VERIFIED
+FIXED_CERTIFICATE_VERSIONCODE_139_APK=NOT_BUILT
+ART_REAL_USER_DEVICE=NOT_VERIFIED
+PHONE_V138_UNCHANGED=YES
+```
+
+**Release decision remains BLOCKED_HOST_INTEGRATION.** The next implementation is a real host Activity lifecycle and user-gesture hook to P5 UI, plus native and generic Node egress control. Source-only components and test-only instrumentation are not that hook.
