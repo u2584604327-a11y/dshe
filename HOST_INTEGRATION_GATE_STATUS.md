@@ -485,3 +485,31 @@ INSTRUMENTATION_CODE=-1
 Subsequent P5 review and P12 manual-attach tests also PASS, without weakening P13's already-verified early ordering. The P5 direct test's historical `LEGACY_HOST_BUTTON_WIRED=NO` is **a test-local label**, not an accurate description of the P13-integrated lab app: P13 separately proves the real manifest-driven hook. Fix misleading labels before shipping any standalone audit summary.
 
 **Decision:** Lock `P13_COLD_BOOT_AUTOHOOK=PASS_ANDROID35_DISPOSABLE`. Do not extend this PASS to a user phone, original signing certificate, native approved one-shot network send, full Node UID isolation, browser profile separation or production APK. The run creates and deletes only disposable signed test artifacts, with no release.
+
+## P14 Token UI, P15 isolated UID probe, P16 device-mode audit — verified 2026-10-29
+
+1. P14 source/Node token 3-state regression PASS: https://github.com/u2584604327-a11y/dshe/actions/runs/40833692739. Browser asset SHA256 be8201f11c7a12478d0552efaf129becde6d104ef2da203c2433b3dfc397a69f. Official provider nonzero values preserved; otherwise clearly estimated or unavailable, not fabricated exact usage.
+2. P14 SHA-pinned browser resource fused into actual P13/P5 disposable Android 35 APK, ART/install/main startup/P13 original host autohook regression PASS: https://github.com/u2584604327-a11y/dshe/actions/runs/40833854898. The actual on-device Token popup with live LAN provider remains UNVERIFIED. No server-side provider usage invented.
+3. P15 original signed v138 APK structural inspection PASS: https://github.com/u2584604327-a11y/dshe/actions/runs/40834057507. 2 manifest Service entries, 0 isolatedProcess services, Node and Shell tools shipped. Strict main DSH Node isolation is NOT VERIFIED.
+4. P15 separate minimal Android isolatedProcess service and IPC test on Android 35 emulator PASS: https://github.com/u2584604327-a11y/dshe/actions/runs/40834677353. Distinct OS UID verified; service denied access to host-owned private synthetic file; manifest isolated flag present; no permissions requested. This proves an independently built isolated service can work on Android35. **Original DSH Node/Browser not migrated to it**, so do not label DSH as strict VM.
+5. P16 real P6 browser device profile source consistency PASS after correcting overly strict integer-only CSS viewport test: https://github.com/u2584604327-a11y/dshe/actions/runs/40834952248. Source has declared User-Agent/viewport/DPR and auto-native restore; actual physical device/OS, WebView engine, TLS/IP, attestation and per-profile isolated storage were not changed or validated.
+
+```text
+P14_TOKEN_MODEL_DISPLAY_3_STATE=PASS_SOURCE
+P14_ANDROID_CANDIDATE_ASSET_FUSED=PASS_EMULATOR
+P14_LIVE_LAN_API_ACTUAL_USAGE=NOT_VERIFIED
+P15_ORIGINAL_DSH_SERVICES_ISOLATED=0
+P15_REAL_ISOLATED_SERVICE_UID_PROTOTYPE=PASS_ANDROID35
+P15_REAL_ISOLATED_SERVICE_PRIVATE_FILE_DENY=PASS_ANDROID35
+P15_DSH_NODE_ACTUALLY_MIGRATED_TO_ISOLATED_UID=NO
+P15_ALL_GENERAL_NODE_FILE_SHELL_NETWORK_EGRESS_CLOSED=NO
+P16_DEVICE_PROFILE_SCHEMA=PASS_SOURCE
+P16_SITE_VISIBLE_DEVICE_CONSISTENCY=NOT_VERIFIED
+P16_REAL_IOS_OR_WINDOWS_DEVICE_IDENTITY=NOT_POSSIBLE_FROM_ANDROID_WEBVIEW
+P13_ORIGINAL_LOGVIEWER_COLD_BOOT_AUTOHOOK=PASS_ANDROID35
+PRODUCTION_FIXED_SIGNED_V139=NOT_BUILT
+REAL_USER_DEVICE=UNCHANGED
+FINAL_RELEASE_GATE=BLOCKED_STRICT_ISOLATION_AND_APPROVED_SEND_AND_SIGNATURE
+```
+
+Full scope and failure distinctions are in host_candidate/P14_P16_SECURITY_AND_DEVICE_MODE_STATUS.md. Build/test APKs were temporarily signed and deleted in isolated Actions; no original app keys, account tokens, private APKs or diagnostic data were released.
