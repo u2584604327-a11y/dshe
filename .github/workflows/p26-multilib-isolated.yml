@@ -79,8 +79,8 @@ jobs:
           set -euo pipefail
           javac --release 8 -cp "$SDK_ROOT/platforms/android-35/android.jar" \
             -d out/classes \
-            host_candidate/p26_multilib/android/com/dsh/p26/preload/P26Activity.java \
-            host_candidate/p26_multilib/android/com/dsh/p26/preload/P26Worker.java
+            host_candidate/p26_multilib/android/com/dsh/p26/multilib/P26Activity.java \
+            host_candidate/p26_multilib/android/com/dsh/p26/multilib/P26Worker.java
           jar cf out/p26.jar -C out/classes .
           "$SDK_ROOT/build-tools/35.0.0/d8" --min-api 34 \
             --lib "$SDK_ROOT/platforms/android-35/android.jar" \
