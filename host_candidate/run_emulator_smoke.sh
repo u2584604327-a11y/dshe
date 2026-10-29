@@ -96,5 +96,21 @@ if test -n "$instrument_apk"; then
   fi
   echo 'P5_NATIVE_UI_VISIBLE_ON_ANDROID=PASS_INSTRUMENTATION'
   echo 'P5_UI_NOT_WIRED_TO_LEGACY_BUTTON=STILL_TRUE'
+  # P12 hooks original LogViewerActivity buttons using test instrumentation;
+  # the production Activity lifecycle STILL does not call P12.attach().
+  set +e
+  p12_output="$(adb shell am instrument -w -r \
+    com.dsh.p1.smoketest/.P12LogViewerInstrumentation 2>&1)"
+  p12_status=$?
+  set -e
+  printf '%s\\n' "$p12_output" | head -c 4000
+  if test "$p12_status" -ne 0 || \
+    ! printf '%s\\n' "$p12_output" | grep -q 'P12_EXISTING_EXPORT_UPLOAD_BUTTONS=BOTH_INTERCEPTED_TEST_CALL' || \
+    ! printf '%s\\n' "$p12_output" | grep -q 'INSTRUMENTATION_CODE: -1'; then
+    echo "::error::P12 original LogViewerActivity user-button interception FAILED"
+    exit 1
+  fi
+  echo 'P12_ORIGINAL_LOGVIEWER_USER_BUTTONS=PASS_TEST_ONLY_ATTACH'
+  echo 'P12_PRODUCT_HOST_LIFECYCLE_HOOK=NOT_CONNECTED'
 fi
 
