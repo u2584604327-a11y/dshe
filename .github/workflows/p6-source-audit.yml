@@ -2,7 +2,7 @@ name: DSH v139 P6 source and D8 evidence audit
 
 on:
   release:
-    types: [published]
+    types: [published, edited]
   workflow_dispatch:
 
 permissions:
