@@ -83,26 +83,35 @@ public final class P20BoundaryActivity extends Activity {
     statusLabel=new TextView(this);
     statusLabel.setText("P20 permission boundary under test");
     setContentView(statusLabel);
+    String stage="CREATE_CANARY";
     try {
       canary=new File(getFilesDir(),"p20-synthetic-host-canary.tmp");
       try(FileOutputStream output=new FileOutputStream(canary,false)){
         output.write(new byte[]{80,50,48});
         output.getFD().sync();
       }
+      stage="CANARY_CHMOD";
       Os.chmod(canary.getAbsolutePath(),0600);
       if(canary.length()!=3)throw new IllegalStateException("canary missing");
+      stage="BIND_LOOPBACK_LISTENER";
       server=new ServerSocket(0,1,InetAddress.getByName("127.0.0.1"));
       server.setSoTimeout(2000);
+      stage="CONNECT_HOST_POSITIVE_CONTROL";
       try(Socket client=new Socket("127.0.0.1",server.getLocalPort());
           Socket accepted=server.accept()){
         if(!client.isConnected()||!accepted.isConnected())
           throw new IllegalStateException("host loopback unavailable");
       }
       Log.i(TAG,"P20_HOST_INTERNET_LOOPBACK_POSITIVE_CONTROL=PASS");
+      stage="BIND_ISOLATED_WORKER";
       bound=bindService(new Intent(this,P20IsolatedWorker.class),
           connection,Context.BIND_AUTO_CREATE);
       if(!bound)Log.e(TAG,"P20_BIND_ISOLATED=FAIL");
-    }catch(Exception error){Log.e(TAG,"P20_SETUP=FAIL");}
+    }catch(Exception error){
+      // Synthetic stage and class only: never log a real device file path.
+      Log.e(TAG,"P20_SETUP_"+stage+"="+error.getClass().getSimpleName());
+      Log.e(TAG,"P20_SETUP=FAIL");
+    }
   }
   @Override public void onDestroy(){
     if(bound)unbindService(connection);
