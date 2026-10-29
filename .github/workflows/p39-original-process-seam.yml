@@ -45,9 +45,8 @@ jobs:
             --repo "$GH_REPO" \
             --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
             --dir .p39tmp
-          printf '%s  %s\n' \
-            3ca56655d79afc57431636e340823e7071bc830615c485b0b9a30b6e3e5 \
-            .p39tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk | sha256sum -c -
+          actual="$(sha256sum .p39tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk | cut -d' ' -f1)"
+          test "$actual" = "3ca56655d79afc57431636e340823e7071bc830615c485b0b9a30b6e3e5"
           echo 'P39_EXACT_ORIGINAL_APK_SHA256=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Derive bounded Process surface and audit P37 compatibility
         shell: bash
