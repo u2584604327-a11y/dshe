@@ -384,3 +384,36 @@ PHONE_V138_UNCHANGED=YES
 ```
 
 **Release decision remains BLOCKED_HOST_INTEGRATION.** The next implementation is a real host Activity lifecycle and user-gesture hook to P5 UI, plus native and generic Node egress control. Source-only components and test-only instrumentation are not that hook.
+
+## P12 previous versions reuse and real legacy buttons on Android35 (2026-10-29)
+
+A search of the user's persistent Library located historic DSH releases, the v137 native decompilation/callgraph, v1.3.7 JS source, and older host patch evidence. The recovered `LogViewerActivity` methods identify the real native `logExport` / `logUpload` buttons. These recovered Java sources are **not an original Gradle project**.
+
+New P12 Java adapter `host_candidate/p12_native/com/dsh/p12/P12LogViewerReviewEntry.java` is independent code that rebinds **both native original button click handlers** to P5 local-only structured review. It is guarded by exact Activity class, fixed native destination allowlist, strict 0700 private queue mode, P5 descriptor-pinned reader and fail-closed no-sender semantics. No raw log export is enabled. P10 remains in the original DEX and P11 remains the summary-only tool.
+
+P12 Java source and pinned nine P5 sources Android javac+D8: **PASS**, https://github.com/u2584604327-a11y/dshe/actions/runs/40827286539.
+
+**Real Android 35 ephemeral simulator test: PASS**, https://github.com/u2584604327-a11y/dshe/actions/runs/40827698165:
+- Fully assembled experimental APK includes 70 compiled P5+P12 class definitions in `classes3.dex`.
+- `P12_ORIGINAL_LOGVIEWER_LAUNCHED=PASS_ANDROID_FIXTURE`.
+- `P12_EXISTING_EXPORT_UPLOAD_BUTTONS=BOTH_INTERCEPTED_TEST_CALL`.
+- `P12_EMPTY_QUEUE_DEFAULT_DENY=NO_RAW_EXPORT_TRIGGERED`.
+- `P5_NATIVE_UI_REAL_ACTIVITY=PASS_INSTRUMENTATION`.
+- `P5_FD_PINNED_READER=PASS_ANDROID_FIXTURE`.
+- Android install, offline ART package compile, MainActivity launch = PASS.
+- Temporary test-signed APK, test-only instrumentation and signer deleted by runner; no production signing/phone install.
+
+**Do not inflate this proof:** P12's original LogViewer click handler was installed by **test instrumentation**, not by the unmodified original app lifecycle. Real user's app will NOT invoke P12 automatically until a native lifecycle/manifest bridge is implemented. Approved one-shot sending is deliberately unconnected and same-UID Node generic filesystem/network bypass is still not blocked. No v139 release may be published.
+
+```text
+P12_REUSED_OLD_DECOMPILED_METHOD_MAPPING=YES
+P12_NATIVE_JAVA_COMPILES=PASS
+P12_REAL_ORIGINAL_LOGVIEWER_BUTTONS=PASS_TEST_ONLY_INSTRUMENTATION
+P12_ORIGINAL_ACTIVITY_LIFECYCLE_HOOK_IN_PRODUCTION=NO
+P12_NETWORK_SEND=DISABLED
+P12_ANDROID35_EMULATOR=PASS_LIMITED
+NODE_TOTAL_EGRESS_CLOSED=NO
+ORIGINAL_CERT_VERSIONCODE_GT_138_APK=NOT_BUILT
+```
+
+See `host_candidate/P12_LIBRARY_RECOVERY_INTEGRATION_NOTES.md` for historical source provenance, exact constraints and next step.
