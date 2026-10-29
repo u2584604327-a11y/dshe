@@ -1,6 +1,7 @@
 name: DSH P29 owner approved private original Node OS boundary device APK
 on:
   pull_request:
+    types: [opened]
     paths:
       - 'host_candidate/p29_device_probe/**'
       - 'host_candidate/P29_REAL_NODE_BOUNDARY_DEVICE_GATE.md'
@@ -14,6 +15,7 @@ jobs:
   owner-approved-p29-private-draft-release:
     if: >-
       github.event_name == 'pull_request' &&
+      github.event.action == 'opened' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p29-real-node-uid-private-canary-egress-20261029' &&
       github.event.pull_request.base.ref == 'dsh/p28-private-arm64-original-node-device-probe-20261029'
