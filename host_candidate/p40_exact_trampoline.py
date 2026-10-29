@@ -148,8 +148,14 @@ def verify_rebuilt(apk):
         require(name in methods, "MISSING_METHOD_" + name.split("->")[-1])
     require(methods[target]["dex"] == "classes.dex", "TARGET_RELOCATED_OUT_OF_PRIMARY_DEX")
     require(methods[bridge]["dex"] == "classes.dex", "TRAMPOLINE_RELOCATED_OUT_OF_PRIMARY_DEX")
-    require(methods[target]["calls"] == [("invoke-static", TRAMPOLINE)],
-            "EXACT_ORIGINAL_CALL_NOT_REPLACED")
+    # Other ProcessBuilder APIs (environment, directory, redirects) are
+    # essential original startup semantics and must remain in this method.
+    # Only the single ProcessBuilder.start() invocation is redirected.
+    primary_calls = methods[target]["calls"]
+    require(primary_calls.count(("invoke-static", TRAMPOLINE)) == 1,
+            "TRAMPOLINE_NOT_PRESENT_EXACTLY_ONCE")
+    require(("invoke-virtual", ORIGINAL) not in primary_calls,
+            "ORIGINAL_START_REMAINS_IN_PRIMARY")
     for name in (probe, dump, bridge):
         require(methods[name]["calls"].count(("invoke-virtual", ORIGINAL)) == 1,
                 "OTHER_START_BROKEN_" + name.split("->")[-1])
