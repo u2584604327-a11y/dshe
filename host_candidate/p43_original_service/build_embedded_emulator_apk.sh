@@ -38,6 +38,13 @@ PY
 apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"
 (cd "$DIR" && zip -q -d rebuilt-unsigned.apk AndroidManifest.xml)
 (cd "$DIR/manifest-binary" && zip -q -0 ../rebuilt-unsigned.apk AndroidManifest.xml)
+# apktool reassembles both original DEX files even though only classes.dex is
+# patched. Restore the untouched secondary dex verbatim from SHA-pinned v138.
+mkdir -p "$DIR/original-secondary"
+unzip -p "$ORIGINAL" classes2.dex > "$DIR/original-secondary/classes2.dex"
+test -s "$DIR/original-secondary/classes2.dex"
+(cd "$DIR" && zip -q -d rebuilt-unsigned.apk classes2.dex)
+(cd "$DIR/original-secondary" && zip -q -0 ../rebuilt-unsigned.apk classes2.dex)
 python host_candidate/p40_exact_trampoline.py verify "$DIR/rebuilt-unsigned.apk"
 python host_candidate/p43_original_service/inject_original_manifest.py verify \
   "$DIR/rebuilt-unsigned.apk"
