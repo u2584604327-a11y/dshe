@@ -10,7 +10,8 @@ from patch_remaining_bundle_calls import apply as patch_p10_builders
 from patch_browser import apply_browser
 from patch_privacy import apply_privacy
 from verify_p6_asset_preimages import EXPECTED_P6,EXPECTED_PATHS,sha_file
-from patch_logs_export_output import patch as patch_p7_logs
+from patch_logs_metadata_only import patch as patch_p11_logs
+P11_LOG_ZIP_SHA="29bcf54bb00ea989516b8bc7bdeb6bbd68f9a11a85082273399eb3597cdd76a0"
 from patch_native_export_reply import apply as patch_p8_export
 P1_SAFE_SHA="8565675b7da207e858f1c3dd69896ce5a68015a24605157a4a11b259218119b6"
 P2_BROWSER_SAFE_SHA="e392e65bf7592ddd9531af81459e678d1462423abed526d5eeddac248ab158a4"
@@ -50,7 +51,9 @@ def assemble(apkpath,p6path,p5path,outpath):
         if dexnames!=["classes.dex","classes2.dex"]:raise ValueError("UNEXPECTED_ORIGINAL_DEX_LAYOUT")
         if not (EXPECTED_PATHS|{P7_LOG_TOOL_PATH}).issubset(set(names)):
             raise ValueError("MISSING_ORIGINAL_ASSETS_OR_LOG_PLUGIN")
-        patched_log_plugin,patched_log_js=patch_p7_logs(original.read(P7_LOG_TOOL_PATH))
+        patched_log_plugin,patched_log_js=patch_p11_logs(original.read(P7_LOG_TOOL_PATH))
+        if hash_bytes(patched_log_plugin)!=P11_LOG_ZIP_SHA:raise ValueError("P11_LOG_PLUGIN_IDENTITY_MISMATCH")
+        if "enum: ['summary']" not in patched_log_js:raise ValueError("P11_SUMMARY_ONLY_SCHEMA_MISSING")
         if b"bundlePath: { type: 'string' }" in patched_log_js.encode("utf-8"):
             raise ValueError("P7_AI_VISIBLE_PATH_SCHEMA_STILL_PRESENT")
         overlays[P7_LOG_TOOL_PATH]=patched_log_plugin
@@ -124,8 +127,9 @@ def assemble(apkpath,p6path,p5path,outpath):
       "P8_NATIVE_EXPORT_BUNDLEPATH_REMOVED":p8_report["NATIVE_EXPORT_REPLY_BUNDLE_PATH_REMOVED"],
       "P5_ADDON_DEX_SHA256":hash_bytes(addon),"P5_CLASS_COUNT":len(newclasses),
       "ADDED_DEX_ENTRY":"classes3.dex","P6_OVERLAY_FILES":sorted(EXPECTED_PATHS),
-      "P7_NESTED_LOG_EXPORT_TOOL_SHA256":hash_bytes(patched_log_plugin),
+      "P11_SUMMARY_ONLY_LOG_TOOL_SHA256":hash_bytes(patched_log_plugin),
       "P7_AI_VISIBLE_DIAGNOSTIC_PATH":"REDACTED",
+      "P11_MODEL_RAW_LOG_CRASH_EXPORT":"DENIED_BEFORE_MAILBOX",
       "P7_NATIVE_MAILBOX_FILE_PATH":"UNVERIFIED_PRIVACY",
       "UNCHANGED_ENTRIES_CHECKED":unchanged,
       "UNSIGNED_LAB_FILE_SHA256":sha_file(resultpath),
