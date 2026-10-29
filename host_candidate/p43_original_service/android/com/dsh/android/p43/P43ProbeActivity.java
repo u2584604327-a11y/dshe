@@ -113,7 +113,7 @@ public final class P43ProbeActivity extends Activity {
         if(!syntheticFile.delete())throw new IOException("UNLINK_FAILED");
         b.putParcelable("p45_readonly_fd",assetFd);
         b.putInt("p45_max_bytes",64);
-        p46Lease=P46HostBroker.attachFixture(this,b);
+        p46Lease=P46HostBroker.attachFixture(P43ProbeActivity.this,b);
         m.replyTo=replies;m.setData(b);
         remote.send(m);
       }catch(Exception failure) {
