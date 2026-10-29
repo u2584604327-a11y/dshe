@@ -15,7 +15,7 @@ expected="$(PYTHONPATH=host_candidate python -c 'from p35_original_engine_spawn_
 test "${#expected}" -eq 64
 test "$(stat -c %s "$ORIGINAL")" -eq 147341486
 printf '%s  %s\n' "$expected" "$ORIGINAL" | sha256sum -c -
-apktool d -f "$ORIGINAL" -o "$DIR/decoded"
+apktool d -f -r --force-manifest "$ORIGINAL" -o "$DIR/decoded"
 python host_candidate/p40_exact_trampoline.py patch "$ORIGINAL" "$DIR/decoded" \
   --report "$DIR/p40-offline.json"
 python host_candidate/p43_original_service/inject_original_manifest.py inject \
