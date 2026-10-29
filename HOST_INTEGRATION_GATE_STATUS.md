@@ -109,3 +109,60 @@ Verified GitHub Actions: https://github.com/u2584604327-a11y/dshe/actions/runs/4
 - PHONE_V138_CHANGED: **NO**
 
 Do not upload signing material to GitHub or install/debug the current v138 online with sensitive data. The required next implementation is a controlled Android host path that routes all diagnostic send requests through the native per-bundle review and fail-closed transport, with isolated ART and offline device verification before signing.
+
+## P5 Android native compilation + P2/P5/P6/P7 unsigned fusion (2026-10-29)
+
+### Android-native compilation
+
+PASS: https://github.com/u2584604327-a11y/dshe/actions/runs/40814642663
+
+- All nine P5 Java sources from the **pinned** P6-embedded P5 archive compiled against Android API 35 using Java 8 language compatibility.
+- D8 compiled them for Android minimum API 26.
+- **63 P5 class definitions** in the resultant component DEX, including compiler-generated nested classes.
+- No native Activity was wired into the installed original app and no ART execution happened.
+
+### Fusion into one temporary UNSIGNED APK structure
+
+P2+P5+P6 PASS: https://github.com/u2584604327-a11y/dshe/actions/runs/40814995654
+
+P2+P5+P6+P7 PASS: https://github.com/u2584604327-a11y/dshe/actions/runs/40815688204
+
+The private workflow dynamically downloads the exact v138 signed APK and exact P6 ZIP, replays the seven bounded P2 changes, compiles the nine P5 sources into `classes3.dex`, replaces three P6 assets and adds P7's narrowed `assets/logs-tool.zip` asset.
+
+For the final P2+P5+P6+P7 **ephemeral unsigned** experiment:
+
+- SHA-256 of bounded main DEX: `9a7cd89f4a5c86394770febf703a9345a44d8c12c39abec9d494635587d8f221`.
+- SHA-256 of P5 additional DEX: `552d593f42596a624b36374243f48aec10ffec6a9006eaa1b4974bc84ffab56b`.
+- P5 definitions added: **63**, and class descriptor collision with original two DEX files: **none**.
+- P7 logs-tool replacement SHA-256: `71c92b1ec4facad6d443d3277e72303684751dc9f5ce44481db6aeb582082d58`.
+- Original file entries verified byte-for-byte unchanged: **965**.
+- Temporary unsigned, pre-zipalign APK SHA-256: `5643d1364d61bd447a3776f01edcb30982a0f288ea8719b126932726c91afdd5`.
+- Temporary unsigned APK size before alignment: **147,382,039 bytes**.
+- Android `aapt`, `zipalign`, ZIP CRC and DEX entry structural checks: PASS.
+- APK original signature intentionally **invalidated** by repacking and the job requires `apksigner verify` to reject the result.
+- The temporary APK was deleted on the GitHub Runner; no APK file was uploaded to Actions Artifacts or GitHub Releases.
+- `versionCode` stays **138**, because this is a lab structure, not an approved v139 installation candidate.
+
+### P7 Node diagnostic export AI-output containment
+
+PASS: https://github.com/u2584604327-a11y/dshe/actions/runs/40815619962
+
+Source: `host_candidate/patch_logs_export_output.py`.
+Synthetic native mailbox regression: `host_candidate/test_logs_export.mjs`.
+
+The original `logs` tool's `action:"export"` returned an absolute `bundlePath` and told the model it could send that ZIP. P7 still allows the native host to generate a local bundle, but exposes only a bounded success/failure, optional bounded byte count, and a requirement for native review. It drops the original mailbox's path, message, nested `details` and any synthetic sensitive canaries from **the model-facing result**. Other `summary` behavior was exercised and preserved. P7 is only in the **unsigned lab**; installed v138 is unchanged.
+
+**Critical limitation:** the native mailbox itself can still contain a path. Node shares the application's UID and may access the private files directly; generic file transport or shell tools may bypass a model-output-only restriction. Neither P7 nor P5 adds a strong Node filesystem capability boundary. A reliable total diagnostic egress policy requires an isolated process/UID or a native-controlled private queue inaccessible to generic tools and enforcement at every diagnostic-capable transport. A separate user-approved sharing UI must be connected to the host to permit safe intentional sends. Do not assume unchanged ordinary attachments are blocked.
+
+### Release blockers and next engineering requirements
+
+- HOST_NATIVE_DIALOG_CONNECTED: **NO**.
+- P5_TRUSTED_SINGLE_USE_TRANSPORT_CONNECTED: **NO**.
+- LEGACY_NATIVE_AND_NODE_DIAGNOSTIC_EGRESS_TOTAL_GATE: **NOT_VERIFIED**.
+- GENERIC_NODE_FILE_ACCESS_ISOLATION: **NOT_IMPLEMENTED**.
+- STORAGE_AND_COOKIES_ISOLATION: **NOT_VERIFIED**.
+- ART_RUNTIME_LOADING_TEST: **NOT_RUN**.
+- VERSIONCODE_139_SIGNED_WITH_FIXED_CERT: **NO**.
+- DATA_PRESERVING_DEVICE_INSTALL: **NOT_TESTED**.
+
+**Do not sign, publish or install the ephemeral assembly.** It is not a ready APK, and no original fixed signing private key should be uploaded to GitHub. Continue with real native host invocation and Node process capability boundaries, not only more standalone JVM tests.
