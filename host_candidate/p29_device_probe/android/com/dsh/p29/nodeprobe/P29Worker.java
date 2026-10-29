@@ -11,11 +11,9 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.Process;
-import java.util.regex.Pattern;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -101,6 +99,11 @@ public final class P29Worker extends Service {
       // Framework-authenticated caller must be our normal package UID.
       if(request.sendingUid!=getApplicationInfo().uid)return;
       final Messenger receiver=request.replyTo;
+      // Capture while this Binder Message is still valid, before worker thread starts.
+      final String suppliedCanary;
+      try{
+        suppliedCanary=request.getData().getString("canaryPath");
+      }catch(RuntimeException malformed){return;}
       new Thread(()->{
         boolean allHashes=false,uidMatch=false;
         String childUid="NOT_TESTED",fileCode="NOT_TESTED",
@@ -167,7 +170,7 @@ public final class P29Worker extends Service {
           }
           allHashes=true;
           phase="VALIDATE_HOST_PRIVATE_CANARY_PATH";
-          String supplied=request.getData().getString("canaryPath");
+          String supplied=suppliedCanary;
           if(supplied==null || supplied.length()>512)
             throw new SecurityException("CANARY_PATH_INVALID");
           File canary=new File(supplied).getCanonicalFile();
