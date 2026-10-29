@@ -41,7 +41,8 @@ changing original Node bytes or writing executables to user-writable directories
 - Place ALL ten direct/transitive native libraries in the same APK. Six keep
   their exact original DT_NEEDED versioned sonames.
 - Store ALL eleven ELF entries uncompressed, and align their data offsets to
-  4096-byte boundaries, including the six .so.N entries.
+  16384-byte boundaries, including the six .so.N entries. Verify all original
+  ELF PT_LOAD segments are themselves 16 KiB aligned (0x4000).
 - A candidate isolated worker sets LD_LIBRARY_PATH to the package-managed
   nativeLibraryDir plus its installed base.apk!/lib/arm64-v8a archive search
   path, then attempts only SHA-pinned original bin/node --version.
@@ -52,9 +53,9 @@ changing original Node bytes or writing executables to user-writable directories
 - Both direct and fallback paths must refuse arbitrary writable-home
   executable copies, altered original Node bytes and relaxed permissions.
 
-Static source, Java compile, signed-original hash and uncompressed 4096-byte ZIP
-alignment all PASS in CI:
-https://github.com/u2584604327-a11y/dshe/actions/runs/40847499377
+Static source, Java compile, signed-original hash and uncompressed 16 KiB ZIP
+alignment all PASS in latest CI:
+https://github.com/u2584604327-a11y/dshe/actions/runs/40847949453
 
 DO NOT infer actual Node execution from those static PASS results.
 
@@ -76,3 +77,17 @@ P21_REAL_NODE_EGRESS_DENIAL=NOT_TESTED
 P21_DSH_PRODUCT_NODE_MIGRATION=NO
 P21_REAL_DEVICE_APK_UPGRADE=NO
 P21_RELEASE=BLOCKED
+
+## 16 KiB check evidence
+
+Original signed Node and all ten of its actual transitive ELF dependencies
+have PT_LOAD alignment 0x4000, verified by readelf -l -W. P21 source gate
+rejects any package that does not preserve this. All 11 uncompressed native
+ELF ZIP data offsets are aligned to 16 KiB even for versioned .so.N entries;
+Android SDK zipalign -c -P 16 4 passes. This addresses package alignment
+for both 4 KiB and 16 KiB page-size devices, **not** runtime linker or
+isolatedProcess/SELinux proof.
+
+Android official guidance:
+https://developer.android.com/guide/practices/page-sizes
+https://developer.android.com/tools/zipalign
