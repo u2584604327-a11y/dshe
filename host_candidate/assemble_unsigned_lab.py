@@ -11,6 +11,7 @@ from patch_browser import apply_browser
 from patch_privacy import apply_privacy
 from verify_p6_asset_preimages import EXPECTED_P6,EXPECTED_PATHS,sha_file
 from patch_logs_metadata_only import patch as patch_p11_logs
+from p13_manifest_inject import inject as inject_p13_manifest
 P11_LOG_ZIP_SHA="29bcf54bb00ea989516b8bc7bdeb6bbd68f9a11a85082273399eb3597cdd76a0"
 from patch_native_export_reply import apply as patch_p8_export
 P1_SAFE_SHA="8565675b7da207e858f1c3dd69896ce5a68015a24605157a4a11b259218119b6"
@@ -37,8 +38,11 @@ def assemble(apkpath,p6path,p5path,outpath):
         for n in newclasses
     ):
         raise ValueError("P5_P12_CLASS_SCOPE_MISMATCH")
-    if "Lcom/dsh/p12/P12LogViewerReviewEntry;" not in newclasses:
-        raise ValueError("P12_REAL_NATIVE_REVIEW_ADAPTER_CLASS_MISSING")
+    if "Lcom/dsh/p12/P12LogViewerReviewEntry;" not in newclasses or \
+       "Lcom/dsh/p12/P13NativeReviewInitializer;" not in newclasses:
+        raise ValueError("P13_AUTO_STARTUP_OR_P12_ADAPTER_CLASS_MISSING")
+    if "Landroidx/startup/Initializer;" in newclasses:
+        raise ValueError("FORBIDDEN_DUPLICATE_ANDROIDX_STARTUP_STUB")
     with zipfile.ZipFile(p6path) as bundle:
         if bundle.testzip():raise ValueError("P6_CRC_FAIL")
         inner=bundle.read("output/DSH_V139_P6_ASSET_OVERLAY_NOT_APK.zip")
@@ -56,6 +60,9 @@ def assemble(apkpath,p6path,p5path,outpath):
         if dexnames!=["classes.dex","classes2.dex"]:raise ValueError("UNEXPECTED_ORIGINAL_DEX_LAYOUT")
         if not (EXPECTED_PATHS|{P7_LOG_TOOL_PATH}).issubset(set(names)):
             raise ValueError("MISSING_ORIGINAL_ASSETS_OR_LOG_PLUGIN")
+        new_manifest,p13_report=inject_p13_manifest(original.read("AndroidManifest.xml"))
+        if hash_bytes(new_manifest)!="39a825e40aff02cef83944ef40de61e310a4c6912d3a352169637ee72a9a0b5f":
+            raise ValueError("P13_MANIFEST_HASH_NOT_PINNED")
         patched_log_plugin,patched_log_js=patch_p11_logs(original.read(P7_LOG_TOOL_PATH))
         if hash_bytes(patched_log_plugin)!=P11_LOG_ZIP_SHA:raise ValueError("P11_LOG_PLUGIN_IDENTITY_MISMATCH")
         if "enum: ['summary']" not in patched_log_js:raise ValueError("P11_SUMMARY_ONLY_SCHEMA_MISSING")
@@ -99,6 +106,7 @@ def assemble(apkpath,p6path,p5path,outpath):
                     data=candidate
                 elif name==P7_LOG_TOOL_PATH:
                     data=patched_log_plugin
+                elif name=="AndroidManifest.xml":data=new_manifest
                 elif name=="classes.dex":data=modified
                 elif not member.is_dir():unchanged+=1
                 meta=copy.copy(member)
@@ -109,9 +117,10 @@ def assemble(apkpath,p6path,p5path,outpath):
             if merged.testzip():raise AssertionError("FUSED_APK_CRC_FAIL")
             if len(merged.namelist())!=len(set(merged.namelist())):raise AssertionError("DUPLICATE_OUTPUT_NAMES")
             for name in names:
-                if name in overlays or name=="classes.dex" or name=="META-INF/MANIFEST.MF" or SIGNATURE_META.fullmatch(name):continue
+                if name in overlays or name in ("classes.dex","AndroidManifest.xml","META-INF/MANIFEST.MF") or SIGNATURE_META.fullmatch(name):continue
                 if merged.read(name)!=original.read(name):raise AssertionError("UNMODIFIED_APK_ENTRY_CHANGED_"+name)
             if hash_bytes(merged.read("classes.dex"))!=P10_DEX_SHA:raise AssertionError("PATCHED_DEX_CHANGED")
+            if merged.read("AndroidManifest.xml")!=new_manifest:raise AssertionError("P13_MANIFEST_CHANGED")
             if merged.read("classes3.dex")!=addon:raise AssertionError("P5_DEX_CHANGED")
             for name in EXPECTED_PATHS|{P7_LOG_TOOL_PATH}:
                 if merged.read(name)!=overlays[name]:raise AssertionError("OVERLAY_CHANGED_"+name)
@@ -131,6 +140,9 @@ def assemble(apkpath,p6path,p5path,outpath):
       "ART_SAFE_DENY_TRY_BOUNDARIES":p1_report["TRY_START_END_AND_HANDLER_ALIGNMENT"],
       "P8_NATIVE_EXPORT_BUNDLEPATH_REMOVED":p8_report["NATIVE_EXPORT_REPLY_BUNDLE_PATH_REMOVED"],
       "P5_ADDON_DEX_SHA256":hash_bytes(addon),"P5_CLASS_COUNT":len(newclasses),
+      "P13_NATIVE_AUTOSTART_MANIFEST_SHA256":hash_bytes(new_manifest),
+      "P13_STARTUP_META_COUNT":p13_report["P13_ANDROIDX_META_DATA_COUNT"],
+      "P13_AUTOWIRE_REAL_ACTIVITY_RUNTIME":"PENDING_ANDROID_INSTRUMENTATION",
       "ADDED_DEX_ENTRY":"classes3.dex","P6_OVERLAY_FILES":sorted(EXPECTED_PATHS),
       "P11_SUMMARY_ONLY_LOG_TOOL_SHA256":hash_bytes(patched_log_plugin),
       "P7_AI_VISIBLE_DIAGNOSTIC_PATH":"REDACTED",
@@ -140,7 +152,7 @@ def assemble(apkpath,p6path,p5path,outpath):
       "UNSIGNED_LAB_FILE_SHA256":sha_file(resultpath),
       "UNSIGNED_LAB_FILE_BYTES":resultpath.stat().st_size,
       "PACKAGE_VERSION_CODE":"138_UNCHANGED",
-      "P5_HOST_WIRED":"NO","DIAGNOSTIC_EGRESS_TOTAL_GATE":"NOT_VERIFIED",
+      "P5_HOST_WIRED":"P13_STARTUP_CANDIDATE_UNVERIFIED","DIAGNOSTIC_EGRESS_TOTAL_GATE":"NOT_VERIFIED",
       "SIGNED_WITH_ORIGINAL_CERT":"NO","ART_VERIFIED":"NO",
       "INSTALLATION_ALLOWED":"NO","APK_EXPORT_ALLOWED":"NO"}
 
