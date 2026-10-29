@@ -28,16 +28,34 @@ pkgline="$(printf '%s\n' "$badging" | grep '^package: ' | head -n1)"
 [[ "$pkgline" == *"name='com.dsh.android'"* ]]
 [[ "$pkgline" == *"versionCode='138'"* ]]
 
-adb logcat -c
-# A force-stopped app might fail to launch due to a product-level bootstrap issue.
-# Keep that result as an explicit failure, never a silent PASS.
+# ART dex2oat compile on a disposable, offline emulator. This is not proof
+# of every P5 addon class being loaded or of real-phone behavior.
 set +e
-start_result="$(adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p com.dsh.android 2>&1)"
+compile_result="$(adb shell cmd package compile -m speed -f com.dsh.android 2>&1)"
+compile_code=$?
+set -e
+printf '%s\n' "$compile_result" | head -c 1000
+if test "$compile_code" -ne 0 || printf '%s\n' "$compile_result" | grep -Eqi 'Failure|Exception|Error:'; then
+  echo "::error::Offline ART package compiler rejected the lab candidate"
+  exit 1
+fi
+echo "ANDROID_ART_OFFLINE_PACKAGE_COMPILE=PASS"
+
+# Prefer manifest's launchable component; original DSH may use explicit
+# MainActivity without a standard MAIN/LAUNCHER resolution.
+launch_activity="$(printf '%s\n' "$badging" | sed -n -E "s/^launchable-activity: name='([^']+)'.*/\\1/p" | head -n1)"
+if test -z "$launch_activity"; then
+  launch_activity="com.dsh.android.MainActivity"
+  echo "NO_LAUNCHABLE_MANIFEST_ENTRY=YES_TRY_EXPLICIT_MAIN"
+fi
+adb logcat -c
+set +e
+start_result="$(adb shell am start -W -n "com.dsh.android/$launch_activity" 2>&1)"
 start_code=$?
 set -e
-printf '%s\n' "$start_result" | sed -E 's/(https?:\/\/)[^ ]+/\1[redacted]/g' | head -c 1500
-if test "$start_code" -ne 0 || printf '%s\n' "$start_result" | grep -Eqi 'Error:|Exception|not found|unable to resolve'; then
-  echo "::error::Android launcher could not start DSH lab candidate"
+printf '%s\n' "$start_result" | head -c 1500
+if test "$start_code" -ne 0 || printf '%s\n' "$start_result" | grep -Eqi 'Error:|Exception|not found|unable to resolve|SecurityException'; then
+  echo "::error::Explicit Android Activity launch blocked"
   exit 1
 fi
 sleep 8
