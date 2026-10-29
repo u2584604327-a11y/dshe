@@ -71,9 +71,28 @@ if grep -Eq 'P17_.*=FAIL' out/p17-private-log.txt; then
   echo '::error::P17 unexpected broker failure'
   exit 1
 fi
+# Real Activity lifecycle regression: leaving the trusted foreground UI
+# must revoke all outstanding grants. No new approval or privileged send.
+adb shell input keyevent KEYCODE_HOME
+revoked=0
+for _ in $(seq 1 10); do
+  if adb logcat -d -s DSH_P17_BROKER:I '*:S' |
+       grep -Fq 'P18_ALL_GRANTS_REVOKED=UI_BACKGROUND'; then
+    revoked=1
+    break
+  fi
+  sleep 1
+done
+if test "$revoked" != 1; then
+  echo '::error::P18 foreground-loss revocation marker absent'
+  adb logcat -d -s DSH_P17_BROKER:I '*:S' |
+    grep -E 'P17_|P18_' | tail -n 30 || true
+  exit 1
+fi
+echo 'P18_UI_BACKGROUND_GRANTS_REVOKED=PASS_ANDROID35' >> "$GITHUB_STEP_SUMMARY"
 echo 'P17_BINDER_SENDING_UID_ISOLATED=PASS_ANDROID35' >> "$GITHUB_STEP_SUMMARY"
 echo 'P17_HOST_UI_EXPLICIT_GRANT=PASS_ANDROID35' >> "$GITHUB_STEP_SUMMARY"
 echo 'P17_ONE_SHOT_REPLAY_AND_RAW_FILE_DENIAL=PASS_ANDROID35' >> "$GITHUB_STEP_SUMMARY"
 echo 'P17_DSH_NODE_ACTUAL_ISOLATED_MIGRATION=NO' >> "$GITHUB_STEP_SUMMARY"
 echo 'P18_UI_GESTURE_OBSERVED_AND_APPROVAL_DELIVERED=PASS_ANDROID35' >> "$GITHUB_STEP_SUMMARY"
-echo 'P18_GRANTS_REVOKED_ON_STOP_DISCONNECT=SOURCE_PRESENT_RUNTIME_NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
+echo 'P18_SERVICE_DISCONNECT_REVOCATION=SOURCE_PRESENT_NOT_RUNTIME_VERIFIED' >> "$GITHUB_STEP_SUMMARY"
