@@ -21,7 +21,7 @@ public final class P43ProbeActivity extends Activity {
   private String session;
   private final P44VirtualDeviceProfile simulatedProfile=P44VirtualDeviceProfile.syntheticDemo();
   private static final byte[] P45_SYNTHETIC=
-      "P45_SYNTHETIC_PRIVATE_ASSET_V1\\n".getBytes(StandardCharsets.UTF_8);
+      "P45_SYNTHETIC_PRIVATE_ASSET_V1".getBytes(StandardCharsets.UTF_8);
   private static String sha256(byte[] input) {
     try {
       byte[] b=MessageDigest.getInstance("SHA-256").digest(input);
