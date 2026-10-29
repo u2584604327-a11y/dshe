@@ -1,16 +1,22 @@
-name: DSH P1-P10 disposable ART + P5 native UI emulator gate
+name: DSH P13 AndroidX Startup automatic native LogViewer hook emulator gate
 
 on:
   push:
     branches: [main]
     paths:
       - 'host_candidate/assemble_unsigned_lab.py'
+      - 'host_candidate/p13_manifest_inject.py'
+      - 'host_candidate/p13_compile_stub/**'
       - 'host_candidate/run_emulator_smoke.sh'
       - 'host_candidate/build_instrumentation_lab.sh'
       - 'host_candidate/test-only/**'
       - 'host_candidate/p12_native/**'
       - '.github/workflows/unsigned-integration-lab.yml'
   workflow_dispatch:
+
+concurrency:
+  group: dsh-p13-auto-init-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -39,7 +45,7 @@ jobs:
           set -euo pipefail
           bash -n host_candidate/run_emulator_smoke.sh
           bash -n host_candidate/build_instrumentation_lab.sh
-          python3 -m py_compile host_candidate/assemble_unsigned_lab.py
+          python3 -m py_compile host_candidate/assemble_unsigned_lab.py host_candidate/p13_manifest_inject.py
           echo 'EMULATOR_SCRIPT_SYNTAX=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Fetch both SHA-pinned inputs from PRIVATE Releases only
         shell: bash
@@ -73,7 +79,7 @@ jobs:
           test -x "$SDK/build-tools/35.0.0/aapt"
           test -x "$SDK/build-tools/35.0.0/zipalign"
           echo "SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-      - name: Compile pinned P5 plus P12 native user-gesture adapter against Android35
+      - name: Compile P5 P12 P13 classes with non-packaged Startup interface stub
         shell: bash
         run: |
           set -euo pipefail
@@ -95,16 +101,25 @@ jobs:
           mkdir -p out/native-src/com/dsh/p12
           cp host_candidate/p12_native/com/dsh/p12/P12LogViewerReviewEntry.java \
             out/native-src/com/dsh/p12/P12LogViewerReviewEntry.java
-          mapfile -d '' sources < <(find out/native-src -name '*.java' -print0 | sort -z)
-          test "${#sources[@]}" -eq 10
+          cp host_candidate/p12_native/com/dsh/p12/P13NativeReviewInitializer.java \
+            out/native-src/com/dsh/p12/P13NativeReviewInitializer.java
+          mkdir -p out/p13-stub-classes
           javac --release 8 -cp "$SDK_ROOT/platforms/android-35/android.jar" \
+            -d out/p13-stub-classes host_candidate/p13_compile_stub/androidx/startup/Initializer.java
+          jar cf out/p13-compile-only-stub.jar -C out/p13-stub-classes .
+          mapfile -d '' sources < <(find out/native-src -name '*.java' -print0 | sort -z)
+          test "${#sources[@]}" -eq 11
+          javac --release 8 -cp "$SDK_ROOT/platforms/android-35/android.jar:out/p13-compile-only-stub.jar" \
             -d out/native-classes "${sources[@]}"
+          test ! -d out/native-classes/androidx
           jar cf out/p5-native.jar -C out/native-classes .
           "$SDK_ROOT/build-tools/35.0.0/d8" --min-api 26 \
             --lib "$SDK_ROOT/platforms/android-35/android.jar" \
+            --classpath out/p13-compile-only-stub.jar \
             --output out/native-dex out/p5-native.jar
           test -s out/native-dex/classes.dex
-          echo 'P5_P12_ANDROID_NATIVE_JAVAC_D8=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P5_P12_P13_ANDROID_NATIVE_JAVAC_D8=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P13_STARTUP_STUB_PACKAGED_IN_DEX=NO' >> "$GITHUB_STEP_SUMMARY"
       - name: Build test-only same-certificate instrumentation skeleton
         shell: bash
         run: bash host_candidate/build_instrumentation_lab.sh
@@ -132,6 +147,7 @@ jobs:
             exit 1
           fi
           echo 'UNSIGNED_APK_STRUCTURAL_ASSEMBLY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P13_MANIFEST_AUTOHOOK_METADATA=PINNED_SHA_ONLY' >> "$GITHUB_STEP_SUMMARY"
           echo 'UNSIGNED_APK_ZIPALIGN_AND_AAPT=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'ORIGINAL_APK_SIGNATURE_INTENTIONALLY_INVALIDATED=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'VERSION_CODE=138_UNCHANGED' >> "$GITHUB_STEP_SUMMARY"
@@ -195,7 +211,8 @@ jobs:
             echo 'PRODUCTION_V139_APK_BUILT=NO'
             echo 'FIXED_CERTIFICATE_SIGNING=NOT_PERFORMED'
             echo 'P12_TEST_ONLY_UI_HOOK=CHECK_INSTRUMENTATION_STEP'
-            echo 'P12_NATIVE_UI_CONNECTED_TO_LEGACY_ACTIVITY_ON_REAL_START=NO'
+            echo 'P13_ANDROIDX_STARTUP_NATIVE_AUTOHOOK=SEE_REAL_INSTRUMENTATION_GATE'
+            echo 'P13_PRODUCT_RUNTIME_AUTOHOOK=NOT_ASSUMED_FROM_STATIC_TESTS'
             echo 'P5_SEND_GATE_CONNECTED_TO_LEGACY_NATIVE_NODE=NO'
             echo 'ART_EMULATOR_RESULT=SEE_DISPOSABLE_EMULATOR_JOB_STEP'\n            echo 'ART_ON_REAL_PHONE=NOT_VERIFIED'
             echo 'No generated APK or binary artifact uploaded or released.'
