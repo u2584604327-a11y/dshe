@@ -28,6 +28,7 @@ import java.net.Socket;
  */
 public final class P20BoundaryActivity extends Activity {
   private static final String TAG="DSH_P20_BOUNDARY";
+  private TextView statusLabel;
   private File canary;
   private ServerSocket server;
   private boolean bound=false;
@@ -58,7 +59,7 @@ public final class P20BoundaryActivity extends Activity {
       }
       Log.i(TAG,"P20_REAL_DSH_NODE_PROCESS_MIGRATED=NO");
       Log.i(TAG,"P20_ARM64_NODE_EXECUTION_ON_X86_64_EMULATOR=NOT_TESTED");
-      ((TextView)findViewById(android.R.id.content)).setText("P20 boundary probe completed");
+      if(statusLabel!=null)statusLabel.setText("P20 boundary probe completed");
     }
   });
   private final ServiceConnection connection=new ServiceConnection(){
@@ -79,9 +80,9 @@ public final class P20BoundaryActivity extends Activity {
   };
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
-    TextView text=new TextView(this);
-    text.setText("P20 permission boundary under test");
-    setContentView(text);
+    statusLabel=new TextView(this);
+    statusLabel.setText("P20 permission boundary under test");
+    setContentView(statusLabel);
     try {
       canary=new File(getFilesDir(),"p20-synthetic-host-canary.tmp");
       try(FileOutputStream output=new FileOutputStream(canary,false)){
