@@ -1,0 +1,141 @@
+name: DSH unsigned integration lab - P2 P5 P6 (non-installable)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'host_candidate/assemble_unsigned_lab.py'
+      - '.github/workflows/unsigned-integration-lab.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ephemeral-unsigned-assembly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Fetch both SHA-pinned inputs from PRIVATE Releases only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p input out out/native-classes out/native-dex
+          gh release download dsh-baseline-v135dsh-baseline-v135 --repo "$GH_REPO" \
+            --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk --dir input
+          gh release download dsh-source-v139-p6 --repo "$GH_REPO" \
+            --pattern DSH_V139_P6_NODE_CREDENTIAL_LOG_REDACTION_AND_ASSET_STAGING.zip --dir input
+          printf '%s  %s\n' '3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5' \
+            'input/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk' | sha256sum -c -
+          printf '%s  %s\n' '3af586c2c83d1aea67d119357672559eb09371c77ef4e06900bb697c06d11fd5' \
+            'input/DSH_V139_P6_NODE_CREDENTIAL_LOG_REDACTION_AND_ASSET_STAGING.zip' | sha256sum -c -
+      - name: Install real Android platform and DEX tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r host_candidate/requirements.txt
+          SDK="$(printenv ANDROID_HOME || printenv ANDROID_SDK_ROOT || echo /usr/local/lib/android/sdk)"
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if test -z "$SDKMANAGER"; then
+            SDKMANAGER="$(find "$SDK/cmdline-tools" -name sdkmanager -type f -perm /111 2>/dev/null | head -n1 || true)"
+          fi
+          test -n "$SDKMANAGER"
+          (yes | "$SDKMANAGER" --sdk_root="$SDK" --licenses >/dev/null) || true
+          "$SDKMANAGER" --sdk_root="$SDK" 'platforms;android-35' 'build-tools;35.0.0'
+          test -s "$SDK/platforms/android-35/android.jar"
+          test -x "$SDK/build-tools/35.0.0/d8"
+          test -x "$SDK/build-tools/35.0.0/apksigner"
+          test -x "$SDK/build-tools/35.0.0/aapt"
+          test -x "$SDK/build-tools/35.0.0/zipalign"
+          echo "SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+      - name: Compile all 9 P5 Java sources against Android 35, convert to DEX
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import io, pathlib, zipfile
+          p=zipfile.ZipFile('input/DSH_V139_P6_NODE_CREDENTIAL_LOG_REDACTION_AND_ASSET_STAGING.zip')
+          addon=p.read('upstream/DSH_V139_P5_AUDIT_FAIL_CLOSED_SOURCE_ONLY.zip')
+          with zipfile.ZipFile(io.BytesIO(addon)) as z:
+              files=sorted(n for n in z.namelist()
+                           if n.startswith('merged_source/src/') and n.endswith('.java'))
+              if len(files)!=9:raise ValueError('P5_SOURCE_COUNT_MISMATCH')
+              for n in files:
+                  path=pathlib.PurePosixPath(n)
+                  if '..' in path.parts:raise ValueError('PATH_TRAVERSAL')
+                  output=pathlib.Path('out/native-src')/path.relative_to('merged_source/src')
+                  output.parent.mkdir(parents=True,exist_ok=True)
+                  output.write_bytes(z.read(n))
+          PY
+          mapfile -d '' sources < <(find out/native-src -name '*.java' -print0 | sort -z)
+          test "${#sources[@]}" -eq 9
+          javac --release 8 -cp "$SDK_ROOT/platforms/android-35/android.jar" \
+            -d out/native-classes "${sources[@]}"
+          jar cf out/p5-native.jar -C out/native-classes .
+          "$SDK_ROOT/build-tools/35.0.0/d8" --min-api 26 \
+            --lib "$SDK_ROOT/platforms/android-35/android.jar" \
+            --output out/native-dex out/p5-native.jar
+          test -s out/native-dex/classes.dex
+          echo 'P5_ANDROID_NATIVE_JAVAC_D8=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Fuse bounded host DEX + native P5 DEX + P6 assets, no signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python host_candidate/assemble_unsigned_lab.py \
+            input/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            input/DSH_V139_P6_NODE_CREDENTIAL_LOG_REDACTION_AND_ASSET_STAGING.zip \
+            out/native-dex/classes.dex \
+            --output out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk \
+            --report out/fusion-report.json
+          "$SDK_ROOT/build-tools/35.0.0/zipalign" -f 4 \
+            out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
+          "$SDK_ROOT/build-tools/35.0.0/zipalign" -c 4 out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
+          unzip -tqq out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
+          badging="$("$SDK_ROOT/build-tools/35.0.0/aapt" dump badging out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk)"
+          pkgline="$(printf '%s\n' "$badging" | grep '^package: ' | head -n1)"
+          [[ "$pkgline" == *"name='com.dsh.android'"* ]]
+          [[ "$pkgline" == *"versionCode='138'"* ]]
+          test "$(unzip -Z1 out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk | grep -Ec '^classes(2|3)?\.dex$')" -eq 3
+          if "$SDK_ROOT/build-tools/35.0.0/apksigner" verify out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk >/dev/null 2>&1; then
+            echo 'Unexpected valid APK signing detected: fail closed.'
+            exit 1
+          fi
+          echo 'UNSIGNED_APK_STRUCTURAL_ASSEMBLY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'UNSIGNED_APK_ZIPALIGN_AND_AAPT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'ORIGINAL_APK_SIGNATURE_INTENTIONALLY_INVALIDATED=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'VERSION_CODE=138_UNCHANGED' >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PY'
+          import json,os,pathlib
+          r=json.loads(pathlib.Path('out/fusion-report.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:
+              out.write('Added P5 DEX classes: '+str(r['P5_CLASS_COUNT'])+'\n')
+              out.write('Unmodified APK entries byte-checked: '+str(r['UNCHANGED_ENTRIES_CHECKED'])+'\n')
+              out.write('P2 primary DEX SHA256: '+r['PATCHED_MAIN_DEX_SHA256']+'\n')
+              out.write('Ephemeral unsigned aligned lab APK exists only inside this runner, never published.\n')
+          PY
+      - name: Destroy transient APK and state remaining blockers
+        if: always()
+        shell: bash
+        run: |
+          rm -f out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
+          {
+            echo 'PRODUCTION_V139_APK_BUILT=NO'
+            echo 'FIXED_CERTIFICATE_SIGNING=NOT_PERFORMED'
+            echo 'P5_NATIVE_UI_CONNECTED_TO_LEGACY_ACTIVITY=NO'
+            echo 'P5_SEND_GATE_CONNECTED_TO_LEGACY_NATIVE_NODE=NO'
+            echo 'ART_AND_PHONE_VERIFIED=NO'
+            echo 'No generated APK or binary artifact uploaded or released.'
+          } >> "$GITHUB_STEP_SUMMARY"
