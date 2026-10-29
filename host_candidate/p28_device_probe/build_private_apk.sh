@@ -40,7 +40,7 @@ jar cf out/p28/probe.jar -C out/p28/classes .
 "$BT/zipalign" -f -P 16 4 out/p28-unsigned.apk out/p28-aligned.apk
 "$BT/zipalign" -c -P 16 4 out/p28-aligned.apk
 python3 - <<'PY'
-import hashlib,json,zipfile
+import hashlib,json,zipfile,struct
 with zipfile.ZipFile("out/p28-aligned.apk") as z:
  names=z.namelist()
  if len(set(names))!=len(names):raise ValueError("DUPLICATE_ZIP_ENTRY")
@@ -52,7 +52,13 @@ with zipfile.ZipFile("out/p28-aligned.apk") as z:
   raise ValueError("ORIGINAL_LIBRARY_SET_OR_PRELOAD_MAP_CHANGED")
  for name,sha in required.items():
   item=z.getinfo(name)
-  offset=item.header_offset+30+len(item.filename.encode())+len(item.extra)
+  with open("out/p28-aligned.apk","rb") as raw:
+   raw.seek(item.header_offset)
+   local=raw.read(30)
+   if len(local)!=30 or local[:4]!=b"PK\\x03\\x04":
+    raise ValueError("BAD_LOCAL_ZIP_HEADER")
+   header=struct.unpack("<IHHHHHIIIHH",local)
+   offset=item.header_offset+30+header[-2]+header[-1]
   if item.compress_type!=zipfile.ZIP_STORED or offset%16384:
    raise ValueError("ELF_ZIP_NOT_16K_STORED")
   if hashlib.sha256(z.read(name)).hexdigest()!=sha:
