@@ -2,7 +2,7 @@ name: APK baseline identity audit (no signing)
 
 on:
   release:
-    types: [published]
+    types: [published, edited]
   workflow_dispatch:
     inputs:
       baseline:
