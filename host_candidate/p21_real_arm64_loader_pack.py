@@ -93,12 +93,17 @@ def main():
     "library_closure":sorted(seen),"library_source_archives":origins,
     "library_sizes_bytes":sizes,
     "native_lib_file_count":len(seen)+1,
+    "api35_extractNativeLibs_unextractable_sonames":sorted(
+      name for name in seen if not name.endswith(".so")),
+    "api35_versioned_library_installation":"BLOCKED_IN_DEFAULT_EXTRACT_NATIVE_LIBS",
+    "original_dt_needed_sonames_unmodified":True,
     "actual_android_isolated_node_execution":"NOT_TESTED",
     "original_dsh_engine_migration":"NO","release":"BLOCKED"}
   pathlib.Path(a.report).parent.mkdir(parents=True,exist_ok=True)
   pathlib.Path(a.report).write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n")
   print("P21_EXACT_SIGNED_V138_ELF=PASS")
   print("P21_RECURSIVE_LIBRARY_CLOSURE=PASS_"+str(len(seen)))
+  print("P21_API35_VERSIONED_LIBRARY_AUTO_EXTRACTION=BLOCKED")
   print("P21_ARM64_ANDROID_NODE_EXECUTION=NOT_TESTED")
   print("P21_PRODUCTION_DSH_NODE_ISOLATED=NO")
 if __name__=="__main__":main()
