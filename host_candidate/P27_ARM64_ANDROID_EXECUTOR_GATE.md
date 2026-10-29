@@ -51,8 +51,38 @@ P20_OS_ISOLATED_WORKER_EGRESS_DENIAL=PASS_STANDALONE_ANDROID35_X86_64
 P24_ONE_SYNTHETIC_SONAME_PRELOAD=PASS_ANDROID35_X86_64
 P25_EXACT_ORIGINAL_V138_NODE_AND_TEN_ELF_STATIC_ALIAS=PASS_STATIC
 P26_MULTILIB_AND_NO_SONAME_PRELOAD=PASS_ANDROID35_X86_64
-P27_GITHUB_ARM64_HOST=CI_PENDING
+P27_GITHUB_ARM64_HOST=PASS_NATIVE_LINUX_ARM64
+P27_LINUX_ARM64_KVM=UNAVAILABLE
+P27_PREINSTALLED_NATIVE_ARM64_ANDROID_EMULATOR=NOT_PRESENT
 P27_ANDROID_ARM64_GUEST=NOT_TESTED
 P27_V138_ORIGINAL_NODE_ISOLATED_ANDROID_BOOT=NOT_TESTED
 P27_DSH_PRODUCTION_RUNTIME_MIGRATED=NO
 P27_RELEASE=BLOCKED
+
+
+## Verified P27 native runner measurements (2026-10-29)
+
+Actions: https://github.com/u2584604327-a11y/dshe/actions/runs/40860259275
+
+Latest ARM64 runner job completed SUCCESS and emitted:
+- P27_GITHUB_HOST_ARCH_AARCH64=PASS
+- P27_ARM64_HOST_KVM=UNAVAILABLE
+- P27_HOST_NATIVE_ARM64_ANDROID_EMULATOR_BINARY=NOT_PRESENT
+- P27_ANDROID_ARM64_GUEST_BOOT=NOT_TESTED
+- P27_ORIGINAL_V138_ARM64_NODE_ISOLATED_EXECVE=NOT_TESTED
+- P27_ORIGINAL_DSH_APP_RELEASE=BLOCKED
+
+The host is genuinely ARM64. However, this specific GitHub-hosted
+environment lacks usable KVM and a native Android ARM64-host emulator.
+It cannot be used to claim a real Android ARM64 test without a separately
+qualified execution channel. Importing an arbitrary unofficial emulator
+binary is NOT approved: it would enlarge the supply-chain attack surface
+for privately held original app assets.
+
+Next legitimate path: independent, user-authorized Android ARM64 physical
+device test with a separately signed standalone test APK, or an actual
+trusted Android ARM64 device farm/runner with hardware evidence. The
+original DSH v138 app, original signing key, live phone data, and production
+must remain untouched. Any APK to distribute containing original Node
+bytes requires a separate explicit distribution decision; do NOT silently
+upload original private Node binary as GitHub Action artifacts.
