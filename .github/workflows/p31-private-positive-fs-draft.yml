@@ -18,7 +18,7 @@ jobs:
       github.event.action == 'opened' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p31-node-positive-fs-control-20261029' &&
-      github.event.pull_request.base.ref == 'dsh/p31-binder-uid-and-canary-liveness-20261029'
+      github.event.pull_request.base.ref == 'dsh/p30-binder-uid-and-canary-liveness-20261029'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
@@ -107,14 +107,14 @@ jobs:
             if test "$old_assets" = 'P30-Private-ARM64-Node-Boundary-Probe.apk,README-P30-PRIVATE.txt,SHA256SUMS.txt';then
               gh release delete "$P30_TAG" --repo "$GH_REPO" --yes
               if gh release view "$P30_TAG" --repo "$GH_REPO" >/dev/null 2>&1;then
-                echo "::error::P29 private Draft still exists after delete";exit 1
+                echo "::error::P30 private Draft still exists after delete";exit 1
               fi
               echo 'P30_OLD_PRIVATE_DRAFT_DELETED=PASS' >> "$GITHUB_STEP_SUMMARY"
             else
-              echo 'P29_OLD_PRIVATE_DRAFT_CLEANUP=SKIPPED_ASSET_SET_CHANGED' >> "$GITHUB_STEP_SUMMARY"
+              echo 'P30_OLD_PRIVATE_DRAFT_CLEANUP=SKIPPED_ASSET_SET_CHANGED' >> "$GITHUB_STEP_SUMMARY"
             fi
           else
-            echo 'P29_OLD_PRIVATE_DRAFT_CLEANUP=SKIPPED_NOT_DRAFT_OR_ABSENT' >> "$GITHUB_STEP_SUMMARY"
+            echo 'P30_OLD_PRIVATE_DRAFT_CLEANUP=SKIPPED_NOT_DRAFT_OR_ABSENT' >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Always destroy signed baseline, temporary test key and all runtime bits
         if: always()
