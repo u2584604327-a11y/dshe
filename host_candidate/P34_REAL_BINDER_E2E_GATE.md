@@ -62,6 +62,22 @@ Android 35 x86_64 lab APK, with real:
 
 P33_ORIGINAL_PROCESS_START_CALLSITES=PASS_STATIC_8
 P33_ORIGINAL_ENGINEMANAGER_START_EDGE=LOCATED_NOT_PATCHED
-P34_ANDROID35_ISOLATED_WORKER_BINDER_UI_E2E=CI_PENDING
+P34_ANDROID35_ISOLATED_WORKER_BINDER_UI_E2E=PASS_CI_40882377690
 P34_REAL_ORIGINAL_NODE_TO_HOST_BRIDGE=NOT_IMPLEMENTED
 P34_PRODUCTION_SIGNED_DSH_V139=BLOCKED
+
+## Recovered older v139 source archives: full-host availability review
+
+Private ChatGPT Library archives inspected read-only (not copied into GitHub):
+- DSH_V139_NATIVE_INTEGRATION_SOURCE_AND_EVIDENCE.zip: source-only v139 P1 Android helper classes, browser-related DEX patch candidates, original v137 JavaScript assets. Its own README explicitly states **NOT an original complete Kotlin project**; browserOrNull and BrowserBridge DEX code changes were not integrated into the live v138 app.
+- DSH_V139_P2_FD_REVIEW_HOST_SOURCE_AND_EVIDENCE.zip: expanded helper implementations including AndroidFdQueue, NativeDiagnosticReview, ConsentLedger, BrowserCoordinator and synthetic tests. Its NEXT_ACCEPTANCE explicitly says host runtime callsites for diagnostics, browser and NativeUploader are still not wired.
+- DSH_V139_P3_PROJECTION_BINDING_SOURCE_ONLY.zip: source delta for projected payload/consent binding; no APK or host wiring.
+- DSH_V139_P4_SINGLE_USE_DIAGNOSTIC_DISPATCH_SOURCE_ONLY.zip: DiagnosticDispatchGate and test source, with self-reported 88/88 JVM checks. README explicitly forbids treating those JVM checks as ART/real sender validation and states no native Activity or Node upload path uses the gateway yet.
+
+**Consequence:** The archives are useful component sources and can be reused for the future real DSH host integration, but none supplies a complete original MainActivity/EngineManager source project or an evidenced live Node->Binder->trusted host path. The original v138 DEX EngineManager$start$2.invokeSuspend callsite found in P33 remains the actual engine migration candidate; do NOT replace it blind with the source-only helper.
+
+P34_REAL_ANDROID35_NONEXPORTED_BINDER_AND_NATIVE_UI=PASS
+P34_NODE_STDOUT_TO_ORIGINAL_DSH_HOST=NOT_IMPLEMENTED
+P34_RECOVERED_V139_COMPONENT_HELPERS=SOURCE_ONLY_REUSABLE
+P34_RECOVERED_ORIGINAL_COMPLETE_MAINACTIVITY_SOURCE=NO
+P34_V139_PRODUCTION_RELEASE=BLOCKED
