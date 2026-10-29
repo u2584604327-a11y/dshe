@@ -4,7 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - 'host_candidate/**'
+      - 'host_candidate/patch_deny.py'
+      - 'host_candidate/patch_browser.py'
+      - 'host_candidate/patch_privacy.py'
+      - 'host_candidate/verify_p2_scope.py'
+      - 'host_candidate/verify_p6_asset_preimages.py'
+      - 'host_candidate/requirements.txt'
       - '.github/workflows/p2-host-preflight.yml'
   workflow_dispatch:
 
