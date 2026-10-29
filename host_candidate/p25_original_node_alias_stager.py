@@ -62,16 +62,25 @@ def main():
  expected=names-{NODE}
  if len(expected)!=EXPECTED_NON_PLATFORM:raise ValueError("LIBRARY_COUNT_CHANGED")
  original_meta={}
+ soname_mismatches=[]
  for name in sorted(expected):
   if not re.fullmatch(r"lib[A-Za-z0-9_.+-]+\.so(?:\.[0-9][0-9.]*)?",name):
    raise ValueError("BAD_ORIGINAL_NEEDED_SONAME")
   blob=(source/name).read_bytes()
   sonames,needed=inspect(blob)
   if len(sonames)!=1 or sonames[0]!=name:
-   raise ValueError("SONAME_MISSING_OR_DIFFERS_FROM_DEPENDENCY_"+name)
+   observed=sonames[0] if len(sonames)==1 else "MISSING_OR_MULTIPLE"
+   soname_mismatches.append({"needed_name":name,"actual_soname":observed})
   if any(dep not in expected and dep not in ANDROID_PLATFORM for dep in needed):
    raise ValueError("TRANSITIVE_NEEDED_NOT_PRESENT_"+name)
   original_meta[name]={"sha256":sha256(blob),"needed":needed}
+ # This prints bounded pinned binary *metadata only*, no runtime bytes or paths.
+ if soname_mismatches:
+  print("P25_ORIGINAL_SONAME_VS_NEEDED_MISMATCH_COUNT="+str(len(soname_mismatches)))
+  for item in soname_mismatches:
+   print("P25_ORIGINAL_SONAME_MISMATCH="+
+         item["needed_name"]+"|"+item["actual_soname"])
+  raise ValueError("ORIGINAL_SONAME_REQUIRES_EXPLICIT_RESOLUTION_PLAN")
  root_soname,root_needs=inspect(original_executable)
  if root_soname:raise ValueError("ORIGINAL_NODE_UNEXPECTED_SHARED_SONAME")
  if any(n not in expected and n not in ANDROID_PLATFORM for n in root_needs):
