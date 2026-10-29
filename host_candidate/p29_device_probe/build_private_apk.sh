@@ -77,7 +77,7 @@ else
 fi
 "$BT/aapt" dump permissions out/p29-aligned.apk > out/p29/perms.txt
 if grep -Fq 'uses-permission:' out/p29/perms.txt;then
- echo "::error::P28 requests prohibited Android permissions";exit 1
+ echo "::error::P29 requests prohibited Android permissions";exit 1
 fi
 test "$(grep -Ec 'android:isolatedProcess="true"' \
  host_candidate/p29_device_probe/android/AndroidManifest.xml)" -eq 1
@@ -96,7 +96,7 @@ keytool -genkeypair -alias p29only -keyalg RSA -keysize 3072 \
 if grep -Fq 'uses-permission:' out/p29/signed-perms.txt;then
  echo "::error::Signed test APK requests prohibited permissions";exit 1
 fi
-(cd delivery && sha256sum P28-Private-ARM64-Node-Isolation-Probe.apk > SHA256SUMS.txt)
+(cd delivery && sha256sum P29-Private-ARM64-Node-Boundary-Probe.apk > SHA256SUMS.txt)
 cat > delivery/README-P29-PRIVATE.txt <<'TEXT'
 P29: Owner-authorized private ARM64 Android OS boundary probe.
 Independent package com.dsh.p29.nodeprobe, NOT DSH v139 and NOT P28.
@@ -113,7 +113,8 @@ Tap 复制测试报告 and paste the report privately into your ChatGPT conversa
 Even a full PASS is limited to this Node process, test operations and Android
 configuration. It is not general DSH isolation, VM identity or v139 release.
 The P28 test app and original installed DSH are never overwritten.
-TEXTecho 'P29_ORIGINAL_11_ARM64_ELF_VERIFIED=PASS_STATIC' >> "$GITHUB_STEP_SUMMARY"
+TEXT
+echo 'P29_ORIGINAL_11_ARM64_ELF_VERIFIED=PASS_STATIC' >> "$GITHUB_STEP_SUMMARY"
 echo 'P29_TEST_APP_NO_PERMISSIONS_EPHEMERAL_SIGNER=PASS_STATIC' >> "$GITHUB_STEP_SUMMARY"
 echo 'P29_REAL_ARM64_ANDROID_NODE_BOOT=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
 echo 'P29_RELEASE=BLOCKED' >> "$GITHUB_STEP_SUMMARY"
