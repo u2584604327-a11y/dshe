@@ -244,3 +244,31 @@ USER_PHONE_UPDATE_AND_DATA_RETENTION=NOT_TESTED
 ```
 
 **Important:** No full DSH v139 release has been built or authorized. Do not share the throwaway emulator-signed APK as an installation candidate; do not ask the user to uninstall their installed v138.
+
+## P9 native legacy export fail-closed — Android emulator PASS (2026-10-29)
+
+- Independently verified SHA-pinned static P9 native patch: https://github.com/u2584604327-a11y/dshe/actions/runs/40819381448
+- Full P1–P9 ephemeral unsigned fusion + temporary nonproduction signature + fresh offline Android 35 emulator test **SUCCESS**: https://github.com/u2584604327-a11y/dshe/actions/runs/40819495503
+- Candidate primary `classes.dex` SHA256: `db1d61fdae52f55b569cc92bc82afbc82c31f305295ef4a2fd3a431177038d29`
+- P9 changes exactly **8 bytes** in `LogCommandBridge.doExport`, replacing the original `DiagnosticBundle.build$default` call and move-result with `const/4 v3,#0` and NOPs. The following existing `if-eqz v3` error path is preserved; no new raw diagnostic archive should be created through this old export path. **Runtime export button behavior has not been UI-tested.**
+- Other **52,010** method code bodies remain byte identical relative to P8.
+- All 965 other original APK entries remain byte-identical in final fusion, P5 D8's 63 class definitions remain separately bundled in `classes3.dex`, and the P6/P7 assets remain pinned.
+- Offline ART package compilation = **PASS**, emulator APK install = **PASS**, explicit `MainActivity` launch and process survival = **PASS**; no known startup VerifyError.
+- No fixed signer, no release, no user's real app data touched. Temporary APK and temporary keystore were removed by the Runner, versionCode still **138**.
+- **Functional tradeoff:** the old full diagnostic ZIP export has been intentionally disabled while native trusted per-bundle approval is unavailable. Existing logs/ZIPs are not deleted. Ordinary file/image send method bodies were not modified by P9.
+- **Remaining same-UID risk:** Node can still read pre-existing diagnostic files and may ask for raw `logs.read`/`logs.crashes` content; P9 does not introduce OS process/UID isolation or comprehensively gate generic Node tools.
+- **Release hard blockers:** No trusted host UI hook to P5 `NativeDiagnosticReview`; `ApprovedDiagnosticSendGate` still has no bound transport; no full native/Node diagnostic egress enforcement; no Android WebView storage profile separation; no real-phone data-preserving update; no original-certificate versionCode>138 APK.
+
+```text
+P9_STATIC_DEFAULT_DENY_RAW_ZIP=PASS
+P9_ANDROID35_EMULATOR_INSTALL=PASS
+P9_ANDROID35_OFFLINE_ART_COMPILE=PASS
+P9_ANDROID35_MAINACTIVITY_LAUNCH=PASS
+P9_DIAGNOSTIC_EXPORT_BUTTON_RUNTIME_TEST=NOT_RUN
+P5_TRUSTED_REVIEW_WIRED=NO
+GENERIC_NODE_SAME_UID_EXFILTRATION_BLOCKED=NO
+PRODUCTION_V139_APK=NOT_BUILT
+USER_PHONE_V138=UNCHANGED
+```
+
+Do NOT publish or sign the ephemeral candidate. Avoid asserting total privacy gate closure based only on P9 disablement.
