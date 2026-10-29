@@ -66,7 +66,18 @@ public final class P43ProbeActivity extends Activity {
          response.getBoolean("p45_root_used",true)) {
         fail("ASSET_FD_HASH_OR_SIZE_OR_PRIVILEGE_CLAIM_INVALID");return;
       }
+      String expectedP46=P46ResourceBundle.fromFixture(
+          P46FixtureData.bytes(0),P46FixtureData.bytes(1)).fingerprint();
+      if(!expectedP46.equals(response.getString("p46_bundle_sha256")) ||
+         response.getInt("p46_verified_parts",-1)!=P46ResourceBundle.COUNT ||
+         response.getBoolean("p46_executed_any_script",true)) {
+        fail("P46_CONTENT_ADDRESSED_BUNDLE_REJECTED");return;
+      }
       received=true;
+      log("P46_ORIGINAL_DSH_CONTENT_ADDRESSED_BUNDLE_FD=PASS");
+      log("P46_TWO_FIXTURES_HASH_AND_BYTE_BOUNDS=PASS");
+      log("P46_REAL_NODE_SCRIPT_EXECUTED=NO");
+      log("P46_PRODUCTION_SCRIPT_PACKAGE_BROKER=NOT_IMPLEMENTED");
       log("P45_ORIGINAL_DSH_HOST_PRIVATE_ASSET_FD_TO_ISOLATED_WORKER=PASS");
       log("P45_BOUNDED_SYNTHETIC_ASSET_SHA256=PASS");
       log("P45_ROOT_REQUIRED=NO");
@@ -89,6 +100,7 @@ public final class P43ProbeActivity extends Activity {
       Bundle b=new Bundle();b.putString("session",session);
       b.putString("p44_profile",simulatedProfile.wire());
       ParcelFileDescriptor assetFd=null;File syntheticFile=null;
+      P46HostBroker.Lease p46Lease=null;
       try {
         syntheticFile=File.createTempFile("p45-synthetic-", ".bin", getCacheDir());
         try(FileOutputStream output=new FileOutputStream(syntheticFile)) {
@@ -101,11 +113,13 @@ public final class P43ProbeActivity extends Activity {
         if(!syntheticFile.delete())throw new IOException("UNLINK_FAILED");
         b.putParcelable("p45_readonly_fd",assetFd);
         b.putInt("p45_max_bytes",64);
+        p46Lease=P46HostBroker.attachFixture(this,b);
         m.replyTo=replies;m.setData(b);
         remote.send(m);
       }catch(Exception failure) {
         fail("SYNTHETIC_FD_BROKER_FAILED");
       }finally{
+        if(p46Lease!=null)p46Lease.close();
         if(assetFd!=null)try{assetFd.close();}catch(IOException ignored){}
         if(syntheticFile!=null)syntheticFile.delete();
       }
