@@ -29,6 +29,7 @@ public final class P22ZipLinkWorker extends Service {
       new Thread(()->{
         boolean executable=false;
         boolean verifiedZipLink=false;
+        boolean directlyLoadedVersionedZipLibrary=false;
         String stage="CHECK_INSTALLED_EXECUTABLE";
         java.lang.Process child=null;
         try {
@@ -39,6 +40,17 @@ public final class P22ZipLinkWorker extends Service {
           stage="ENSURE_VERSIONED_LIB_NOT_INSTALLED";
           if(new File(libDir,"libp22version.so.3").exists())
             throw new IllegalStateException("versioned library extracted; not a ZIP test");
+          stage="DIRECT_BIONIC_ZIP_DLOPEN";
+          try {
+            // Android Bionic documented direct ZIP ELF dlopen API, tested
+            // independently of subprocess DT_NEEDED resolution.
+            System.load(getApplicationInfo().sourceDir+
+                "!/lib/x86_64/libp22version.so.3");
+            directlyLoadedVersionedZipLibrary=true;
+          }catch(UnsatisfiedLinkError | SecurityException loadError){
+            Log.e(TAG,"P22_DIRECT_ZIP_DLOPEN_CLASS="+
+                loadError.getClass().getSimpleName());
+          }
           stage="EXEC_PIE_WITH_APK_ZIP_LIBRARY_SEARCH";
           ProcessBuilder process=new ProcessBuilder(executableFile.getAbsolutePath(),"--version");
           process.redirectErrorStream(true);
@@ -57,6 +69,12 @@ public final class P22ZipLinkWorker extends Service {
           byte[] bytes=new byte[256];int n=output.read(bytes);
           String stdout=n<0?"":new String(bytes,0,n,StandardCharsets.UTF_8).trim();
           verifiedZipLink=(status==0 && stdout.equals("P22_VERSIONED_ZIP_DEPENDENCY_OK:22035"));
+          if(!verifiedZipLink){
+            Log.e(TAG,"P22_CHILD_DIAG_MENTIONS_REQUIRED_LIB="+
+                stdout.contains("libp22version.so.3"));
+            Log.e(TAG,"P22_CHILD_DIAG_MENTIONS_NOT_FOUND="+
+                stdout.contains("not found"));
+          }
           if(!verifiedZipLink){
             Log.e(TAG,"P22_CHILD_EXIT_CODE="+status);
             // Diagnostic from a deterministic synthetic 2-file app only.
@@ -79,6 +97,7 @@ public final class P22ZipLinkWorker extends Service {
         result.putInt("uid",Process.myUid());
         result.putBoolean("isolated",Process.isIsolated());
         result.putBoolean("apkExec",executable);
+        result.putBoolean("directZipDlopen",directlyLoadedVersionedZipLibrary);
         result.putBoolean("versionedLibrary",verifiedZipLink);
         Message response=Message.obtain(null,1);
         response.setData(result);
