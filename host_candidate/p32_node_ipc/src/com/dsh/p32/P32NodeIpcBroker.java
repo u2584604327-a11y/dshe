@@ -94,10 +94,14 @@ public final class P32NodeIpcBroker {
   public synchronized Decision receiveAuthenticatedWorkerRequest(
       int frameworkUid,String sessionId,String token,String nodeStdout) {
     if(!bound||session==null)return deny(Outcome.DENY_NOT_BOUND);
-    if(frameworkUid!=boundUid || !uidVerifier.isIsolatedUid(frameworkUid))
+    if(frameworkUid!=boundUid || !uidVerifier.isIsolatedUid(frameworkUid)) {
+      disconnect(); // invalid caller burns all outstanding grants.
       return deny(Outcome.DENY_UNTRUSTED_SENDER);
-    if(sessionId==null||!session.equals(sessionId))
+    }
+    if(sessionId==null||!session.equals(sessionId)) {
+      disconnect(); // stale/mismatched session cannot retain a live grant.
       return deny(Outcome.DENY_WRONG_SESSION);
+    }
     // Burn before inspecting the untrusted Node frame: malformed attempts
     // cannot retain a one-shot token for replay.
     if(activeGrant==null||token==null||!activeGrant.equals(token))
