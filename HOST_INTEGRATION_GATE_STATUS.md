@@ -417,3 +417,47 @@ ORIGINAL_CERT_VERSIONCODE_GT_138_APK=NOT_BUILT
 ```
 
 See `host_candidate/P12_LIBRARY_RECOVERY_INTEGRATION_NOTES.md` for historical source provenance, exact constraints and next step.
+
+## P13 AndroidX Startup production-style auto hook — Android 35 PASS (2026-10-29)
+
+**Authoritative real Android 35 isolated test:** https://github.com/u2584604327-a11y/dshe/actions/runs/40830669436 — **SUCCESS**.
+
+The previous P12 proof needed test instrumentation to manually call `P12LogViewerReviewEntry.attach()`. P13 eliminates that missing hookup in the actual fused **test candidate app** without rewriting old host DEX method references:
+
+- Original v138 includes a nonexported `androidx.startup.InitializationProvider`, containing three existing startup `meta-data` entries. The exact preimage `AndroidManifest.xml` SHA256 is `fa9e134048fc416e267106600af7bdf28ca1f9dd46e4cf055f1e6a87b69d5987`.
+- `host_candidate/p13_manifest_inject.py` appends a single `meta-data android:name="com.dsh.p12.P13NativeReviewInitializer" android:value="androidx.startup"` child under that **existing provider**, without adding a provider, changing permissions, exports, app package/UID or versionCode. It preserves all original attributes and sibling chunks while appending one UTF-16 string-pool entry.
+- Exact resulting binary Manifest SHA256: `39a825e40aff02cef83944ef40de61e310a4c6912d3a352169637ee72a9a0b5f`, string pool count 95→96, bytes 10,144→10,328. Full test archive matches the pinned hash.
+- `P13NativeReviewInitializer` implements the existing AndroidX Startup `Initializer`; it uses Android `Application.ActivityLifecycleCallbacks` to attach P12 after the real `LogViewerActivity` has resumed and its views exist. It accepts **no** Node, web, model or Intent-provided capabilities.
+- The AndroidX interface class is a compile-time test-only stub under `p13_compile_stub`; class `androidx.startup.Initializer` is **not packaged** in the new DEX, avoiding conflict with original app classes. P5/P12/P13 classes compiled under Android SDK35 and D8 API26.
+- Diagnostic sender remains unbound. A fixed `.invalid` destination is used **only** to support local preview validation; no real HTTPS upload is possible. Known P10 raw-ZIP builder paths and P11 AI raw-log mailbox routes stay default denied.
+
+**Actual real-activity instrumentation, without manual attach:**
+
+```text
+P13_ANDROIDX_STARTUP_METADATA=PASS_REAL_APPLICATION
+P13_LOGVIEWER_AUTOMATIC_HOOK=PASS_NO_MANUAL_ATTACH
+P13_REAL_EXPORT_UPLOAD_BUTTONS=REBOUND_TO_LOCAL_REVIEW
+P13_LEGACY_RAW_ZIP_SEND=P10_DEFAULT_DENY_PRESERVED
+P13_APPROVED_NETWORK_SEND=NOT_CONNECTED
+P13_GENERIC_NODE_SAME_UID_EGRESS=NOT_BLOCKED
+P13_REAL_PHONE_UPGRADE=NOT_TESTED
+INSTRUMENTATION_CODE=-1
+```
+
+Original app install, offline ART package compilation and MainActivity launch also succeeded. P5 direct UI and P12 test-only button instrumentation retained their previous PASS. No test APK or transient keystore was published; the runner destroyed them. User's existing installed DSH and data remain untouched.
+
+### Honest gate distinctions
+
+- **P13_AUTO_HOOK=PASS_ANDROID35_EPHEMERAL_LAB**: This is now a real manifest-driven integration *in the candidate APK*, not merely a manually wired test.
+- **P13_USER_DATA_AND_SIGNATURE=UNVERIFIED**: The candidate still uses v138 versionCode and an unrelated disposable key; it is not a replacement install for the user's real v138.
+- **P13_NATIVE_APPROVED_ONE_SHOT_SEND=NO**: UI is preview-only, default denied, no new network capability. A future authorized product implementation must bind a strictly exclusive native transport after revalidating approved bytes and destination.
+- **P13_NODE_UID_ISOLATION=NO**: Same-UID general Node/file/shell/network tools can bypass the scoped P11 logs-tool policy; P13 does not solve that.
+- **P13_BROWSER_UI_AND_STORAGE_PROFILE=NOT_VERIFIED**: Existing browser/device tools still require separate production path acceptance.
+
+```text
+RELEASE_V139=BLOCKED_SAFE_TRANSPORT_NODE_SANDBOX_FIXED_SIGNATURE_REAL_PHONE
+P13_NATIVE_AUTOHOOK=PASS_ANDROID35
+P13_APPROVED_SEND=NO
+ALL_GENERIC_NODE_EGRESS=NOT_CLOSED
+PRODUCTION_SIGNED_APK=NO
+```
