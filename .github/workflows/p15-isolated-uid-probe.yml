@@ -80,26 +80,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
-          script: |
-            set -euo pipefail
-            adb install --no-streaming out/p15-disposable.apk
-            adb logcat -c
-            adb shell am start -n com.dsh.p15probe/.P15ProbeActivity
-            sleep 9
-            adb logcat -d -s DSH_P15_ISOLATION:I '*:S' > out/p15-logcat-private.txt
-            for expected in \
-              'P15_ISOLATED_UID_DISTINCT=PASS' \
-              'P15_PRIVATE_CANARY_READ_DENIED=PASS' \
-              'P15_ISOLATED_SERVICE_MANIFEST=PASS' \
-              'P15_DSH_NODE_ALREADY_MIGRATED=NO'; do
-              grep -Fq "$expected" out/p15-logcat-private.txt || {
-                echo "::error::P15 OS isolated-process gate failed: $expected"
-                exit 1
-              }
-            done
-            echo 'P15_ANDROID35_ISOLATED_UID=PASS' >> "$GITHUB_STEP_SUMMARY"
-            echo 'P15_ANDROID35_HOST_PRIVATE_FILE_DENIAL=PASS' >> "$GITHUB_STEP_SUMMARY"
-            echo 'P15_DSH_NODE_EXECUTION_MIGRATED=NO' >> "$GITHUB_STEP_SUMMARY"
+          script: bash host_candidate/p15_isolated_probe/run_probe.sh
       - name: Destroy temporary signed binaries and logs, preserve no artifacts
         if: always()
         shell: bash
