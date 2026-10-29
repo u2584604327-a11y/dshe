@@ -4,8 +4,25 @@ adb install --no-streaming out/p17-disposable.apk
 adb logcat -c
 adb shell am start -n com.dsh.p17.probe/.P17BrokerProbeActivity
 sleep 4
-# Explicit test-only simulated UI touch; never grant by process startup.
-adb shell input tap 150 175
+# Use the actual Android UI hierarchy to locate the test-only user gesture.
+# Never approximate display density or click arbitrary screen locations.
+adb shell uiautomator dump /sdcard/p17-ui-test.xml >/dev/null
+adb exec-out cat /sdcard/p17-ui-test.xml > out/p17-ui-test.xml
+read -r tapx tapy < <(python3 - <<'PY'
+import re,xml.etree.ElementTree as ET
+root=ET.parse("out/p17-ui-test.xml").getroot()
+found=[n for n in root.iter("node") if n.attrib.get("text")=="批准一次计数" and n.attrib.get("enabled")=="true"]
+if len(found)!=1:raise SystemExit("P17_TRUSTED_UI_BUTTON_NOT_FOUND")
+m=re.fullmatch(r"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]",found[0].attrib.get("bounds",""))
+if not m:raise SystemExit("P17_UI_BOUNDS_MISSING")
+x1,y1,x2,y2=map(int,m.groups())
+if not(x2>x1 and y2>y1):raise SystemExit("P17_BAD_BUTTON_BOUNDS")
+print((x1+x2)//2,(y1+y2)//2)
+PY
+)
+adb shell input tap "$tapx" "$tapy"
+adb shell rm -f /sdcard/p17-ui-test.xml
+rm -f out/p17-ui-test.xml
 sleep 8
 adb logcat -d -s DSH_P17_BROKER:I '*:S' > out/p17-private-log.txt
 for marker in \
