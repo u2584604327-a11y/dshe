@@ -74,6 +74,9 @@ def verify(apk):
             "BUILT_TEST_ACTIVITY_UNEXPECTED")
     require(len(root.findall("service"))==3,"BUILT_ORIGINAL_SERVICES_CHANGED")
     require(target.get_package()=="com.dsh.android","PACKAGE_CHANGED")
+    require(int(target.get_min_sdk_version() or 0)==26 and
+            int(target.get_target_sdk_version() or 0)==28,
+            "BUILT_MIN_TARGET_SDK_DRIFT")
     print("P43_ORIGINAL_REBUILT_APK_ISOLATED_SERVICE_MANIFEST=PASS")
     print("P43_ORIGINAL_SERVICE_NOT_EXPORTED=PASS")
     print("P43_BUNDLE_IS_TEST_ONLY_NOT_PRODUCTION=YES")
