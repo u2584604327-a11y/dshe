@@ -6,10 +6,11 @@ set -euo pipefail
 mkdir -p out/instrument-classes out/instrument-dex
 src="host_candidate/test-only/com/dsh/p1/smoketest/DshInstrumentation.java"
 src_p12="host_candidate/test-only/com/dsh/p1/smoketest/P12LogViewerInstrumentation.java"
+src_p13="host_candidate/test-only/com/dsh/p1/smoketest/P13AutoHookInstrumentation.java"
 manifest="host_candidate/test-only/AndroidManifest.xml"
-test -s "$src" && test -s "$src_p12" && test -s "$manifest" && test -s out/p5-native.jar
+test -s "$src" && test -s "$src_p12" && test -s "$src_p13" && test -s "$manifest" && test -s out/p5-native.jar
 javac --release 8 -cp "$SDK_ROOT/platforms/android-35/android.jar:out/p5-native.jar" \
-  -d out/instrument-classes "$src" "$src_p12"
+  -d out/instrument-classes "$src" "$src_p12" "$src_p13"
 jar cf out/p5-ui-instrumentation.jar -C out/instrument-classes .
 "$SDK_ROOT/build-tools/35.0.0/d8" --min-api 26 \
   --lib "$SDK_ROOT/platforms/android-35/android.jar" \
