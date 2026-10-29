@@ -1,5 +1,6 @@
 package com.dsh.p32;
 
+import com.dsh.p17.P17CapabilityGate;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
