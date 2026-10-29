@@ -51,6 +51,11 @@ public final class IsolatedCountWorker extends Service {
     if(!Process.isIsolated())throw new SecurityException("P18 requires isolated UID");
     return work.getBinder();
   }
+  @Override public boolean onUnbind(Intent intent){
+    host=null;
+    authenticatedHostUid=-1;
+    return super.onUnbind(intent);
+  }
   @Override public void onDestroy(){
     host=null;
     authenticatedHostUid=-1;
