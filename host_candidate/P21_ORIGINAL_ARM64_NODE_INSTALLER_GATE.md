@@ -31,6 +31,33 @@ Official references:
 - https://android.googlesource.com/platform/bionic/+/HEAD/android-changes-for-ndk-developers.md
 - https://developer.android.com/about/versions/10/behavior-changes-10
 
+## P21 second-stage direct-from-APK immutable linker candidate
+
+A second source-only candidate now addresses the *staging* limitation without
+changing original Node bytes or writing executables to user-writable directories:
+
+- Preserve extractNativeLibs=true for original Node executable renamed to the
+  installer-extractable libdshnode_p21_exec.so (SHA256 unchanged).
+- Place ALL ten direct/transitive native libraries in the same APK. Six keep
+  their exact original DT_NEEDED versioned sonames.
+- Store ALL eleven ELF entries uncompressed, and align their data offsets to
+  4096-byte boundaries, including the six .so.N entries.
+- A candidate isolated worker sets LD_LIBRARY_PATH to the package-managed
+  nativeLibraryDir plus its installed base.apk!/lib/arm64-v8a archive search
+  path, then attempts only SHA-pinned original bin/node --version.
+- This relies on Android Bionic support for directly reading an aligned,
+  uncompressed native ELF from a ZIP. Whether the **execve child linker**
+  honors that search path under isolatedProcess, the app linker namespace and
+  SELinux remains **NOT TESTED**.
+- Both direct and fallback paths must refuse arbitrary writable-home
+  executable copies, altered original Node bytes and relaxed permissions.
+
+Static source, Java compile, signed-original hash and uncompressed 4096-byte ZIP
+alignment all PASS in CI:
+https://github.com/u2584604327-a11y/dshe/actions/runs/40847499377
+
+DO NOT infer actual Node execution from those static PASS results.
+
 ## Required next safe gate
 
 1. Verify Android package/extraction semantics for API35 and API36 with real arm64 system environments. Use a non-production ARM64 hardware/emulator owned by the user; hosted x86_64 emulator cannot run this original ARM64 Node directly.
@@ -40,7 +67,9 @@ Official references:
 
 ## Honest status
 
-P21_REAL_NODE_NATIVE_LIBRARY_CANDIDATE=STATIC_CI_REQUIRED
+P21_REAL_NODE_NATIVE_LIBRARY_CANDIDATE=STATIC_CI_PASS
+P21_ALL_11_ZIP_NATIVE_ELFS_4096_ALIGNED=STATIC_CI_PASS
+P21_DIRECT_ZIP_LINKER_RESOLUTION=NOT_TESTED
 P21_API35_VERSIONED_LIB_INSTALLER_EXTRACTION=BLOCKED_6
 P21_REAL_ARM64_NODE_ISOLATED_UID_EXECUTE=NOT_RUN
 P21_REAL_NODE_EGRESS_DENIAL=NOT_TESTED
