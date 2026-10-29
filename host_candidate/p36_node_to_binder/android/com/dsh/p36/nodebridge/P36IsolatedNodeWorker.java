@@ -76,6 +76,15 @@ public final class P36IsolatedNodeWorker extends Service {
     }
   }
 
+  private static String limitedProcessOutput(InputStream input)throws Exception {
+    ByteArrayOutputStream out=new ByteArrayOutputStream();
+    byte[] buf=new byte[512];int count;
+    while((count=input.read(buf))!=-1){
+      if(out.size()+count>256)throw new IllegalStateException("NODE_STDOUT_EXCESSIVE");
+      out.write(buf,0,count);
+    }
+    return out.toString("UTF-8").trim();
+  }
   private void status(String state) {
     if(statusInbox==null)return;
     Bundle b=new Bundle();
@@ -97,15 +106,12 @@ public final class P36IsolatedNodeWorker extends Service {
       if(checkSelfPermission(android.Manifest.permission.INTERNET)
             ==PackageManager.PERMISSION_GRANTED)
         throw new SecurityException("P36_NO_INTERNET_PERMITTED");
-      String phase="START";
-          phase="VERIFY_INSTALLER_IMMUTABLE_NATIVE_DIR";
           File directory=new File(getApplicationInfo().nativeLibraryDir).getCanonicalFile();
           if(!directory.isDirectory())throw new IllegalStateException("NATIVE_DIR_ABSENT");
           File executable=new File(directory,EXEC).getCanonicalFile();
           if(!directory.equals(executable.getParentFile()) ||
               !executable.canExecute())
             throw new SecurityException("EXECUTABLE_NOT_PACKAGE_INSTALLED");
-          phase="LOAD_SIGNED_BINARY_LOCK";
           JSONObject lock=new JSONObject(readAsset(getAssets().open("p28-runtime-lock.json")));
           if(!"P28_EXACT_V138_NODE_SHA_PIN".equals(lock.getString("gate")) ||
              !ORIGINAL_SIGNED_APK_SHA.equals(lock.getString("source_apk_sha256")) ||
@@ -115,7 +121,6 @@ public final class P36IsolatedNodeWorker extends Service {
           JSONArray preload=lock.getJSONArray("preload");
           if(libs.length()!=MAX_LIBS || preload.length()!=6)
             throw new SecurityException("DEPENDENCY_COUNT_MISMATCH");
-          phase="VERIFY_ORIGINAL_NODE_AND_ALL_TEN_LIBRARY_BYTES";
           if(!ORIGINAL_NODE_SHA.equals(hash(executable)))
             throw new SecurityException("NODE_SHA256_MISMATCH");
           Set<String> verifiedNames=new HashSet<>();
