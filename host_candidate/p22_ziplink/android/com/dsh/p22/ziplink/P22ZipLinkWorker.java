@@ -57,8 +57,19 @@ public final class P22ZipLinkWorker extends Service {
           byte[] bytes=new byte[256];int n=output.read(bytes);
           String stdout=n<0?"":new String(bytes,0,n,StandardCharsets.UTF_8).trim();
           verifiedZipLink=(status==0 && stdout.equals("P22_VERSIONED_ZIP_DEPENDENCY_OK:22035"));
-          if(!verifiedZipLink)
+          if(!verifiedZipLink){
+            Log.e(TAG,"P22_CHILD_EXIT_CODE="+status);
+            // Diagnostic from a deterministic synthetic 2-file app only.
+            // Classify errors, not paths, environment variables or stdout.
+            String category=stdout.contains("CANNOT LINK EXECUTABLE")
+                ? "CANNOT_LINK_EXECUTABLE"
+                : stdout.contains("libp22version.so.3") && stdout.contains("not found")
+                ? "VERSIONED_NEEDED_NOT_FOUND"
+                : stdout.contains("P22_VERSIONED_ZIP_DEPENDENCY_OK")
+                ? "LINK_OK_BUT_OUTPUT_MISMATCH" : "OTHER_EXIT_OR_OUTPUT_MISMATCH";
+            Log.e(TAG,"P22_CHILD_DIAGNOSTIC_CATEGORY="+category);
             Log.e(TAG,"P22_CHILD_EXIT_OR_OUTPUT_MISMATCH=FAIL");
+          }
         }catch(Exception error){
           Log.e(TAG,"P22_STAGE_"+stage+"="+error.getClass().getSimpleName());
         }finally{
