@@ -111,6 +111,24 @@ if test -n "$instrument_apk"; then
     exit 1
   fi
   echo 'P12_ORIGINAL_LOGVIEWER_USER_BUTTONS=PASS_TEST_ONLY_ATTACH'
-  echo 'P12_PRODUCT_HOST_LIFECYCLE_HOOK=NOT_CONNECTED'
+  echo 'P12_TEST_INSTRUMENTATION_USER_BUTTONS=PASS'
+  # P13 does NOT call P12.attach() from instrumentation; the only allowed
+  # installer is original DSH's AndroidX Startup provider registered through
+  # the exact modified binary AXML in the test app package.
+  set +e
+  p13_output="$(adb shell am instrument -w -r \
+    com.dsh.p1.smoketest/.P13AutoHookInstrumentation 2>&1)"
+  p13_status=$?
+  set -e
+  printf '%s\\n' "$p13_output" | head -c 4000
+  if test "$p13_status" -ne 0 || \
+    ! printf '%s\\n' "$p13_output" | grep -q 'P13_LOGVIEWER_AUTOMATIC_HOOK=PASS_NO_MANUAL_ATTACH' || \
+    ! printf '%s\\n' "$p13_output" | grep -q 'P13_ANDROIDX_STARTUP_METADATA=PASS_REAL_APPLICATION' || \
+    ! printf '%s\\n' "$p13_output" | grep -q 'INSTRUMENTATION_CODE: -1'; then
+    echo "::error::P13 AndroidX Startup original LogViewer automatic hook FAILED"
+    exit 1
+  fi
+  echo 'P13_ORIGINAL_LOGVIEWER_AUTOHOOK=PASS_ANDROID35_NO_MANUAL_ATTACH'
+  echo 'P13_APPROVED_DIAGNOSTIC_TRANSPORT=NOT_CONNECTED'
 fi
 
