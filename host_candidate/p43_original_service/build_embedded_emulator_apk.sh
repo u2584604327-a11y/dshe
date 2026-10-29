@@ -20,7 +20,24 @@ python host_candidate/p40_exact_trampoline.py patch "$ORIGINAL" "$DIR/decoded" \
   --report "$DIR/p40-offline.json"
 python host_candidate/p43_original_service/inject_original_manifest.py inject \
   "$DIR/decoded/AndroidManifest.xml"
+# Apktool 2.7 with --force-manifest and -r preserves resources.arsc byte-for-byte,
+# but its rebuilt APK contains a *plain-text* Manifest! Compile ONLY that XML
+# with aapt, then replace the invalid plaintext ZIP member with binary AXML.
+"$BT/aapt" package -f -M "$DIR/decoded/AndroidManifest.xml" \
+  -I "$SDK/platforms/android-35/android.jar" -F "$DIR/manifest-only.apk"
+python - "$DIR/manifest-only.apk" "$DIR/manifest-binary" <<'PY'
+import pathlib,sys,zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+ raw=z.read('AndroidManifest.xml')
+if len(raw)<128 or raw[:4]!=b'\x03\x00\x08\x00':
+ raise RuntimeError("P43_MANIFEST_ONLY_AXML_NOT_BINARY")
+out=pathlib.Path(sys.argv[2]);out.mkdir(parents=True,exist_ok=True)
+(out/'AndroidManifest.xml').write_bytes(raw)
+print('P43_ONLY_MANIFEST_COMPILED_TO_BINARY_AXML=PASS')
+PY
 apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"
+(cd "$DIR" && zip -q -d rebuilt-unsigned.apk AndroidManifest.xml)
+(cd "$DIR/manifest-binary" && zip -q -0 ../rebuilt-unsigned.apk AndroidManifest.xml)
 python host_candidate/p40_exact_trampoline.py verify "$DIR/rebuilt-unsigned.apk"
 python host_candidate/p43_original_service/inject_original_manifest.py verify \
   "$DIR/rebuilt-unsigned.apk"
