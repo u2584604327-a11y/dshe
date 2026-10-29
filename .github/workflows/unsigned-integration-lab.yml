@@ -8,6 +8,7 @@ on:
       - 'host_candidate/run_emulator_smoke.sh'
       - 'host_candidate/build_instrumentation_lab.sh'
       - 'host_candidate/test-only/**'
+      - 'host_candidate/p12_native/**'
       - '.github/workflows/unsigned-integration-lab.yml'
   workflow_dispatch:
 
@@ -72,7 +73,7 @@ jobs:
           test -x "$SDK/build-tools/35.0.0/aapt"
           test -x "$SDK/build-tools/35.0.0/zipalign"
           echo "SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-      - name: Compile all 9 P5 Java sources against Android 35, convert to DEX
+      - name: Compile pinned P5 plus P12 native user-gesture adapter against Android35
         shell: bash
         run: |
           set -euo pipefail
@@ -91,8 +92,11 @@ jobs:
                   output.parent.mkdir(parents=True,exist_ok=True)
                   output.write_bytes(z.read(n))
           PY
+          mkdir -p out/native-src/com/dsh/p12
+          cp host_candidate/p12_native/com/dsh/p12/P12LogViewerReviewEntry.java \
+            out/native-src/com/dsh/p12/P12LogViewerReviewEntry.java
           mapfile -d '' sources < <(find out/native-src -name '*.java' -print0 | sort -z)
-          test "${#sources[@]}" -eq 9
+          test "${#sources[@]}" -eq 10
           javac --release 8 -cp "$SDK_ROOT/platforms/android-35/android.jar" \
             -d out/native-classes "${sources[@]}"
           jar cf out/p5-native.jar -C out/native-classes .
@@ -100,7 +104,7 @@ jobs:
             --lib "$SDK_ROOT/platforms/android-35/android.jar" \
             --output out/native-dex out/p5-native.jar
           test -s out/native-dex/classes.dex
-          echo 'P5_ANDROID_NATIVE_JAVAC_D8=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P5_P12_ANDROID_NATIVE_JAVAC_D8=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Build test-only same-certificate instrumentation skeleton
         shell: bash
         run: bash host_candidate/build_instrumentation_lab.sh
@@ -190,7 +194,8 @@ jobs:
           {
             echo 'PRODUCTION_V139_APK_BUILT=NO'
             echo 'FIXED_CERTIFICATE_SIGNING=NOT_PERFORMED'
-            echo 'P5_NATIVE_UI_CONNECTED_TO_LEGACY_ACTIVITY=NO'
+            echo 'P12_TEST_ONLY_UI_HOOK=CHECK_INSTRUMENTATION_STEP'
+            echo 'P12_NATIVE_UI_CONNECTED_TO_LEGACY_ACTIVITY_ON_REAL_START=NO'
             echo 'P5_SEND_GATE_CONNECTED_TO_LEGACY_NATIVE_NODE=NO'
             echo 'ART_EMULATOR_RESULT=SEE_DISPOSABLE_EMULATOR_JOB_STEP'\n            echo 'ART_ON_REAL_PHONE=NOT_VERIFIED'
             echo 'No generated APK or binary artifact uploaded or released.'
