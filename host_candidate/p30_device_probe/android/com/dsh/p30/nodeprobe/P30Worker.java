@@ -40,7 +40,7 @@ public final class P30Worker extends Service {
   private static final String FIXED_JS =
     "const fs=require('node:fs'),net=require('node:net');"
     +"const out={uid:process.getuid(),file:'UNTESTED',local:'UNTESTED',remote:'UNTESTED'};"
-    +"try{fs.readFileSync(process.env.P29_CANARY_PATH);out.file='ALLOWED';}"
+    +"try{fs.readFileSync(process.env.P30_CANARY_PATH);out.file='ALLOWED';}"
     +"catch(e){out.file=['EACCES','EPERM'].includes(e.code)?'DENIED_'+e.code:'OTHER_'+String(e.code||'UNKNOWN');}"
     +"function tcp(host,port){return new Promise(done=>{"
     +"let sock,ended=false;function finish(x){if(ended)return;ended=true;if(sock)sock.destroy();done(x);}"
@@ -176,7 +176,7 @@ public final class P30Worker extends Service {
           File canary=new File(supplied).getCanonicalFile();
           File intendedParent=new File(getApplicationInfo().dataDir,"files").getCanonicalFile();
           if(!canary.getParentFile().equals(intendedParent) ||
-             !"p29_private_canary.bin".equals(canary.getName()))
+             !"p30_private_canary.bin".equals(canary.getName()))
             throw new SecurityException("CANARY_NOT_HOST_PRIVATE_SCOPE");
           phase="EXECUTE_FIXED_NODE_PROCESS_GETUID_AND_DENIAL_PROBES";
           // Node's real process.getuid() and node:fs/node:net APIs:
@@ -191,7 +191,7 @@ public final class P30Worker extends Service {
           environment.put("HOME","/");
           environment.put("LD_LIBRARY_PATH",directory.getAbsolutePath());
           environment.put("LD_PRELOAD",preloadEnv.toString());
-          environment.put("P29_CANARY_PATH",canary.getAbsolutePath());
+          environment.put("P30_CANARY_PATH",canary.getAbsolutePath());
           nodeProcess=pb.start();
           phase="WAIT_FIXED_18_SECONDS";
           if(!nodeProcess.waitFor(18,TimeUnit.SECONDS))
@@ -251,7 +251,7 @@ public final class P30Worker extends Service {
         Message m=Message.obtain(null,1);
         m.setData(result);
         try{receiver.send(m);}catch(Exception ignored){}
-      },"p28-exact-arm64-node-version-only").start();
+      },"p30-real-child-uid-and-egress").start();
     }
   });
   @Override public IBinder onBind(Intent intent){
