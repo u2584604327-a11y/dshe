@@ -212,6 +212,22 @@ def main():
         "P33_DEX_APP_METHODS": result["app_methods_with_code"],
         "P33_APP_DIRECT_EDGES": result["app_to_app_direct_invokes"],
         "P33_PLATFORM_BOUNDARY_ANCHORS": result["direct_api_anchor_counts"],
+        "P33_REAL_PROCESS_START_CALLSITES": [
+            {"caller":x["caller"],"target":x["callee"],
+             "dex":x["dex"],"code_off":x["code_off"],"pc":x["pc"]}
+            for x in result["direct_api_anchor_samples"].get("PROCESS_START", [])[:16]
+        ],
+        "P33_REAL_WEBVIEW_BRIDGE_CALLSITES": [
+            {"caller":x["caller"],"target":x["callee"],
+             "dex":x["dex"],"code_off":x["code_off"],"pc":x["pc"]}
+            for x in result["direct_api_anchor_samples"].get("WEBVIEW_BRIDGE", [])[:16]
+        ],
+        "P33_NODE_STATIC_UPSTREAM_CALLERS": [
+            {"sink_caller":x["sink_caller"],
+             "direct_app_callers":x["direct_app_callers"][:6]}
+            for x in result["two_hop_reverse_callsites"]
+            if x["family"] == "PROCESS_START"
+        ][:12],
         "P33_NATIVE_HOST_WIRING": "NOT_CONNECTED_STATIC_REVIEW_ONLY",
         "P33_EXTERNAL_REFLECTION_JNI_NODE_ASSET_DISPATCH": "NOT_COVERED",
         "P33_V139_RELEASE": "BLOCKED",
