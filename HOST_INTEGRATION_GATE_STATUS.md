@@ -538,3 +538,21 @@ P18_ORDINARY_USER_ATTACHMENTS=SOURCE_UNCHANGED_RUNTIME_NOT_VERIFIED
 FIXED_CERTIFICATE_SIGNED_V139_APK=NOT_BUILT
 PRODUCTION_RELEASE=BLOCKED_STRICT_ISOLATION_NATIVE_SEND_SIGNING
 ```
+
+### P18 combined Android 35 final result
+
+Private CI https://github.com/u2584604327-a11y/dshe/actions/runs/40837022330 completed **SUCCESS** (2026-10-29). Exact two modified plugin archives are present in ephemeral P1–P14 candidate; Android 35 installation, ART package compilation, MainActivity startup, P13 cold-process LogViewer automatic hook, P5 safe preview, P12 regression all passed. The trusted P17 Binder one-shot broker **also** passed independently at https://github.com/u2584604327-a11y/dshe/actions/runs/40836348358; it is NOT yet hosted by DSH or wired to Node.
+
+```text
+P17_ISOLATED_WORKER_AND_AUTHENTICATED_MESSENGER_UID=PASS_STANDALONE
+P17_EXPLICIT_UI_ONESHOT_GRANT_AND_REPLAY_DENIAL=PASS_STANDALONE
+P18_SOURCE_NODE_TOOL_SHELL_ROOT_REGISTRATION_DENIED=PASS
+P18_COMBINED_ANDROID35_APK_ART_STARTUP=PASS
+P18_P13_AUTOMATIC_HOST_UI_REGRESSION=PASS
+P18_ACTUAL_AI_SESSION_TOOL_LIST_VERIFIED=NOT_RUN
+P18_NODE_BUILTIN_BASH_CHILD_PROCESS_GENERIC_FS_NETWORK_ISOLATED=NO
+REAL_NODE_MIGRATED_TO_ISOLATED_UID=NO
+FORMAL_V139_RELEASE=BLOCKED
+```
+
+These scope distinctions are mandatory; source-only tool registration deny plus APK startup is not a whole-app sandbox. Full details at `host_candidate/P17_SANDBOX_ARCHITECTURE_AND_MIGRATION_GATES.md` and `host_candidate/P18_PRIVILEGED_TOOL_FAILCLOSE_STATUS.md`.
