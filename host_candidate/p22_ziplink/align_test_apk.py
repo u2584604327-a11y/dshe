@@ -4,7 +4,8 @@ The source contents are test-only NDK C code; never original DSH binary.
 """
 import argparse,copy,json,pathlib,struct,zipfile
 ABI="lib/x86_64/"
-EXPECTED={ABI+"libp22probe_exec.so",ABI+"libp22version.so.3"}
+EXPECTED={ABI+"libp22probe_exec.so",ABI+"libp22version.so.3",
+          ABI+"libp22bridge.so"}
 ALIGN=16384
 def pos(i):
  return i.header_offset+30+len(i.filename.encode("utf-8"))+len(i.extra)
@@ -45,9 +46,10 @@ def main():
    if item.filename in EXPECTED:
     if pos(item)%ALIGN:raise ValueError("NOT_16K_ALIGNED")
     if item.compress_type!=zipfile.ZIP_STORED:raise ValueError("NOT_STORED")
-  output={"P22_ZIP_16K_ALIGNED_ELF_COUNT":2,
+  output={"P22_ZIP_16K_ALIGNED_ELF_COUNT":3,
           "P22_VERSIONED_SONAME_PRESERVED":True,
-          "P22_ACTUAL_ANDROID35_EXECVE":"NOT_TESTED"}
+          "P22_ACTUAL_ANDROID35_EXECVE":"NOT_TESTED",
+          "P22_FIXED_JNI_BIONIC_ZIP_DLOPEN":"NOT_TESTED"}
   pathlib.Path(a.report).write_text(json.dumps(output,indent=2)+"\n")
  print("P22_16KB_ELF_APK_ZIP_OFFSET=PASS")
 if __name__=="__main__":main()
