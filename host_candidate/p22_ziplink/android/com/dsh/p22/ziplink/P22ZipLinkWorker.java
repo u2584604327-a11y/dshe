@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class P22ZipLinkWorker extends Service {
   private static final String TAG="DSH_P22_ZIPLINK";
+  private static native int probeNativeZipDlopen(String apkZipPath);
   private final Messenger receive=new Messenger(new Handler(Looper.getMainLooper()){
     @Override public void handleMessage(Message request) {
       if(request.what!=1 || request.replyTo==null || !Process.isIsolated())return;
@@ -30,6 +31,7 @@ public final class P22ZipLinkWorker extends Service {
         boolean executable=false;
         boolean verifiedZipLink=false;
         boolean directlyLoadedVersionedZipLibrary=false;
+        boolean nativeDlopenVersionedZipLibrary=false;
         String stage="CHECK_INSTALLED_EXECUTABLE";
         java.lang.Process child=null;
         try {
@@ -50,6 +52,17 @@ public final class P22ZipLinkWorker extends Service {
           }catch(UnsatisfiedLinkError | SecurityException loadError){
             Log.e(TAG,"P22_DIRECT_ZIP_DLOPEN_CLASS="+
                 loadError.getClass().getSimpleName());
+          }
+          stage="JNI_BIONIC_DIRECT_DLOPEN";
+          try {
+            System.loadLibrary("p22bridge");
+            int nativeResult=probeNativeZipDlopen(getApplicationInfo().sourceDir+
+                "!/lib/x86_64/libp22version.so.3");
+            nativeDlopenVersionedZipLibrary=(nativeResult==22035);
+            Log.i(TAG,"P22_NATIVE_ZIP_DLOPEN_RESULT_CODE="+nativeResult);
+          }catch(UnsatisfiedLinkError | SecurityException bridgeError){
+            Log.e(TAG,"P22_NATIVE_ZIP_DLOPEN_ERROR_CLASS="+
+                bridgeError.getClass().getSimpleName());
           }
           stage="EXEC_PIE_WITH_APK_ZIP_LIBRARY_SEARCH";
           ProcessBuilder process=new ProcessBuilder(executableFile.getAbsolutePath(),"--version");
@@ -98,6 +111,7 @@ public final class P22ZipLinkWorker extends Service {
         result.putBoolean("isolated",Process.isIsolated());
         result.putBoolean("apkExec",executable);
         result.putBoolean("directZipDlopen",directlyLoadedVersionedZipLibrary);
+        result.putBoolean("nativeZipDlopen",nativeDlopenVersionedZipLibrary);
         result.putBoolean("versionedLibrary",verifiedZipLink);
         Message response=Message.obtain(null,1);
         response.setData(result);
