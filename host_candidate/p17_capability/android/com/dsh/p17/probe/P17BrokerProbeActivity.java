@@ -28,24 +28,45 @@ public final class P17BrokerProbeActivity extends Activity {
   private final Messenger broker=new Messenger(new Handler(Looper.getMainLooper()){
     @Override public void handleMessage(Message m) {
       if(m.what==IsolatedCountWorker.HELLO) {
-        workerUid=m.sendingUid;
-        if(workerUid==Process.myUid()||!Process.isIsolatedUid(workerUid)||
-           !m.getData().getBoolean("isolated",false)) {
-          Log.e(TAG,"P17_REAL_BINDER_UID=FAIL");return;
+        // A HELLO is valid only once for the current, explicitly bound worker.
+        // A second HELLO cannot silently swap the UID while a grant is live.
+        final int reportedUid=m.sendingUid;
+        boolean claimedIsolated=false;
+        try { claimedIsolated=m.getData().getBoolean("isolated",false); }
+        catch(RuntimeException invalid){ denyPending("BAD_HELLO");return; }
+        if(remote==null || !bound || workerUid!=-1 || attempts!=0 ||
+           reportedUid==Process.myUid() || !Process.isIsolatedUid(reportedUid) ||
+           !claimedIsolated) {
+          Log.e(TAG,"P17_REAL_BINDER_UID=FAIL");
+          denyPending("INVALID_HELLO");
+          return;
         }
+        workerUid=reportedUid;
         Log.i(TAG,"P17_REAL_BINDER_UID=PASS");
         send(IsolatedCountWorker.TEST_UNGRANTED,null);
       }else if(m.what==IsolatedCountWorker.QUERY) {
         if(m.sendingUid!=workerUid||!Process.isIsolatedUid(m.sendingUid)) {
           Log.e(TAG,"P17_UNAUTHENTICATED_UID=DENIED");return;
         }
-        String scope=m.getData().getString("scope","");
-        String token=m.getData().getString("token","");
+        String scope,token;
+        try {
+          scope=m.getData().getString("scope","");
+          token=m.getData().getString("token","");
+        } catch(RuntimeException invalid) {
+          denyPending("MALFORMED_IPC");
+          return;
+        }
         boolean approved=gate.consume(token,scope,m.sendingUid);
         attempts++;
         if(attempts==1) {
-          if(!approved){Log.i(TAG,"P17_PREGRANT_DENIED=PASS");button.setEnabled(true);}
-          else Log.e(TAG,"P17_PREGRANT_DENIED=FAIL");
+          if(!approved){
+            Log.i(TAG,"P17_PREGRANT_DENIED=PASS");
+            readyForGrant=true;
+            button.setEnabled(true);
+          } else {
+            Log.e(TAG,"P17_PREGRANT_DENIED=FAIL");
+            denyPending("UNGRANTED_ACCEPTED");
+          }
         }else if(attempts==2) {
           if(approved)Log.i(TAG,"P17_ONE_SHOT_APPROVED=PASS");
           else Log.e(TAG,"P17_ONE_SHOT_APPROVED=FAIL");
@@ -62,26 +83,49 @@ public final class P17BrokerProbeActivity extends Activity {
     }
   });
   private int workerUid=-1,attempts=0;
+  private boolean readyForGrant=false;
   private Messenger remote;
   private Button button;
   private boolean bound=false;
   private final ServiceConnection connection=new ServiceConnection() {
     @Override public void onServiceConnected(ComponentName n,IBinder b) {
+      denyPending("NEW_BINDING");
       remote=new Messenger(b);
       send(IsolatedCountWorker.HELLO,null);
     }
     @Override public void onServiceDisconnected(ComponentName n){
-      remote=null;gate.revokeAll();button.setEnabled(false);
+      remote=null;
+      denyPending("DISCONNECTED");
+    }
+    @Override public void onBindingDied(ComponentName n){
+      remote=null;
+      denyPending("BINDING_DIED");
+    }
+    @Override public void onNullBinding(ComponentName n){
+      remote=null;
+      denyPending("NULL_BINDING");
     }
   };
-  private void send(int code,String grant) {
-    if(remote==null)return;
+  private void denyPending(String reason) {
+    gate.revokeAll();
+    workerUid=-1;
+    attempts=0;
+    readyForGrant=false;
+    if(button!=null)button.setEnabled(false);
+    Log.i(TAG,"P18_ALL_GRANTS_REVOKED="+reason);
+  }
+  private boolean send(int code,String grant) {
+    if(remote==null)return false;
     try {
       Message m=Message.obtain(null,code);
       m.replyTo=broker;
       if(grant!=null){Bundle b=new Bundle();b.putString("token",grant);m.setData(b);}
       remote.send(m);
-    }catch(Exception error){Log.e(TAG,"P17_IPC_SEND=FAIL");}
+      return true;
+    }catch(Exception error){
+      Log.e(TAG,"P17_IPC_SEND=FAIL");
+      return false;
+    }
   }
   @Override public void onCreate(Bundle b) {
     super.onCreate(b);
@@ -92,21 +136,42 @@ public final class P17BrokerProbeActivity extends Activity {
     root.addView(button,new LinearLayout.LayoutParams(-1,140));
     setContentView(root);
     button.setOnClickListener(v->{
-      if(workerUid<0||!Process.isIsolatedUid(workerUid)||attempts!=1) {
-        Log.e(TAG,"P17_GESTURE_PRECONDITION=DENIED");return;
+      Log.i(TAG,"P18_USER_CLICK_RECEIVED=YES");
+      if(!bound||remote==null||!readyForGrant||
+         workerUid<0||!Process.isIsolatedUid(workerUid)||attempts!=1) {
+        Log.e(TAG,"P17_GESTURE_PRECONDITION=DENIED");
+        return;
       }
       button.setEnabled(false);
-      String token=gate.approveOnce(P17CapabilityGate.SCOPE_METADATA_COUNT,
-                                   workerUid,20000);
-      Log.i(TAG,"P17_TRUSTED_UI_GRANT=PASS");
-      send(IsolatedCountWorker.GRANT,token);
+      readyForGrant=false;
+      String token;
+      try {
+        token=gate.approveOnce(P17CapabilityGate.SCOPE_METADATA_COUNT,
+                               workerUid,20000);
+      } catch(RuntimeException denied) {
+        denyPending("GRANT_REJECTED");
+        return;
+      }
+      if(send(IsolatedCountWorker.GRANT,token)){
+        Log.i(TAG,"P17_TRUSTED_UI_GRANT=PASS");
+      } else {
+        gate.revoke(token);
+        Log.e(TAG,"P17_TRUSTED_UI_GRANT=FAIL");
+      }
     });
     bound=bindService(new Intent(this,IsolatedCountWorker.class),connection,Context.BIND_AUTO_CREATE);
     if(!bound)Log.e(TAG,"P17_BIND_FAILED");
   }
+  @Override protected void onStop(){
+    // A pending grant may not survive losing the visible trusted UI.
+    denyPending("UI_BACKGROUND");
+    super.onStop();
+  }
   @Override public void onDestroy(){
-    gate.revokeAll();
+    denyPending("ACTIVITY_DESTROY");
     if(bound)unbindService(connection);
+    bound=false;
+    remote=null;
     super.onDestroy();
   }
 }
