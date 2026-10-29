@@ -29,7 +29,7 @@ jobs:
           gh release download dsh-baseline-v135dsh-baseline-v135 --repo "$GH_REPO" \
             --pattern 'DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk' --dir input
           printf '%s  %s\n' \
-            '3ca56655d79afc57431636e340823e7071bc830615c485b0b9a30b6e3e5' \
+            '3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5' \
             input/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk | sha256sum -c -
       - name: Static real binary ZIP ELF and dependency audit (never execute Node)
         shell: bash
