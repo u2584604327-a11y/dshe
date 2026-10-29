@@ -137,7 +137,18 @@ public final class DshInstrumentation extends Instrumentation {
     }catch(Throwable failure){
       result.putString("FAIL_PHASE",phase);
       result.putString("FAIL_TYPE",failure.getClass().getSimpleName());
-      // No raw exception strings or stack traces; paths and content stay private.
+      // Only a narrowly whitelisted synthetic FD queue errno / safe class of
+      // failure. Never print an arbitrary exception message or stack trace.
+      String cause=failure.getMessage();
+      if(cause!=null&&cause.matches("QUEUE_OPEN errno=[0-9]{1,4}"))
+        result.putString("FAIL_REASON",cause);
+      else if(cause!=null&&cause.equals("Queue ownership or permissions rejected"))
+        result.putString("FAIL_REASON","SYNTHETIC_QUEUE_PERMISSIONS");
+      else if(cause!=null&&cause.equals("Queue is not a directory"))
+        result.putString("FAIL_REASON","SYNTHETIC_QUEUE_NOT_DIRECTORY");
+      else
+        result.putString("FAIL_REASON","OTHER_NO_DETAIL");
+      // No raw paths, arbitrary native errors or stack traces are emitted.
       finish(Activity.RESULT_CANCELED,result);
     }finally {
       NativeDiagnosticReview close=review;
