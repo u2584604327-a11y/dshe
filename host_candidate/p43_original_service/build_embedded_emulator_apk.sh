@@ -56,7 +56,11 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   -d "$DIR/classes" \
   host_candidate/p43_original_service/android/com/dsh/android/p43/P43IsolatedWorker.java \
   host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java \
-  host_candidate/p43_original_service/android/com/dsh/android/p43/P44VirtualDeviceProfile.java
+  host_candidate/p43_original_service/android/com/dsh/android/p43/P44VirtualDeviceProfile.java \
+  host_candidate/p43_original_service/android/com/dsh/android/p43/P46ResourceBundle.java \
+  host_candidate/p43_original_service/android/com/dsh/android/p43/P46FixtureData.java \
+  host_candidate/p43_original_service/android/com/dsh/android/p43/P46HostBroker.java \
+  host_candidate/p43_original_service/android/com/dsh/android/p43/P46WorkerBundle.java
 jar cf "$DIR/p43.jar" -C "$DIR/classes" .
 "$BT/d8" --min-api 26 --lib "$SDK/platforms/android-35/android.jar" \
   --output "$DIR/dex" "$DIR/p43.jar"
@@ -95,7 +99,11 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
  names={c.get_name() for c in classes.get_classes()}
  for expected in ('Lcom/dsh/android/p43/P43IsolatedWorker;',
                   'Lcom/dsh/android/p43/P43ProbeActivity;',
-                  'Lcom/dsh/android/p43/P44VirtualDeviceProfile;'):
+                  'Lcom/dsh/android/p43/P44VirtualDeviceProfile;',
+                  'Lcom/dsh/android/p43/P46ResourceBundle;',
+                  'Lcom/dsh/android/p43/P46FixtureData;',
+                  'Lcom/dsh/android/p43/P46HostBroker;',
+                  'Lcom/dsh/android/p43/P46WorkerBundle;'):
   if expected not in names:raise RuntimeError('P43_SERVICE_CLASS_MISSING')
 print("P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA")
 print("P43_ORIGINAL_P40_TRAMPOLINE_AND_P43_CLASSES3=PASS_STATIC")
