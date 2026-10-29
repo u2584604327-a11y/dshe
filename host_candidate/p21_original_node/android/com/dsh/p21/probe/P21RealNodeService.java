@@ -61,7 +61,12 @@ public final class P21RealNodeService extends Service {
           Map<String,String> env=pb.environment();
           env.clear();
           env.put("PATH","/system/bin");
-          env.put("LD_LIBRARY_PATH",nativeDir.getAbsolutePath());
+          // Android Bionic can resolve uncompressed/page-aligned ELF from
+          // APK ZIP paths, but this is an UNVERIFIED candidate for execve
+          // plus DT_NEEDED versioned sonames in an isolated UID.
+          String apkLibrarySearch=getApplicationInfo().sourceDir+"!/lib/arm64-v8a";
+          env.put("LD_LIBRARY_PATH",
+              nativeDir.getAbsolutePath()+":"+apkLibrarySearch);
           env.put("HOME","/");
           child=pb.start();
           stage="WAIT_FOR_NODE_EXIT";
