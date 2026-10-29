@@ -94,6 +94,10 @@ keytool -genkeypair -alias p36only -keyalg RSA -keysize 3072 \
  --ks-pass "pass:$PASSWORD" --key-pass "pass:$PASSWORD" \
  --out delivery/P36-Private-ARM64-Original-Node-Binder-Bridge.apk out/p36-aligned.apk
 "$BT/apksigner" verify delivery/P36-Private-ARM64-Original-Node-Binder-Bridge.apk
+# V4 signing may generate a separate .idsig sidecar; the APK already
+# carries installable V2/V3 signatures and the private delivery MUST have
+# exactly 3 audited files. Remove only this ephemeral sidecar.
+rm -f delivery/P36-Private-ARM64-Original-Node-Binder-Bridge.apk.idsig
 "$BT/zipalign" -c -P 16 4 delivery/P36-Private-ARM64-Original-Node-Binder-Bridge.apk
 "$BT/aapt" dump permissions delivery/P36-Private-ARM64-Original-Node-Binder-Bridge.apk > out/p36/signed-perms.txt
 if grep -Fq 'uses-permission:' out/p36/signed-perms.txt;then
