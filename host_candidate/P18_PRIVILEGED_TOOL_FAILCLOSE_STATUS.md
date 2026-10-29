@@ -25,7 +25,7 @@ These are extra escape routes beyond the P11 safe summary-only `logs` plugin. A 
 ## Evidence
 
 - P18 exact nested-resource patch and real Node plugin registration test PASS: https://github.com/u2584604327-a11y/dshe/actions/runs/40836893499
-- P13/P14/P5 with P18 overlay Android 35 fusion/ART/UI regression: https://github.com/u2584604327-a11y/dshe/actions/runs/40837022330 — check completed run result before claiming PASS.
+- P13/P14/P5 with P18 overlay Android 35 fusion/ART/UI regression: https://github.com/u2584604327-a11y/dshe/actions/runs/40837022330 — **SUCCESS**. Exact P18 resources present in lab APK, Android install and offline ART compile, MainActivity startup, P13 cold-process original LogViewer automatic hook and P5/P12 tests pass. This does NOT prove the actual engine's runtime tool registry state or ordinary attachment parity, which require separate in-app acceptance.
 - P17 authentic Android Binder sendingUid and one-shot consent/burn/replay/deny proof PASS (standalone): https://github.com/u2584604327-a11y/dshe/actions/runs/40836348358
 
 ## Next security gate
@@ -35,7 +35,7 @@ Map all remaining original executable escape paths, including built-in model `ba
 ```text
 P18_PRIVILEGED_SHELL_UID2000_TOOL_REGISTERED=NO_SOURCE_TEST
 P18_PRIVILEGED_ROOT_UID0_TOOL_REGISTERED=NO_SOURCE_TEST
-P18_COMBINED_ANDROID_ART=CHECK_REAL_CI
+P18_COMBINED_ANDROID_ART_AND_NATIVE_UI=PASS_ANDROID35_LAB
 P18_BUILTIN_BASH_TOOL=ORIGINAL_UNCHANGED
 P18_GENERIC_NODE_FS_NETWORK_SHELL=NOT_ISOLATED
 P18_USER_APP_FUNCTIONAL_PARITY=NOT_VERIFIED
