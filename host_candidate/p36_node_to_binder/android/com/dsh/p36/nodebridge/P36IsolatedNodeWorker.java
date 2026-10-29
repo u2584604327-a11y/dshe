@@ -188,6 +188,20 @@ public final class P36IsolatedNodeWorker extends Service {
       nodeProcess=null;
     }
   }
+  private void sendRequest(String grant)throws Exception{
+    if(host==null||verifiedNodeFrame==null||
+         !originalHashes||!nodeUidMatch)
+      throw new IllegalStateException("NO_VERIFIED_ORIGINAL_NODE");
+    Message q=Message.obtain(null,P32AndroidBinderPort.REQUEST);
+    q.replyTo=workerInbox;
+    Bundle b=new Bundle();
+    b.putString("session",session);
+    if(grant!=null)b.putString("grant",grant);
+    // ONLY original Node stdout after exact SHA, child getuid and canonical parse.
+    b.putString("nodeFrame",verifiedNodeFrame);
+    q.setData(b);
+    host.send(q);
+  }
   private final Messenger workerInbox=new Messenger(new Handler(Looper.getMainLooper()){
     @Override public void handleMessage(Message m){
       try {
@@ -249,20 +263,6 @@ public final class P36IsolatedNodeWorker extends Service {
           }
         }
       }catch(Exception e){phase=90;status("BLOCKED_PROTOCOL_EXCEPTION");}
-    }
-    private void sendRequest(String grant)throws Exception{
-      if(host==null||verifiedNodeFrame==null||
-           !originalHashes||!nodeUidMatch)
-        throw new IllegalStateException("NO_VERIFIED_ORIGINAL_NODE");
-      Message q=Message.obtain(null,P32AndroidBinderPort.REQUEST);
-      q.replyTo=workerInbox;
-      Bundle b=new Bundle();
-      b.putString("session",session);
-      if(grant!=null)b.putString("grant",grant);
-      // ONLY original Node stdout after exact SHA, child getuid and canonical parse.
-      b.putString("nodeFrame",verifiedNodeFrame);
-      q.setData(b);
-      host.send(q);
     }
   });
   @Override public IBinder onBind(Intent intent) {
