@@ -30,6 +30,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Preflight emulator script syntax before downloading APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/run_emulator_smoke.sh
+          python3 -m py_compile host_candidate/assemble_unsigned_lab.py
+          echo 'EMULATOR_SCRIPT_SYNTAX=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Fetch both SHA-pinned inputs from PRIVATE Releases only
         shell: bash
         run: |
