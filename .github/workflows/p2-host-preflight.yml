@@ -8,6 +8,7 @@ on:
       - 'host_candidate/patch_browser.py'
       - 'host_candidate/patch_privacy.py'
       - 'host_candidate/verify_p2_scope.py'
+      - 'host_candidate/verify_diagnostic_egress_sites.py'
       - 'host_candidate/verify_p6_asset_preimages.py'
       - 'host_candidate/requirements.txt'
       - '.github/workflows/p2-host-preflight.yml'
@@ -59,6 +60,15 @@ jobs:
             input/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
             --report out/p2-bounded-dex-report.json
           echo 'P2_BOUNDED_DEX_IN_MEMORY=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Prove known original native HTTP sink is removed in bounded candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python host_candidate/verify_diagnostic_egress_sites.py \
+            input/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --report out/native-diagnostic-sink-delta.json
+          echo 'P2_KNOWN_NATIVE_DIAGNOSTIC_HTTP_SINK_REMOVED=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'ALL_NATIVE_NODE_EGRESS_CLOSED=NOT_VERIFIED' >> "$GITHUB_STEP_SUMMARY"
       - name: Verify P6 assets can overlay exact v138 without mismatched preimages
         shell: bash
         run: |
