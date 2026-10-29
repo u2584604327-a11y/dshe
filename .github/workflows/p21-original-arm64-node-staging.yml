@@ -49,6 +49,7 @@ jobs:
           r=json.loads(pathlib.Path('out/p21/closure.json').read_text())
           assert r['native_lib_file_count']==11
           assert len(r['library_closure'])==10
+          assert r['all_original_elf_pt_load_alignments_16k'] is True
           blockers=set(r['api35_extractNativeLibs_unextractable_sonames'])
           expected={'libcrypto.so.3','libssl.so.3','libz.so.1','libicui18n.so.78',
                     'libicuuc.so.78','libicudata.so.78'}
@@ -91,14 +92,14 @@ jobs:
             out/p21/probe-unsigned.apk \
             --out out/p21/probe-aligned-unsigned.apk \
             --report out/p21/zip-alignment.json
-          "$SDK/build-tools/35.0.0/zipalign" -c 4 out/p21/probe-aligned-unsigned.apk
+          "$SDK/build-tools/35.0.0/zipalign" -c -P 16 4 out/p21/probe-aligned-unsigned.apk
           python3 - <<'PY'
           import json,pathlib
           result=json.loads(pathlib.Path('out/p21/zip-alignment.json').read_text())
           assert result['P21_ZIP_NATIVE_LIB_ENTRIES']==11
-          assert result['P21_VERSIONED_LIBS_ALIGNED_4096']==6
+          assert result['P21_VERSIONED_LIBS_ALIGNED_16384']==6
           assert result['P21_NODE_REAL_EXECUTION']=='NOT_TESTED'
-          print('P21_ALL_11_APK_NATIVE_ELF_ZIP_ENTRIES_ALIGNED_4096=PASS')
+          print('P21_ALL_11_APK_NATIVE_ELF_ZIP_ENTRIES_ALIGNED_16K=PASS')
           PY
           unzip -p out/p21/probe-aligned-unsigned.apk \
             lib/arm64-v8a/libdshnode_p21_exec.so | sha256sum \
@@ -111,7 +112,7 @@ jobs:
           fi
           echo 'P21_ANDROID35_STANDALONE_JAVA_COMPILED=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P21_UNSIGNED_ARM64_ABI_PACKAGE=PASS_STATIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
-          echo 'P21_UNCOMPRESSED_4096_ALIGNED_VERSIONED_LIBS=PASS_STATIC' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P21_UNCOMPRESSED_16K_ALIGNED_VERSIONED_LIBS=PASS_STATIC' >> "$GITHUB_STEP_SUMMARY"
           echo 'P21_APK_ZIP_RUNTIME_LIB_SEARCH=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
       - name: Destroy private input and executable test package
         if: always()
