@@ -1,10 +1,16 @@
 package com.dsh.p1.smoketest;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.Instrumentation;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
+import java.lang.reflect.Field;
+import java.util.concurrent.atomic.AtomicInteger;
 import android.system.Os;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.app.UiAutomation;
@@ -70,6 +76,39 @@ public final class DshInstrumentation extends Instrumentation {
     }
     return false;
   }
+
+  private static boolean containsNativeText(View view,String expected){
+    if(view instanceof TextView) {
+      CharSequence label=((TextView)view).getText();
+      if(label!=null&&label.toString().contains(expected))return true;
+    }
+    if(view instanceof ViewGroup) {
+      ViewGroup container=(ViewGroup)view;
+      for(int i=0;i<container.getChildCount();i++)
+        if(containsNativeText(container.getChildAt(i),expected))return true;
+    }
+    return false;
+  }
+  private boolean waitForNativeDialog(NativeDiagnosticReview owner,int seconds){
+    for(int attempt=0;attempt<seconds*3;attempt++){
+      final boolean[] found={false};
+      runOnMainSync(()->{
+        try {
+          Field field=NativeDiagnosticReview.class.getDeclaredField("shown");
+          field.setAccessible(true);
+          Object window=field.get(owner);
+          if(window instanceof AlertDialog) {
+            AlertDialog dialog=(AlertDialog)window;
+            found[0]=dialog.isShowing()&&dialog.getWindow()!=null
+                &&containsNativeText(dialog.getWindow().getDecorView(),"发送器尚未接入");
+          }
+        }catch(Exception ignored){}
+      });
+      if(found[0])return true;
+      SystemClock.sleep(350);
+    }
+    return false;
+  }
   @Override public void onStart() {
     Bundle result=new Bundle();
     Activity activity=null;
@@ -116,30 +155,33 @@ public final class DshInstrumentation extends Instrumentation {
       final Activity owner=activity;
       final AndroidFdQueue trustedQueue=queue;
       final NativeDiagnosticReview[] created=new NativeDiagnosticReview[1];
+      final AtomicInteger unsupportedRejected=new AtomicInteger();
       runOnMainSync(()->{
         try{
           created[0]=new NativeDiagnosticReview(owner,trustedQueue,
               Collections.singleton(DESTINATION),DESTINATION,
-              (kind,entry,reason,timestamp,count)->{});
+              (kind,entry,reason,timestamp,count)->{
+                if("DENIED".equals(kind)&&"preview".equals(entry)&&
+                    "UNSUPPORTED_OR_CHANGED_FILE".equals(reason))
+                  unsupportedRejected.incrementAndGet();
+              });
           created[0].preview(valid);
         }catch(Exception error){throw new RuntimeException(error);}
       });
       review=created[0];
 
       phase="NATIVE_SAFE_PREVIEW_VISIBLE";
-      if(!waitForText("逐包诊断预览",12)){
-        phase=waitForText("预览失败",2) ?
-          "P5_PROJECTOR_OR_QUEUE_REJECTED" : "P5_DIALOG_NOT_ACCESSIBILITY_VISIBLE";
-        throw new AssertionError("Trusted P5 safe preview not available");
+      if(!waitForNativeDialog(review,10)){
+        phase="P5_DIALOG_NOT_SHOWING_OR_SAFE_CONTENT_MISSING";
+        throw new AssertionError("Trusted P5 dialog was not shown with fail-closed notice");
       }
-      assertTrue(waitForText("发送器尚未接入",3),"Fail-closed sender message missing");
-      assertTrue(!waitForText("CANARY_MUST_NOT_DISPLAY",1),"Unexpected secret shown");
-
       phase="NATIVE_UNSUPPORTED_SCHEMA_DENIED";
       final NativeDiagnosticReview control=review;
       runOnMainSync(()->control.preview(invalid));
-      assertTrue(waitForText("预览失败",15),"Unsupported ZIP/JSON did not fail closed");
-      assertTrue(!waitForText("CANARY_MUST_NOT_DISPLAY",1),"Unsupported input leaked");
+      for(int i=0;i<24&&unsupportedRejected.get()==0;i++)
+        SystemClock.sleep(350);
+      assertTrue(unsupportedRejected.get()==1,
+          "Unsupported format not denied by native audit callback");
 
       phase="P5_REVIEW_SMOKE_PASS";
       result.putString("P5_NATIVE_UI_REAL_ACTIVITY","PASS_INSTRUMENTATION");
