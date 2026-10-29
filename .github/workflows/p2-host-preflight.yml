@@ -76,11 +76,23 @@ jobs:
             echo 'STORAGE_ISOLATION=NOT_VERIFIED'
             echo 'PHONE_V138_UNCHANGED=YES'
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload only JSON integrity reports (never APK, DEX or diagnostic data)
+      - name: Summarize verified hashes without storing artifacts
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: p2-p6-integrity-reports
-          path: out/*.json
-          if-no-files-found: warn
-          retention-days: 7
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,pathlib
+          out=pathlib.Path('out')
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as summary:
+              for label,file in [('P2 exact DEX scope','p2-bounded-dex-report.json'),('P6 asset preimages','p6-v138-asset-preimages.json')]:
+                  path=out/file
+                  if not path.exists():
+                      summary.write(f'- {label}: NOT_COMPLETED\n')
+                      continue
+                  data=json.loads(path.read_text())
+                  if 'P2_BOUNDED_DEX_SHA256' in data:
+                      summary.write(f"- {label}: PASS; bounded DEX SHA256 = `{data['P2_BOUNDED_DEX_SHA256']}`; unchanged method bodies = {data['P2_UNCHANGED_METHOD_CODE_BODIES']}\n")
+                  else:
+                      summary.write(f"- {label}: {data.get('V138_ASSET_OVERLAY_PREIMAGES', 'NOT_VERIFIED')}; overlay paths = {len(data['overlay_files'])}\n")
+              summary.write('- No original APK, patched DEX, source payloads or signing credentials are uploaded as Actions artifacts.\n')
+          PY
