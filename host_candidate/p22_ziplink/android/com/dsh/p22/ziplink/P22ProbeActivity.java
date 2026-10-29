@@ -37,6 +37,9 @@ public final class P22ProbeActivity extends Activity {
       if(verified && b.getBoolean("directZipDlopen",false))
         Log.i(TAG,"P22_DIRECT_BIONIC_VERSIONED_ZIP_DLOPEN=PASS");
       else Log.e(TAG,"P22_DIRECT_BIONIC_VERSIONED_ZIP_DLOPEN=FAIL");
+      if(verified && b.getBoolean("nativeZipDlopen",false))
+        Log.i(TAG,"P22_NATIVE_BIONIC_VERSIONED_ZIP_DLOPEN=PASS");
+      else Log.e(TAG,"P22_NATIVE_BIONIC_VERSIONED_ZIP_DLOPEN=FAIL");
       if(verified && b.getBoolean("versionedLibrary",false))
         Log.i(TAG,"P22_EXEC_VERSIONED_SONAME_FROM_APK_ZIP=PASS");
       else Log.e(TAG,"P22_EXEC_VERSIONED_SONAME_FROM_APK_ZIP=FAIL");
