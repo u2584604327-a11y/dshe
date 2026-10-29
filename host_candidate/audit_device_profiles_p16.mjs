@@ -16,8 +16,9 @@ assert.ok(profiles.auto&&profiles.iphone&&profiles.ipad&&profiles.desktop);
 const report={};
 for(const [mode,p] of Object.entries(profiles)){
   if(mode!=="auto"){
-    assert.ok(Number.isInteger(p.width)&&p.width>0,mode+": invalid viewport width");
-    assert.ok(Number.isInteger(p.height)&&p.height>0,mode+": invalid viewport height");
+    // CSS-pixel viewport dimensions may be fractional (high-DPR or foldable profiles).
+    assert.ok(Number.isFinite(p.width)&&p.width>0&&p.width<10000,mode+": invalid viewport width");
+    assert.ok(Number.isFinite(p.height)&&p.height>0&&p.height<10000,mode+": invalid viewport height");
     assert.ok(typeof p.ua==="string"&&p.ua.startsWith("Mozilla/5.0"),mode+": no declared UA");
     assert.ok(Number.isFinite(p.dpr)&&p.dpr>0,mode+": invalid device pixel ratio");
   } else {
