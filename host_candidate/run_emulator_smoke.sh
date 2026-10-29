@@ -3,6 +3,7 @@
 # Do NOT use the original fixed signer or any real diagnostics, app data or accounts.
 set -euo pipefail
 lab_apk="${1:?Provide disposable debug-signed APK}"
+instrument_apk="${2:-}"
 sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
 adb wait-for-device
 test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
@@ -74,3 +75,26 @@ echo "DEX_VERIFICATION_AT_STARTUP=PARTIAL_NO_CRASH_OBSERVED"
 echo "P5_ADDON_CLASSES_LOADED=NOT_VERIFIED"
 echo "NATIVE_DIAGNOSTIC_EGRESS=NOT_VERIFIED"
 echo "REAL_PHONE_AND_DATA_PRESERVATION=NOT_VERIFIED"
+# Separate, same-ephemeral-signer instrumentation from a disposable APK.
+# Do not infer original UI wiring from a test directly invoking the P5 class.
+if test -n "$instrument_apk"; then
+  test -s "$instrument_apk"
+  adb install --no-streaming "$instrument_apk"
+  adb shell pm path com.dsh.p1.smoketest | grep -q '^package:'
+  set +e
+  test_output="$(adb shell am instrument -w -r \
+    com.dsh.p1.smoketest/.DshInstrumentation 2>&1)"
+  test_status=$?
+  set -e
+  printf '%s\\n' "$test_output" | head -c 4000
+  if test "$test_status" -ne 0 || \
+    ! printf '%s\\n' "$test_output" | grep -q 'P5_NATIVE_UI_REAL_ACTIVITY=PASS_INSTRUMENTATION' || \
+    ! printf '%s\\n' "$test_output" | grep -q 'P5_UNTRUSTED_SCHEMA_REJECTION=PASS_ANDROID_FIXTURE' || \
+    ! printf '%s\\n' "$test_output" | grep -q 'INSTRUMENTATION_CODE: -1'; then
+    echo "::error::P5 NativeDiagnosticReview real Activity UI smoke FAILED"
+    exit 1
+  fi
+  echo 'P5_NATIVE_UI_VISIBLE_ON_ANDROID=PASS_INSTRUMENTATION'
+  echo 'P5_UI_NOT_WIRED_TO_LEGACY_BUTTON=STILL_TRUE'
+fi
+
