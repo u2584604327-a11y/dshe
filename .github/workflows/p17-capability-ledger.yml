@@ -6,6 +6,9 @@ on:
       - 'host_candidate/p17_capability/**'
       - '.github/workflows/p17-capability-ledger.yml'
   workflow_dispatch:
+concurrency:
+  group: dsh-p17-broker-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
