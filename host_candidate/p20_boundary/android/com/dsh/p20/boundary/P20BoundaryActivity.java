@@ -96,17 +96,31 @@ public final class P20BoundaryActivity extends Activity {
       stage="BIND_LOOPBACK_LISTENER";
       server=new ServerSocket(0,1,InetAddress.getByName("127.0.0.1"));
       server.setSoTimeout(2000);
-      stage="CONNECT_HOST_POSITIVE_CONTROL";
-      try(Socket client=new Socket("127.0.0.1",server.getLocalPort());
-          Socket accepted=server.accept()){
-        if(!client.isConnected()||!accepted.isConnected())
-          throw new IllegalStateException("host loopback unavailable");
-      }
-      Log.i(TAG,"P20_HOST_INTERNET_LOOPBACK_POSITIVE_CONTROL=PASS");
-      stage="BIND_ISOLATED_WORKER";
-      bound=bindService(new Intent(this,P20IsolatedWorker.class),
-          connection,Context.BIND_AUTO_CREATE);
-      if(!bound)Log.e(TAG,"P20_BIND_ISOLATED=FAIL");
+      // Android forbids networking on the UI main thread. Run the known
+      // 127.0.0.1-only positive control in a bounded native worker thread.
+      final ServerSocket listener=server;
+      new Thread(()->{
+        try(Socket client=new Socket("127.0.0.1",listener.getLocalPort());
+            Socket accepted=listener.accept()){
+          if(!client.isConnected()||!accepted.isConnected())
+            throw new IllegalStateException("loopback control failed");
+          runOnUiThread(()->{
+            if(isFinishing()||isDestroyed())return;
+            Log.i(TAG,"P20_HOST_INTERNET_LOOPBACK_POSITIVE_CONTROL=PASS");
+            try{
+              bound=bindService(new Intent(this,P20IsolatedWorker.class),
+                  connection,Context.BIND_AUTO_CREATE);
+              if(!bound)Log.e(TAG,"P20_BIND_ISOLATED=FAIL");
+            }catch(Exception error){
+              Log.e(TAG,"P20_SETUP_BIND_ISOLATED_WORKER="+error.getClass().getSimpleName());
+              Log.e(TAG,"P20_SETUP=FAIL");
+            }
+          });
+        }catch(Exception error){
+          Log.e(TAG,"P20_SETUP_CONNECT_HOST_POSITIVE_CONTROL="+error.getClass().getSimpleName());
+          Log.e(TAG,"P20_SETUP=FAIL");
+        }
+      },"p20-host-loopback-positive-control").start();
     }catch(Exception error){
       // Synthetic stage and class only: never log a real device file path.
       Log.e(TAG,"P20_SETUP_"+stage+"="+error.getClass().getSimpleName());
