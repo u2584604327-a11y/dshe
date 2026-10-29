@@ -32,7 +32,7 @@ public final class P32NodeIpcBroker {
   }
   private static Decision deny(Outcome o) {return new Decision(o,0);}
   private static final Pattern NODE_FRAME =
-      Pattern.compile("\\{\"op\":\"METADATA_COUNT\",\"limit\":([0-9]{1,2})\\}");
+      Pattern.compile("\\{\"op\":\"METADATA_COUNT\",\"limit\":([1-8])\\}");
   private static final int FRAME_MAX_BYTES=64;
   private static final long GRANT_TTL_MS=10_000L;
   private final P17CapabilityGate grants;
