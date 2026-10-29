@@ -27,7 +27,6 @@ BRIDGE = """.class public final Lcom/dsh/android/p40/P40ProcessBridge;
 .method public static start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;
     .registers 2
     .param p0, "builder"  # Ljava/lang/ProcessBuilder;
-    .throws Ljava/io/IOException;
 
     invoke-virtual {p0}, Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;
     move-result-object v0
