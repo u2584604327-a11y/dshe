@@ -83,6 +83,7 @@ def analyze(path):
     selected = {}
     invokes = 0
     unparsed = 0
+    oversized_method_ids = 0
     for dex_name, data in sorted(blobs.items()):
         dex = DEX(data)
         for klass in dex.get_classes():
@@ -93,10 +94,15 @@ def analyze(path):
                 if meth.get_code() is None:
                     continue
                 origin = short_method(meth)
+                if len(origin) > 450:
+                    oversized_method_ids += 1
+                    # Valid generated Kotlin/Java signatures can be long.
+                    # Keep only a safe, reproducible bounded identity:
+                    # these generated callers may lose exact reverse joins.
+                    origin = origin[:340] + "#sha256:" + hashlib.sha256(
+                        origin.encode("utf-8")).hexdigest()[:20]
                 methods.add(origin)
                 class_method_count[cls] += 1
-                if len(origin) > 450:
-                    raise ValueError("P33_IMPLAUSIBLE_METHOD_ID")
                 for kind in category_for(origin):
                     category_methods[kind].add(origin)
                     if len(selected) < 550:
@@ -163,6 +169,7 @@ def analyze(path):
         "app_to_app_direct_invokes":len(app_edges),
         "all_invocations_scanned":invokes,
         "unparsed_invokes_count":unparsed,
+        "method_identifiers_over_450_hashed":oversized_method_ids,
         "category_counts":{k:len(v) for k,v in sorted(category_methods.items())},
         "candidate_classes": [
             {"class":c,"methods_with_code":n,
