@@ -64,6 +64,23 @@ def inspect(apk):
         raise ValueError('P35_ORIGINAL_ENGINE_START_PC_DRIFT')
     if len(calls)<10 or len(branches)<3:
         raise ValueError('P35_COROUTINE_CODE_IMPLAUSIBLE')
+    # Preserve the *real original host* post-launch Process handle,
+    # reader thread, startup synchronization and READY state contract.
+    # A naive replace-ProcessBuilder-with-Binder patch would violate all.
+    must_have={
+        3924:'Lcom/dsh/android/EngineManager;->access$setProcess$p(',
+        3980:'Lcom/dsh/android/EngineManager$start$2$ExternalSyntheticLambda0;-><init>(',
+        3986:'Ljava/lang/Thread;-><init>(',
+        4010:'Ljava/lang/Thread;->start()',
+        4026:'Ljava/util/concurrent/CountDownLatch;->await(',
+        4674:'Lkotlinx/coroutines/flow/MutableStateFlow;->setValue(',
+    }
+    by_pc={x['pc']:x['target'] for x in calls}
+    for pc,api in must_have.items():
+        if not by_pc.get(pc,'').startswith(api):
+            raise ValueError('P35_ENGINE_PROCESS_LIFECYCLE_EDGE_DRIFT_'+str(pc))
+    lifecycle=[{'pc':pc,'target':by_pc[pc]} for pc in sorted(must_have)]
+
     near=[x for x in calls if abs(x['pc']-PC)<=900]
     if len(near)>150:raise ValueError('P35_CALLSITES_UNBOUNDED')
     support=[]
@@ -90,6 +107,9 @@ def inspect(apk):
        'primary_start_invokes':starts,
        'primary_total_invokes':len(calls),
        'primary_control_flow_count':len(branches),
+       'post_spawn_required_lifecycle_api_edges':lifecycle,
+       'original_java_Process_handle_and_daemon_reader_thread':'REQUIRED_BY_ORIGINAL_DEX',
+       'countdown_latch_and_ready_state_flow':'REQUIRED_BY_ORIGINAL_DEX',
        'near_start_invocations':near,
        'selected_related_invocations':[x for x in calls if RELATED.search(x['target'])][:100],
        'other_engine_start_stop_probe_callbacks':support[:24],
