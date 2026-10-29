@@ -461,3 +461,27 @@ P13_APPROVED_SEND=NO
 ALL_GENERIC_NODE_EGRESS=NOT_CLOSED
 PRODUCTION_SIGNED_APK=NO
 ```
+
+### Independent cold-process P13 regression (no manual attach before test)
+
+The second real Android35 gate https://github.com/u2584604327-a11y/dshe/actions/runs/40831479000 completed with **SUCCESS** after changing the instrumentation order to first:
+1. Install exact ephemeral lab APK and test APK.
+2. Call `adb shell am force-stop com.dsh.android`, terminating the app process.
+3. Run **P13AutoHookInstrumentation first**, with no prior P5/P12 tests in that process and **no call to `P12.attach()`**.
+4. Start the original `com.dsh.android.LogViewerActivity`, confirm AndroidX manifest metadata and independently detect the two button content descriptions set by P12, then click them.
+5. Only after P13 passes, execute the separately scoped P5 and P12 regression fixtures.
+
+Verified cold-process evidence:
+```text
+P13_ANDROIDX_STARTUP_METADATA=PASS_REAL_APPLICATION
+P13_LOGVIEWER_AUTOMATIC_HOOK=PASS_NO_MANUAL_ATTACH
+P13_REAL_EXPORT_UPLOAD_BUTTONS=REBOUND_TO_LOCAL_REVIEW
+P13_LEGACY_RAW_ZIP_SEND=P10_DEFAULT_DENY_PRESERVED
+P13_APPROVED_NETWORK_SEND=NOT_CONNECTED
+P13_GENERIC_NODE_SAME_UID_EGRESS=NOT_BLOCKED
+INSTRUMENTATION_CODE=-1
+```
+
+Subsequent P5 review and P12 manual-attach tests also PASS, without weakening P13's already-verified early ordering. The P5 direct test's historical `LEGACY_HOST_BUTTON_WIRED=NO` is **a test-local label**, not an accurate description of the P13-integrated lab app: P13 separately proves the real manifest-driven hook. Fix misleading labels before shipping any standalone audit summary.
+
+**Decision:** Lock `P13_COLD_BOOT_AUTOHOOK=PASS_ANDROID35_DISPOSABLE`. Do not extend this PASS to a user phone, original signing certificate, native approved one-shot network send, full Node UID isolation, browser profile separation or production APK. The run creates and deletes only disposable signed test artifacts, with no release.
