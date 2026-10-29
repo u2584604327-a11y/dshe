@@ -4,6 +4,11 @@ import android.content.*;
 import android.os.*;
 import android.widget.TextView;
 import java.security.SecureRandom;
+import java.security.MessageDigest;
+import java.nio.charset.StandardCharsets;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.Locale;
 
 /**
@@ -15,6 +20,16 @@ public final class P43ProbeActivity extends Activity {
   private final StringBuilder status=new StringBuilder();
   private String session;
   private final P44VirtualDeviceProfile simulatedProfile=P44VirtualDeviceProfile.syntheticDemo();
+  private static final byte[] P45_SYNTHETIC=
+      "P45_SYNTHETIC_PRIVATE_ASSET_V1\\n".getBytes(StandardCharsets.UTF_8);
+  private static String sha256(byte[] input) {
+    try {
+      byte[] b=MessageDigest.getInstance("SHA-256").digest(input);
+      StringBuilder s=new StringBuilder(64);
+      for(byte v:b)s.append(String.format(Locale.ROOT,"%02x",v&255));
+      return s.toString();
+    }catch(Exception e){throw new IllegalStateException("HASH_UNAVAILABLE",e);}
+  }
   private TextView label;
   private boolean bound,received,failed;
   private Messenger remote;
@@ -45,7 +60,18 @@ public final class P43ProbeActivity extends Activity {
          response.getBoolean("p44_hardware_identity_changed",true)) {
         fail("PROFILE_TAMPER_OR_UNAUTHORIZED_CLAIM");return;
       }
+      if(!sha256(P45_SYNTHETIC).equals(response.getString("p45_asset_sha256")) ||
+         response.getInt("p45_asset_size",-1)!=P45_SYNTHETIC.length ||
+         response.getBoolean("p45_path_transferred",true) ||
+         response.getBoolean("p45_root_used",true)) {
+        fail("ASSET_FD_HASH_OR_SIZE_OR_PRIVILEGE_CLAIM_INVALID");return;
+      }
       received=true;
+      log("P45_ORIGINAL_DSH_HOST_PRIVATE_ASSET_FD_TO_ISOLATED_WORKER=PASS");
+      log("P45_BOUNDED_SYNTHETIC_ASSET_SHA256=PASS");
+      log("P45_ROOT_REQUIRED=NO");
+      log("P45_HOST_PATH_SHARED=NO");
+      log("P45_PRODUCTION_ENGINE_SCRIPT_BROKER=NOT_IMPLEMENTED");
       log("P44_ORIGINAL_DSH_PROFILE_TO_ISOLATED_WORKER=PASS");
       log("P44_HOST_SELECTED_VIRTUAL_PROFILE_HASH_VALIDATED=PASS");
       log("P44_ACTUAL_SYSTEM_VM=NO");
@@ -62,8 +88,27 @@ public final class P43ProbeActivity extends Activity {
       Message m=Message.obtain(null,P43IsolatedWorker.INIT);
       Bundle b=new Bundle();b.putString("session",session);
       b.putString("p44_profile",simulatedProfile.wire());
-      m.replyTo=replies;m.setData(b);
-      try{remote.send(m);}catch(RemoteException e){fail("BINDER_SEND_FAILED");}
+      ParcelFileDescriptor assetFd=null;File syntheticFile=null;
+      try {
+        syntheticFile=File.createTempFile("p45-synthetic-", ".bin", getCacheDir());
+        try(FileOutputStream output=new FileOutputStream(syntheticFile)) {
+          output.write(P45_SYNTHETIC);
+          output.getFD().sync();
+        }
+        // Only the already-open O_RDONLY descriptor crosses Binder; unlink
+        // filename before transfer so the worker never needs its host path.
+        assetFd=ParcelFileDescriptor.open(syntheticFile,ParcelFileDescriptor.MODE_READ_ONLY);
+        if(!syntheticFile.delete())throw new IOException("UNLINK_FAILED");
+        b.putParcelable("p45_readonly_fd",assetFd);
+        b.putInt("p45_max_bytes",64);
+        m.replyTo=replies;m.setData(b);
+        remote.send(m);
+      }catch(Exception failure) {
+        fail("SYNTHETIC_FD_BROKER_FAILED");
+      }finally{
+        if(assetFd!=null)try{assetFd.close();}catch(IOException ignored){}
+        if(syntheticFile!=null)syntheticFile.delete();
+      }
     }
     @Override public void onServiceDisconnected(ComponentName n){fail("SERVICE_DISCONNECTED");}
     @Override public void onBindingDied(ComponentName n){fail("BINDING_DIED");}
