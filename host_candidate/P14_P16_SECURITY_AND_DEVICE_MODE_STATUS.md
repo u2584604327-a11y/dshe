@@ -18,7 +18,7 @@ Exact signed v138 read-only audit: https://github.com/u2584604327-a11y/dshe/acti
 
 Original Android Manifest has 2 Service entries, 0 services marked isolatedProcess. The APK includes Node engine, shell/root helpers and browser device preset code. A file named boosandbox.bin does not establish a real OS VM boundary. Production Node isolated UID, generic Node filesystem/network/shell confinement, and per-profile WebView storage isolation remain NOT VERIFIED.
 
-Independent real Android isolated-UID probe source (not DSH product engine): host_candidate/p15_isolated_probe/. It has a separate test package with a service marked isolatedProcess=true, no Android permissions, and an IPC test that verifies the service gets a different UID and cannot read an app-created private canary. The Android result must be checked in https://github.com/u2584604327-a11y/dshe/actions/runs/40834677353 before claiming PASS.
+Independent real Android isolated-UID probe source (not DSH product engine): host_candidate/p15_isolated_probe/. It has a separate test package with a service marked isolatedProcess=true, no Android permissions, and an IPC test that verifies the service gets a different UID and cannot read an app-created private canary. The real isolated-process prototype PASSED Android 35 simulator execution: https://github.com/u2584604327-a11y/dshe/actions/runs/40834677353 (SUCCESS). The test verified different UID, inability to read an app-private synthetic canary, and isolatedProcess metadata. This is a standalone test APK; it has NOT migrated any production DSH Node/browser service.
 
 Until Node and browser automation actually migrate behind a proven restricted UID and a trusted native capability broker, DSH cannot be described as a strict virtual machine. An ordinary extra process, WebView storage suffix or JS device profile is insufficient.
 
@@ -39,7 +39,7 @@ P14_ANDROID_FUSION_ART_STARTUP=PASS
 P14_REAL_LAN_TOKEN_USAGE=NOT_VERIFIED
 P15_ORIGINAL_ISOLATED_SERVICES=0
 P15_PRODUCTION_NODE_UID_ISOLATION=NOT_VERIFIED
-P15_STANDALONE_ISOLATED_PROBE=SEE_REAL_ACTIONS_RESULT
+P15_STANDALONE_ISOLATED_PROBE=PASS_ANDROID35_NOT_DSH_ENGINE
 P16_DEVICE_PROFILE_SOURCE_VALIDITY=PASS
 P16_SITE_VISIBLE_DEVICE_CONSISTENCY=NOT_VERIFIED
 REAL_IOS_WINDOWS_HARDWARE_IDENTITY=NOT_ACHIEVABLE_FROM_WEBVIEW
