@@ -58,7 +58,7 @@ def apply(source):
     modified=[m for cls in after.get_classes() if cls.get_name()==OWNER
               for m in cls.get_methods() if m.get_name()==METHOD and m.get_descriptor()==SIGNATURE][0]
     ai={pc:x for pc,x in modified.get_instructions_idx()}
-    if ai[BEGIN].get_name()!="const/4" or "v3, 0" not in ai[BEGIN].get_output():
+    if ai[BEGIN].get_name()!="const/4" or struct.unpack_from("<H",output,off)[0]!=0x3012:
         raise AssertionError("EXPORT_NULL_RETURN_NOT_PRESERVED")
     if any(ai[pc].get_name()!="nop" for pc in (118,120,122)):
         raise AssertionError("EXPORT_CALL_BYTES_NOT_NOP")
