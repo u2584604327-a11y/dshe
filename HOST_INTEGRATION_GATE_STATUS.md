@@ -316,3 +316,32 @@ FIXED_CERT_SIGNED_V139_APK=NOT_BUILT
 ```
 
 **Do not ship the test-signed APK or expose a v139 installation link.** It does not include the production signer or complete host and egress integration.
+
+## P11 summary-only Node tool + P5 Android UI runtime gate (2026-10-29)
+
+### P11: source + Node execution PASS, production still unchanged
+
+- P11 private GitHub Actions: https://github.com/u2584604327-a11y/dshe/actions/runs/40822332733 — **SUCCESS**.
+- Source: `host_candidate/patch_logs_metadata_only.py`, using exact SHA-pinned original v138 `assets/logs-tool.zip` plus P7 export-output redaction.
+- New P11 ZIP SHA256: `29bcf54bb00ea989516b8bc7bdeb6bbd68f9a11a85082273399eb3597cdd76a0`.
+- The AI `logs` plugin now denies `read`, `crashes` and `export` before dispatching any mailbox command, regardless of attempted arguments. `summary` projects only bounded integer counters and fixed explanatory strings; it discards native arbitrary `message`, `headline`, `lastExit`, `logText`, `sceneText`, `bundlePath` and nested `details`. Synthetic canary leak test PASS.
+- The native log viewer, on-disk data, existing ZIP files and other Node/shell generic file tools are **not** protected by this specific plugin-only restriction. The Node process still shares application UID; **total native/Node diagnostic egress closed = NO**.
+- P11 resource has been added to the ephemeral P1–P10 assembler, with exact pinned hash. This is **not an installed user update**.
+
+### P5 actual Android UI smoke: newly discovered runtime boundary
+
+- Same-ephemeral-signer Android instrumentation source: `host_candidate/test-only/com/dsh/p1/smoketest/DshInstrumentation.java`; the instrumentation package is never shipped or published.
+- Original disposable Android 35 App and instrumentation APK build/installation worked in https://github.com/u2584604327-a11y/dshe/actions/runs/40821972738, but `NativeDiagnosticReview` UI was **not displayed**: the P5 `AndroidFdQueue` constructor raised `IOException`. Thus previous P5 Java compile and package success must **not** be called native UI runtime PASS.
+- A subsequent bounded diagnostic https://github.com/u2584604327-a11y/dshe/actions/runs/40822506334 showed `FAIL_PHASE=NATIVE_PINNED_QUEUE`, `FAIL_REASON=SYNTHETIC_QUEUE_PERMISSIONS`. Its strict mode requirement rejects group/other-writable roots. Do **not** loosen the ownership/permissions checks.
+- The instrumentation fixture now creates an explicitly native-owned mode `0700` private queue root under a disposable subdirectory; no app-shared filesDir mode is changed and no old logs are removed. The retest is https://github.com/u2584604327-a11y/dshe/actions/runs/40822933877, and remains **NOT_VERIFIED** until its actual result.
+- This P5 UI test is intentionally invoked by a test harness from MainActivity, **not** by the original LogViewerActivity button. Even success cannot establish host UI wiring or one-shot transport integration.
+
+```text
+P11_NODE_LOG_MODEL_BOUNDARY=PASS_SYNTHETIC_REAL_PLUGIN
+P11_FULL_APP_EGRESS=NOT_VERIFIED
+P5_NATIVE_UI_ANDROID=NOT_VERIFIED_PENDING_0700_QUEUE_RETEST
+P5_ORIGINAL_LOGVIEWER_HOOK=NO
+P5_ONE_SHOT_SEND_CONNECTED=NO
+ORIGINAL_CERT_V139_APK=NO
+PHONE_V138_UNCHANGED=YES
+```
