@@ -42,7 +42,11 @@ def file_sha256(path):
 
 
 def method_id(method):
-    return method.get_class_name() + "->" + method.get_name() + method.get_descriptor()
+    # DexMethod.get_descriptor() includes the return type; invoke textual output
+    # from androguard lists the name and arguments only. Canonicalize both
+    # to the same class + method + argument descriptor key.
+    args = method.get_descriptor().split(")", 1)[0] + ")"
+    return method.get_class_name() + "->" + method.get_name() + args
 
 
 def audit(apk_path):
