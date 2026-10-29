@@ -17,9 +17,22 @@ public final class P43IsolatedWorker extends Service {
       Bundle data=message.getData();
       String session=data.getString("session");
       if(session==null || !session.matches("[a-f0-9]{64}"))return;
+      // The profile is only a simulated view. A syntactically malformed,
+      // noncanonical or unexpectedly privileged profile fails closed.
+      final P44VirtualDeviceProfile profile;
+      try {
+        profile=P44VirtualDeviceProfile.parse(data.getString("p44_profile"));
+      } catch(RuntimeException invalidProfile) { return; }
+      if(profile.canMakeSystemVirtualMachine() ||
+         profile.altersRealHardwareIdentity() ||
+         profile.grantsNetworkOrFilesystemAccess() ||
+         profile.hasIndependentKernel())return;
       used=true;
       Bundle response=new Bundle();
       response.putString("session",session);
+      response.putString("p44_profile_hash",profile.fingerprint());
+      response.putBoolean("p44_is_real_virtual_machine",false);
+      response.putBoolean("p44_hardware_identity_changed",false);
       Message reply=Message.obtain(null,HELLO);
       reply.setData(response);
       try {message.replyTo.send(reply);} catch(RemoteException ignored){}
