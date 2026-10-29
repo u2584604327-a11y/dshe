@@ -132,7 +132,9 @@ public final class P17BrokerProbeActivity extends Activity {
     LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
     TextView heading=new TextView(this);heading.setText("一次性计数授权（安全隔离测试）");
     root.addView(heading,new LinearLayout.LayoutParams(-1,90));
-    button=new Button(this);button.setText("批准一次计数");button.setEnabled(false);
+    button=new Button(this);button.setText("批准一次计数");
+    button.setContentDescription("P17_APPROVE_ONCE"); // stable test-only a11y locator
+    button.setEnabled(false);
     root.addView(button,new LinearLayout.LayoutParams(-1,140));
     setContentView(root);
     button.setOnClickListener(v->{
