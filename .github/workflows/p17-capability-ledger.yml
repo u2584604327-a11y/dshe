@@ -1,0 +1,41 @@
+name: DSH P17 authenticated capability ledger (no generic file/network scope)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'host_candidate/p17_capability/**'
+      - '.github/workflows/p17-capability-ledger.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  default-deny-capability-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Source-only no-Android unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/p17-test
+          javac --release 8 -d out/p17-test \
+            host_candidate/p17_capability/src/com/dsh/p17/P17CapabilityGate.java \
+            host_candidate/p17_capability/test/com/dsh/p17/P17GateTest.java
+          java -cp out/p17-test com.dsh.p17.P17GateTest
+          echo 'P17_JAVA_ONE_SHOT_CAPABILITY_GATE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P17_RAW_FILE_OR_GENERIC_NETWORK_CAPABILITY=DENIED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P17_REAL_BINDER_UID_GATE=NOT_YET_CONNECTED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P17_FULL_DSH_VM_ISOLATION=NOT_YET' >> "$GITHUB_STEP_SUMMARY"
+      - name: Source audit no arbitrary sinks in capability ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! grep -E 'java.net.|HttpURLConnection|Runtime.getRuntime|ProcessBuilder|FileInputStream' \
+            host_candidate/p17_capability/src/com/dsh/p17/P17CapabilityGate.java
