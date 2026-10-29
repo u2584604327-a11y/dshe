@@ -45,8 +45,17 @@ jobs:
             --repo "$GH_REPO" \
             --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
             --dir .p39tmp
-          actual="$(sha256sum .p39tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk | cut -d' ' -f1)"
-          test "$actual" = "3ca56655d79afc57431636e340823e7071bc830615c485b0b9a30b6e3e5"
+          file=.p39tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          test -s "$file"
+          actual="$(sha256sum "$file" | awk '{print $1}')"
+          expected='3ca56655d79afc57431636e340823e7071bc830615c485b0b9a30b6e3e5'
+          bytes="$(wc -c < "$file" | tr -d ' ')"
+          release_digest="$(gh api "repos/$GH_REPO/releases/tags/dsh-baseline-v135dsh-baseline-v135" --jq '.assets[] | select(.name=="DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk") | .digest')"
+          printf 'P39_BYTES=%s\\nP39_LOCAL_SHA=%s\\nP39_EXPECTED_SHA=%s\\nP39_RELEASE_DIGEST=%s\\n' "$bytes" "$actual" "$expected" "$release_digest"
+          if test "$bytes" != 147341486 || test "$actual" != "$expected" || test "$release_digest" != "sha256:$expected"; then
+            echo '::error::Original signed APK local/Release checksum or size mismatch; stop'
+            exit 1
+          fi
           echo 'P39_EXACT_ORIGINAL_APK_SHA256=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Derive bounded Process surface and audit P37 compatibility
         shell: bash
