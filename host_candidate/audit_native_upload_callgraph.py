@@ -154,6 +154,13 @@ if __name__=="__main__":
         "direct_app_invocation_pairs":report["direct_app_invocation_pairs"],
         "uploader_methods":len(report["log_uploader_methods"]),
         "network_invocations":report["network_invocations_among_app_classes"],
+        "uploader_callers":[
+            {"method":r["method"],"callers":r["direct_callers"][:12],"total_callers":r["direct_caller_count"]}
+            for r in report["log_uploader_methods"] if r["direct_caller_count"]
+        ],
+        "selected_native_network_invocations":report["direct_network_invocation_sites_for_selected_classes"][:30],
+        "unresolved_invoke_count_sample":report["unresolved_invoke_count_sample"],
+        "unresolved_invoke_examples":report["unresolved_invoke_examples"][:5],
         "report":args.report,
         "full_egress_closed":"NOT_VERIFIED",
     },indent=2))
