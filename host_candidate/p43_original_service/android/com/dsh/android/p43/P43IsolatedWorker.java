@@ -55,6 +55,10 @@ public final class P43IsolatedWorker extends Service {
       // Actual runtime file leasing and script approval are not enabled.
       byte[] expected="P45_SYNTHETIC_PRIVATE_ASSET_V1".getBytes(StandardCharsets.UTF_8);
       if(!Arrays.equals(expected,content))return;
+      // P46 two-part manifest and both O_RDONLY PFDs must verify before the
+      // one-shot Binder grant is consumed. No unverified bytes are executed.
+      final String p46Digest=P46WorkerBundle.verifyFixture(data);
+      if(p46Digest==null)return;
       final String assetHash;
       try {
         byte[] hash=MessageDigest.getInstance("SHA-256").digest(content);
@@ -72,6 +76,9 @@ public final class P43IsolatedWorker extends Service {
       response.putInt("p45_asset_size",content.length);
       response.putBoolean("p45_path_transferred",false);
       response.putBoolean("p45_root_used",false);
+      response.putString("p46_bundle_sha256",p46Digest);
+      response.putInt("p46_verified_parts",P46ResourceBundle.COUNT);
+      response.putBoolean("p46_executed_any_script",false);
       Message reply=Message.obtain(null,HELLO);
       reply.setData(response);
       try {message.replyTo.send(reply);} catch(RemoteException ignored){}
