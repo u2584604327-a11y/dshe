@@ -1,6 +1,8 @@
 name: DSH v139 P6 source and D8 evidence audit
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -12,6 +14,7 @@ concurrency:
 
 jobs:
   p6-source-gates:
+    if: github.event_name == 'workflow_dispatch' || github.event.release.tag_name == 'dsh-source-v139-p6'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
