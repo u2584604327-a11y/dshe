@@ -17,8 +17,12 @@ def elf_data(b):
   raise ValueError("INVALID_ARM64_ELF")
  with tempfile.TemporaryDirectory(prefix="p21-static-readelf-") as td:
   p=pathlib.Path(td)/"binary";p.write_bytes(b)
-  r=subprocess.run(["readelf","-d","-l",str(p)],capture_output=True,text=True,check=True,timeout=30)
+  r=subprocess.run(["readelf","-d","-l","-W",str(p)],capture_output=True,text=True,check=True,timeout=30)
  o=r.stdout
+ load_alignments=[int(line.split()[-1],16) for line in o.splitlines()
+                  if line.strip().startswith("LOAD")]
+ if not load_alignments or any(a<16384 or a%16384 for a in load_alignments):
+  raise ValueError("ORIGINAL_ELF_NOT_16KB_PT_LOAD_ALIGNED")
  needed=sorted(set(re.findall(r"Shared library: \[([^\]]+)\]",o)))
  paths=re.findall(r"Library (?:runpath|rpath): \[([^\]]+)\]",o)
  interp=re.search(r"Requesting program interpreter:\s*([^\]]+)\]",o)
@@ -92,6 +96,7 @@ def main():
     "interpreter":interp,"original_termux_runpath_present":True,
     "library_closure":sorted(seen),"library_source_archives":origins,
     "library_sizes_bytes":sizes,
+    "all_original_elf_pt_load_alignments_16k":True,
     "native_lib_file_count":len(seen)+1,
     "api35_extractNativeLibs_unextractable_sonames":sorted(
       name for name in seen if not name.endswith(".so")),
