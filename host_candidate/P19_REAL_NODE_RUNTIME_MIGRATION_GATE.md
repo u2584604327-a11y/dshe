@@ -11,9 +11,14 @@ Date: 2026-10-29. Source-only and read-only. Not a v139 APK.
 - ELF interpreter: /system/bin/linker64.
 - DT_RUNPATH contains a Termux path: /data/data/com.termux/files/usr/lib.
 - Required shared libraries are not all present under resolvable sonames in the
-  standalone runtime ZIP. Some LINKS.txt aliases point to absent ZIP members.
-  This is a static archive dependency closure deficit; on-device system library
-  availability and the current native host resolution sequence remain unknown.
+  standalone Node runtime ZIP. Crucially, the sibling APK asset
+  assets/bootstrap-aarch64.zip **does** contain the four missing libraries:
+  libcrypto.so.3, libssl.so.3, libz.so.1.3.2, libc++_shared.so.
+  Bootstrap asset SHA-256:
+  b3739c14a2eb7421243b908e2fe2b9e54cbdf8477d210d09e8ac4452d864cad9.
+  Combined Node+bootstrap static dependency-file presence must be checked.
+  This does NOT demonstrate linker search paths, actual extraction, execution
+  from immutable package sources or isolated UID access.
 - assets/engine.bin is separate compressed data.
 - P15 original v138 manifest: zero isolatedProcess services.
 - P18 separate Binder/UI/capability probe passed Android35:
@@ -49,7 +54,9 @@ Android 10+ targets cannot execute arbitrary code from writable app home
 
 P19_REAL_NODE_ZIP_ELF_METADATA=CI_PENDING
 P19_RUNPATH_TERMUX_HARD_BINDING=DETECTED_STATIC
-P19_NODE_ZIP_LIBRARY_CLOSURE=NOT_ESTABLISHED
+P19_NODE_ZIP_ALONE_LIBRARY_CLOSURE=INCOMPLETE
+P19_NODE_PLUS_BOOTSTRAP_FILE_PRESENCE=CI_CHECK
+P19_ANDROID_LINKER_RESOLUTION_UNDER_ISOLATED_UID=NOT_VERIFIED
 P19_ISOLATED_UID_ORIGINAL_NODE_STARTUP=NOT_TESTED
 P19_DSH_NODE_NATIVE_HOST_INTEGRATED=NO
 P19_ORIGINAL_CERT_V139=NO
