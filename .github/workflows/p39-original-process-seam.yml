@@ -48,7 +48,7 @@ jobs:
           file=.p39tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
           test -s "$file"
           test "$(stat -c %s "$file")" -eq 147341486
-          expected=3ca56655d79afc57431636e340823e7071bc830615c485b0b9a30b6e3e5
+          expected=3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5
           echo "$expected  $file" | sha256sum --check -
           echo 'P39_EXACT_ORIGINAL_APK_SHA256=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Derive bounded Process surface and audit P37 compatibility
@@ -61,7 +61,7 @@ jobs:
           python3 - <<'PY'
           import json
           s=json.load(open('.p39tmp/process-surface.json'))
-          assert s['baseline_apk_sha256']=='3ca56655d79afc57431636e340823e7071bc830615c485b0b9a30b6e3e5'
+          assert s['baseline_apk_sha256']=='3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5'
           assert s['primary_start_code_off']==3163260
           assert s['primary_start_pc']==3912
           assert s['p35_lifecycle_edges_pinned'] is True
