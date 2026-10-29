@@ -32,8 +32,13 @@ def assemble(apkpath,p6path,p5path,outpath):
     addon=pathlib.Path(p5path).read_bytes()
     if len(addon)>5_000_000:raise ValueError("P5_DEX_TOO_LARGE")
     newclasses=addon_classes(addon)
-    if len(newclasses)<9 or not all(n.startswith("Lcom/dsh/p1/") for n in newclasses):
-        raise ValueError("P5_CLASS_SCOPE_MISMATCH")
+    if len(newclasses)<64 or not all(
+        n.startswith("Lcom/dsh/p1/") or n.startswith("Lcom/dsh/p12/")
+        for n in newclasses
+    ):
+        raise ValueError("P5_P12_CLASS_SCOPE_MISMATCH")
+    if "Lcom/dsh/p12/P12LogViewerReviewEntry;" not in newclasses:
+        raise ValueError("P12_REAL_NATIVE_REVIEW_ADAPTER_CLASS_MISSING")
     with zipfile.ZipFile(p6path) as bundle:
         if bundle.testzip():raise ValueError("P6_CRC_FAIL")
         inner=bundle.read("output/DSH_V139_P6_ASSET_OVERLAY_NOT_APK.zip")
