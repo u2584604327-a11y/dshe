@@ -63,7 +63,7 @@ public final class P32NodeIpcBrokerTest {
     malformedBurn(b,session,"{\"op\":\"METADATA_COUNT\",\"limit\":9}");
     malformedBurn(b,session,"{\"op\":\"METADATA_COUNT\",\"limit\":03}");
     malformedBurn(b,session,GOOD+" ");
-    malformedBurn(b,session,GOOD.repeat(4));
+    malformedBurn(b,session,GOOD+GOOD+GOOD+GOOD);
     malformedBurn(b,session,"[{\"op\":\"METADATA_COUNT\",\"limit\":3}]");
     malformedBurn(b,session,"{\"op\":\"METADATA_COUNT\",\"limit\":3}\n{\"op\":\"METADATA_COUNT\",\"limit\":3}");
 
