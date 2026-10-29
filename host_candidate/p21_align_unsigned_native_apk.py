@@ -2,7 +2,7 @@
 """P21 installer-immutable APK ZIP ELF alignment. Candidate-only unsigned APK.
 
 API >=23 Bionic linker supports page-aligned uncompressed ELF files in ZIPs.
-Verifies VERSIONED .so.N files too; makes no runtime linker/UID claim.
+Verifies 16 KB page alignment for VERSIONED .so.N files too; makes no runtime linker/UID claim.
 """
 import argparse,copy,hashlib,json,pathlib,struct,zipfile
 EXPECTED_NODE="a0d21a1589312919114b24a5cc520c30ab7f26f9985b3f0c643c153172ebd1e6"
@@ -42,7 +42,7 @@ def main():
     item=copy.copy(info)
     item.extra=b""
     # New valid private ZIP extra field: length includes tag and size (4).
-    alignment=4096 if native else (4 if info.compress_type==zipfile.ZIP_STORED else 1)
+    alignment=16384 if native else (4 if info.compress_type==zipfile.ZIP_STORED else 1)
     pos=dest.fp.tell()
     name_bytes=item.filename.encode("utf-8")
     if alignment>1:
@@ -54,18 +54,18 @@ def main():
   for entry in check.infolist():
    if entry.is_dir():continue
    native=entry.filename.startswith(NATIVE_PREFIX)
-   required=4096 if native else (4 if entry.compress_type==0 else 1)
+   required=16384 if native else (4 if entry.compress_type==0 else 1)
    if offset(entry)%required:raise ValueError("ZIP_PAGE_ALIGNMENT_BAD_"+entry.filename)
   if hashlib.sha256(check.read(NATIVE_PREFIX+"libdshnode_p21_exec.so")).hexdigest()!=EXPECTED_NODE:
    raise ValueError("ZIP_REWRITE_CHANGED_NODE_EXE")
   report={"P21_ZIP_NATIVE_LIB_ENTRIES":len(entries),
-          "P21_VERSIONED_LIBS_ALIGNED_4096":len(VERSIONED),
+          "P21_VERSIONED_LIBS_ALIGNED_16384":len(VERSIONED),
           "P21_NATIVE_ELFS_STORED_UNCOMPRESSED":True,
           "P21_ORIGINAL_NODE_SHA256_RETAINED":True,
           "P21_ZIP_LD_LIBRARY_PATH_ANDROID_ISOLATED_UID":"NOT_TESTED",
           "P21_NODE_REAL_EXECUTION":"NOT_TESTED",
           "P21_RELEASE":"BLOCKED"}
   pathlib.Path(p.report).write_text(json.dumps(report,indent=2)+"\n")
- print("P21_ALL_11_REAL_ARM64_ELF_ZIP_PAGE_ALIGNMENT=PASS")
+ print("P21_ALL_11_REAL_ARM64_ELF_ZIP_16KB_ALIGNMENT=PASS")
  print("P21_VERSIONED_SONAMES_DIRECT_APK_LINKER_CANDIDATE=PACKAGED_NOT_EXECUTED")
 if __name__=="__main__":main()
