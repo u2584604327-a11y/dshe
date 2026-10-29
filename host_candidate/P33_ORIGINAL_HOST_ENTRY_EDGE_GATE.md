@@ -21,7 +21,7 @@ Workflow: .github/workflows/p33-original-host-entry-graph.yml
 
 Only source allowed: privately held original v138
 DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
-SHA256 3ca56655d79afc57431636e340823e7071bc830615c485b0b9a30b6e3e5.
+SHA256 3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5.
 
 In temporary, private CI, parse each real classes*.dex directly with pinned
 androguard. Record only bounded method/class names, direct invoke
