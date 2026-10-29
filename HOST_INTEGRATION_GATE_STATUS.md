@@ -68,3 +68,44 @@ One preceding CI run had `P2/P6` checks PASS but the final artifact upload faile
 | Android ART, data-preserving offline install and real phone | NOT_VERIFIED |
 
 **Do not sign, publish or install a new APK based on the static replay alone.** Keep original signing material out of GitHub and the existing phone v138 unchanged. The next required engineering work is *actual native/Node send-path integration* and *Android host UI integration*, which cannot be accomplished by merely appending the existing standalone Java classes to DEX.
+
+## Native diagnostic upload call-graph and egress delta (verified 2026-10-29)
+
+### Read-only original DEX invocation analysis
+
+Source: `host_candidate/audit_native_upload_callgraph.py`
+
+Verified GitHub Actions: https://github.com/u2584604327-a11y/dshe/actions/runs/40813846052
+
+- 4,599 DSH application method implementations scanned.
+- 6,149 direct app-to-app invocation pairs identified.
+- 56 app-code direct calls to network-related Java APIs. These are **not** 56 confirmed diagnostic upload paths.
+- Static audit detects 22 `LogUploader` method definitions and their caller sites.
+- Confirmed original upload path: `LogViewerActivity.upload$lambda$49 → LogUploader.upload → upload$lambda$12 → doUpload`.
+- Confirmed legacy retry path: `DshApplication.uploadPendingBundles → retryPending → retryPendingLocked → doUpload`.
+- `doUpload` invokes `HttpURLConnection.getOutputStream()`; it is a concrete original native send sink.
+- `LogCommandBridge` local export and `LogUploader.enqueue` are not by themselves evidence of a network request.
+
+### Real DEX patched sink removal
+
+Source: `host_candidate/verify_diagnostic_egress_sites.py`
+
+Verified GitHub Actions: https://github.com/u2584604327-a11y/dshe/actions/runs/40814002535
+
+- Original v138 exact SHA256: `3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5`.
+- P2 in-memory candidate exact `classes.dex` SHA256: `9a7cd89f4a5c86394770febf703a9345a44d8c12c39abec9d494635587d8f221`.
+- Original diagnostic-focused classes contained **5** direct HTTP/URL sink instructions (constructor, `openConnection`, `setRequestMethod`, `setDoOutput`, `getOutputStream`).
+- P2 candidate contains **0** such direct sink instructions in the same classes: **PASS**.
+- Full P2 seven-method byte-range and non-target method invariants: **PASS**, verified separately in the same run.
+- P6 static three-file overlay preimages: **PASS**.
+
+**Limitations:** This shows removal of the known native diagnostic uploader HTTP implementation from a validated *uninstalled candidate DEX*. It does not exclude generic native bridge, reflection, JNI, additional HTTP libraries, Node outgoing requests, or other executable/network transports. It does not implement P5's approved transport and native review UI. The candidate DEX was never written into a signed APK and was not executed on Android ART.
+
+- KNOWN_NATIVE_DIAGNOSTIC_HTTP_SINK_REMOVED_IN_CANDIDATE: **PASS**
+- ALL_NATIVE_NODE_EGRESS_CLOSED: **NOT_VERIFIED**
+- NATIVE_APPROVAL_UI_CONNECTED: **NO**
+- DSH_V139_APK_BUILT: **NO**
+- ART_AND_REAL_PHONE: **NOT_VERIFIED**
+- PHONE_V138_CHANGED: **NO**
+
+Do not upload signing material to GitHub or install/debug the current v138 online with sensitive data. The required next implementation is a controlled Android host path that routes all diagnostic send requests through the native per-bundle review and fail-closed transport, with isolated ART and offline device verification before signing.
