@@ -107,6 +107,12 @@ public final class DshInstrumentation extends Instrumentation {
       write(valid,VALID);
       write(invalid,INVALID);
       queue=new AndroidFdQueue(root,folder.getName());
+      // Isolate pinned Java reader behavior from dialog/UiAutomation behavior.
+      phase="NATIVE_PINNED_READ";
+      byte[] observed=queue.read(valid).copyBytes();
+      assertTrue(observed.length==VALID.getBytes(StandardCharsets.UTF_8).length,
+          "Verified descriptor did not return exact synthetic fixture length");
+      phase="NATIVE_DIALOG_CONSTRUCTION";
       final Activity owner=activity;
       final AndroidFdQueue trustedQueue=queue;
       final NativeDiagnosticReview[] created=new NativeDiagnosticReview[1];
@@ -121,7 +127,11 @@ public final class DshInstrumentation extends Instrumentation {
       review=created[0];
 
       phase="NATIVE_SAFE_PREVIEW_VISIBLE";
-      assertTrue(waitForText("逐包诊断预览",15),"Trusted P5 preview dialog did not appear");
+      if(!waitForText("逐包诊断预览",12)){
+        phase=waitForText("预览失败",2) ?
+          "P5_PROJECTOR_OR_QUEUE_REJECTED" : "P5_DIALOG_NOT_ACCESSIBILITY_VISIBLE";
+        throw new AssertionError("Trusted P5 safe preview not available");
+      }
       assertTrue(waitForText("发送器尚未接入",3),"Fail-closed sender message missing");
       assertTrue(!waitForText("CANARY_MUST_NOT_DISPLAY",1),"Unexpected secret shown");
 
@@ -146,7 +156,7 @@ public final class DshInstrumentation extends Instrumentation {
       // Only a narrowly whitelisted synthetic FD queue errno / safe class of
       // failure. Never print an arbitrary exception message or stack trace.
       String cause=failure.getMessage();
-      if(cause!=null&&cause.matches("QUEUE_OPEN errno=[0-9]{1,4}"))
+      if(cause!=null&&cause.matches("QUEUE_(OPEN|READ) errno=[0-9]{1,4}"))
         result.putString("FAIL_REASON",cause);
       else if(cause!=null&&cause.equals("Queue ownership or permissions rejected"))
         result.putString("FAIL_REASON","SYNTHETIC_QUEUE_PERMISSIONS");
