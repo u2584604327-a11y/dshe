@@ -1,10 +1,11 @@
-name: DSH unsigned integration lab - P2 P5 P6 (non-installable)
+name: DSH P2-P7 disposable ART emulator integration lab
 
 on:
   push:
     branches: [main]
     paths:
       - 'host_candidate/assemble_unsigned_lab.py'
+      - 'host_candidate/run_emulator_smoke.sh'
       - '.github/workflows/unsigned-integration-lab.yml'
   workflow_dispatch:
 
@@ -14,7 +15,7 @@ permissions:
 jobs:
   ephemeral-unsigned-assembly:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -126,16 +127,51 @@ jobs:
               out.write('P2 primary DEX SHA256: '+r['PATCHED_MAIN_DEX_SHA256']+'\n')
               out.write('Ephemeral unsigned aligned lab APK exists only inside this runner, never published.\n')
           PY
+      - name: Create one-time SELF-SIGNED lab identity (never original DSH certificate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          LAB_PASS="$(openssl rand -hex 20)"
+          keytool -genkeypair -alias dsh-ephemeral-ci -keyalg RSA -keysize 3072 \
+            -validity 1 -storetype PKCS12 -dname 'CN=DISPOSABLE_EMULATOR_TEST_ONLY' \
+            -keystore out/EMULATOR_ONLY_EPHEMERAL.p12 \
+            -storepass "$LAB_PASS" -keypass "$LAB_PASS" -noprompt >/dev/null 2>&1
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" sign \
+            --ks out/EMULATOR_ONLY_EPHEMERAL.p12 --ks-key-alias dsh-ephemeral-ci \
+            --ks-pass "pass:$LAB_PASS" --key-pass "pass:$LAB_PASS" \
+            --out out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk \
+            out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
+            out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk > out/ephemeral-cert.txt
+          lab_cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' out/ephemeral-cert.txt | head -n 1)"
+          test -n "$lab_cert"
+          test "$lab_cert" != '90072b7de43e96999be92d99869ce5e5b7639b5f2449417b99a1790831b60ff8'
+          echo 'EMULATOR_ONLY_EPHEMERAL_SIGNATURE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'NOT_COMPATIBLE_WITH_INSTALLED_DSH_V138=EXPECTED' >> "$GITHUB_STEP_SUMMARY"
+      - name: Prepare emulator KVM access
+        shell: bash
+        run: |
+          if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Install and launch disposable candidate on fresh offline Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/run_emulator_smoke.sh out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk
       - name: Destroy transient APK and state remaining blockers
         if: always()
         shell: bash
         run: |
-          rm -f out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
+          rm -f out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/EMULATOR_ONLY_EPHEMERAL.p12 /tmp/dsh-private-emulator-logcat.txt
           {
             echo 'PRODUCTION_V139_APK_BUILT=NO'
             echo 'FIXED_CERTIFICATE_SIGNING=NOT_PERFORMED'
             echo 'P5_NATIVE_UI_CONNECTED_TO_LEGACY_ACTIVITY=NO'
             echo 'P5_SEND_GATE_CONNECTED_TO_LEGACY_NATIVE_NODE=NO'
-            echo 'ART_AND_PHONE_VERIFIED=NO'
+            echo 'ART_EMULATOR_RESULT=SEE_DISPOSABLE_EMULATOR_JOB_STEP'\n            echo 'ART_ON_REAL_PHONE=NOT_VERIFIED'
             echo 'No generated APK or binary artifact uploaded or released.'
           } >> "$GITHUB_STEP_SUMMARY"
