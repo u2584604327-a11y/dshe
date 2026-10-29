@@ -57,6 +57,8 @@ jobs:
           assert r['versioned_soname_count']==6
           assert r['all_alias_filenames_end_with_so'] is True
           assert r['all_dependency_ELF_bytes_and_internal_sonames_preserved'] is True
+          assert r['original_missing_soname_exception']==['libsqlite3.so']
+          assert r['original_libsqlite3_filename_fallback_runtime']=='NOT_TESTED'
           assert r['original_node_ELF_unchanged'] is True
           assert len(set(r['soname_to_installer_filename'].values()))==10
           assert all(name.endswith('.so') for name in r['soname_to_installer_filename'].values())
@@ -102,6 +104,7 @@ jobs:
           echo 'P25_ALL_11_REAL_ARM64_ELF_16K_PACKAGE_ALIGNED=PASS_STATIC' >> "$GITHUB_STEP_SUMMARY"
           echo 'P25_ORIGINAL_NODE_SHA256_PRESERVED=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P25_ALL_SIX_VERSIONED_SONAMES_PRESERVED=PASS_STATIC' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P25_ORIGINAL_LIBSQLITE3_MISSING_SONAME=RUNTIME_COMPATIBILITY_UNVERIFIED' >> "$GITHUB_STEP_SUMMARY"
           echo 'P25_ANDROID35_MULTILIB_LD_PRELOAD=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
       - name: Destroy exact signed input, unsigned staging package and all original runtime bits
         if: always()
