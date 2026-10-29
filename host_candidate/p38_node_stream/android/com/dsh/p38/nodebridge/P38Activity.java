@@ -38,7 +38,7 @@ public final class P38Activity extends Activity {
         (complete?"PASS":failed?"BLOCKED":"INCOMPLETE")
         +"\nANDROID_API="+Build.VERSION.SDK_INT
         +"\nABI="+Build.SUPPORTED_ABIS[0]
-        +"\nTRUSTED_HOST_UID="+Process.myUid()
+        +"\nTRUSTED_HOST_UID="+android.os.Process.myUid()
         +"\nWORKER_BINDER_UID="+workerUid
         +"\nVERIFIED_NODE_STDOUT="+(complete?"PASS":"NOT_PROVEN")
         +"\nSEPARATE_STDERR="+(complete?"PASS":"NOT_PROVEN")
@@ -98,7 +98,7 @@ public final class P38Activity extends Activity {
     @Override public void handleMessage(Message m) {
       if(failed||complete)return;
       int sender=m.sendingUid;
-      if(!Process.isIsolatedUid(sender)||sender==Process.myUid()||
+      if(!android.os.Process.isIsolatedUid(sender)||sender==android.os.Process.myUid()||
          (workerUid!=-1&&sender!=workerUid)) {
         fail("BINDER_SENDER_NOT_ISOLATED_OR_CHANGED");return;
       }
@@ -108,7 +108,7 @@ public final class P38Activity extends Activity {
         }
         workerUid=sender;session=newSession();expectedSeq=1;
         proxy=new P37RemoteProcess(workerUid,session,
-            Process::isIsolatedUid,new P37RemoteProcess.RemoteControl(){
+            android.os.Process::isIsolatedUid,new P37RemoteProcess.RemoteControl(){
               @Override public void requestGracefulStop(){control(P38NodeWorker.STOP);}
               @Override public void requestForceStop(){control(P38NodeWorker.KILL);}
             });
