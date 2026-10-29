@@ -68,8 +68,41 @@ EngineManager$start$2.invokeSuspend coroutine:
 6. Only after source/ART and safety gates may version 139 signed updates
    be separately authorized. Original signing key never in source/CI.
 
-P35_SIGNED_V138_ENGINE_START_CONTRACT=CI_PENDING
+P35_SIGNED_V138_ENGINE_START_CONTRACT=PASS_CI_40886757918
 P35_P32_BROKER_REAL_NODE_IN_DSH=NOT_CONNECTED
 P35_NATIVE_DIAGNOSTIC_SEND_APPROVAL_IN_DSH=NOT_CONNECTED
 P35_FULL_ORIGINAL_CHAT_AND_BROWSER_PARITY=NOT_VERIFIED
 P35_SIGNED_RELEASE=BLOCKED
+
+## Actual signed-original v138 DEX findings (2026-10-29)
+Verified original exact engine startup at
+https://github.com/u2584604327-a11y/dshe/actions/runs/40886757918
+
+- Baseline SHA, EngineManager$start$2.invokeSuspend code_off 3163260
+  and unique ProcessBuilder.start PC 3912 are verified.
+- Before spawn the original engine builds environment from homeDir,
+  Android getCacheDir/getFilesDir, nodeOptions, Termux mirror
+  environment and ShizukuChannel.socketName. It records active env
+  and invokes maybeIsolateBadBundles, requestRestart,
+  resumePrivilegedChannel and ensureRescuePrompt.
+  No original environment variable values were emitted.
+- Immediately AFTER ProcessBuilder.start(): PC 3924 sets the original
+  Java Process into EngineManager.process; PC 3980 constructs a
+  lambda capturing Process, CountDownLatch, CoroutineScope,
+  EngineManager and Regex; PC 3986 creates reader Thread;
+  PC 4010 calls Thread.start; PC 4026 waits on CountDownLatch;
+  PC 4674 updates MutableStateFlow Ready-related value.
+- The exact P35 source assertions now fail closed if these API
+  edges drift: original process handle, reader thread, startup
+  latch and StateFlow state transition are required semantics.
+- Therefore replacing only ProcessBuilder.start with a Binder
+  message would BREAK original engine lifecycle and chat readiness.
+  A validated process-proxy or ported supervised state machine
+  is necessary, not a no-op spawn method patch.
+- Static observations do not prove runtime host migration.
+
+P35_REAL_HOST_PROCESS_LIFECYCLE_OBSERVED=PASS_STATIC_EXACT
+P35_ORIGINAL_PROCESS_READER_LATCH_STATEFLOW_DEPS=CONFIRMED
+P35_ACTUAL_NODE_OUT_TO_P32_BINDER=NOT_CONNECTED
+P35_ORIGINAL_ENGINEMANAGER_PATCHED=NO
+P35_V139_RELEASE=BLOCKED
