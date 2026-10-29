@@ -46,17 +46,13 @@ public final class P34Activity extends Activity {
   };
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
-    LinearLayout root=new LinearLayout(this);
-    root.setOrientation(LinearLayout.VERTICAL);
+    // The entire Activity content is the trusted native button, so a
+    // single center-screen adb input tap hits it without UIAutomator.
+    // No hidden auto-approval or programmatic Button.performClick().
     approve=new Button(this);
     approve.setText("批准一次合成计数（可信原生 UI）");
     approve.setContentDescription("P34_NATIVE_APPROVE_ONCE");
-    root.addView(approve,new LinearLayout.LayoutParams(-1,190));
-    TextView info=new TextView(this);
-    info.setText("独立 Android 35 Binder 沙箱实验。只测试合成 METADATA_COUNT，"
-      +"没有 Node、网络、文件或真实 DSH 操作。");
-    root.addView(info);
-    setContentView(root);
+    setContentView(approve);
     approve.setOnClickListener(v->{
       boolean sent=trusted.onTrustedUiApproveOnceClick();
       Log.i(TAG,"P34_NATIVE_UI_CLICK_GRANT_SENT="+(sent?"YES":"NO"));
