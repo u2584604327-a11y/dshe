@@ -37,7 +37,7 @@ def main():
         raise ValueError("ORIGINAL_NODE_SHA_CHANGED_BEFORE_APP_PACKAGING")
     entries=[]
     for original,alias in sorted(aliases.items()):
-        if not re.fullmatch(r"lib[A-Za-z0-9_.-]{1,70}\.so",alias) or ".." in alias:
+        if not re.fullmatch(r"lib[A-Za-z0-9_.+-]{1,70}\.so",alias) or ".." in alias:
             raise ValueError("INVALID_INSTALLER_LIBRARY_ALIAS")
         if hash_file(root/alias)!=expected[original]:
             raise ValueError("ORIGINAL_LIBRARY_BYTES_CHANGED")
