@@ -18,7 +18,7 @@ jobs:
       github.event.action == 'opened' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p30-binder-uid-and-canary-liveness-20261029' &&
-      github.event.pull_request.base.ref == 'dsh/p30-real-node-uid-private-canary-egress-20261029'
+      github.event.pull_request.base.ref == 'dsh/p29-real-node-uid-private-canary-egress-20261029'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
