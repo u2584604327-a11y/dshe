@@ -55,8 +55,8 @@ def manifest_snapshot(path):
     receivers = list(app.findall("receiver"))
     application_name = app.get(ANDROID + "name", "")
     return {
-        "target_sdk": int(manifest.get_androidversion_target() or 0),
-        "min_sdk": int(manifest.get_androidversion_min() or 0),
+        "target_sdk": int(manifest.get_target_sdk_version() or 0),
+        "min_sdk": int(manifest.get_min_sdk_version() or 0),
         "application_has_custom_class": bool(application_name),
         "application_class_is_under_dsh_namespace": application_name.startswith((
             "com.dsh.android.", "."
