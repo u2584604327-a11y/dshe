@@ -49,8 +49,8 @@ def inspect(apk):
                     'Lcom/dsh/android/termux/TermuxBootstrap;->nodeIsUsable(')):
                     found[ident]=(name,m)
     if TARGET not in found:raise ValueError('P35_ENGINE_COROUTINE_NOT_FOUND')
-    dex,m=found[TARGET]
-    if dex!='classes.dex' or m.get_code_off()!=CODE_OFF:
+    primary_dex,m=found[TARGET]
+    if primary_dex!='classes.dex' or m.get_code_off()!=CODE_OFF:
         raise ValueError('P35_ENGINE_COROUTINE_CODE_OFFSET_DRIFT')
     calls=[];branches=[]
     for pc,i in m.get_instructions_idx():
@@ -85,7 +85,7 @@ def inspect(apk):
     return {
        'gate':'STATIC_EXACT_ORIGINAL_ENGINE_SPAWN_CONTRACT',
        'exact_original_signed_apk_sha256':EXPECTED,
-       'method':TARGET,'dex':dex,
+       'method':TARGET,'dex':primary_dex,
        'primary_code_off':m.get_code_off(),'primary_start_pc':PC,
        'primary_start_invokes':starts,
        'primary_total_invokes':len(calls),
