@@ -272,3 +272,47 @@ USER_PHONE_V138=UNCHANGED
 ```
 
 Do NOT publish or sign the ephemeral candidate. Avoid asserting total privacy gate closure based only on P9 disablement.
+
+## P10 all original external direct ZIP builder calls denied — emulator PASS (2026-10-29)
+
+Verified by four independent pieces of private Actions evidence:
+
+1. Original direct native bundle constructor reachability audit: https://github.com/u2584604327-a11y/dshe/actions/runs/40819987540
+2. Exact return/branch context analysis for `LogViewerActivity.exportBundle$lambda$41` and `LogUploader.collectCrashScenes`: https://github.com/u2584604327-a11y/dshe/actions/runs/40820114161
+3. P10 exact v138 → ART-safe P1 → browser/privacy → P8/P9 → P10 direct callsite and method scope regression: https://github.com/u2584604327-a11y/dshe/actions/runs/40820289771 (**SUCCESS**)
+4. P1–P10 temporary unsigned APK + ephemeral throwaway signer + fresh offline Android 35 simulator: https://github.com/u2584604327-a11y/dshe/actions/runs/40820408827 (**SUCCESS**)
+
+### Native changes and proof boundary
+
+- Original `DiagnosticBundle.build$default` direct DEX callers were identified in `LogCommandBridge.doExport`, `LogViewerActivity.exportBundle$lambda$41`, `LogViewerActivity.upload$lambda$49` and `LogUploader.collectCrashScenes`. Three more calls were within `DiagnosticBundle`'s own implementation. These are a **static inventory of direct calls**, not reflection/JNI/Node reachability.
+- The first two existing sends had already been denied by ART-safe P1, P9. P10 now replaces two more external builder callsites, **8 bytes each** (existing register set to null + NOP), with the original failure/result branches preserved.
+- `ALL_DIRECT_EXTERNAL_DIAGNOSTIC_BUILD_DEFAULT_CALLS=ZERO_STATIC` in the candidate original primary DEX.
+- Full P10 candidate primary DEX SHA256: `cfe19482edcd4bea7c1b476bb90da5b956759c98a2bb101ee9dd459be4a15474`.
+- P5 native additional DEX remains 63 class definitions. P6/P7 resources retain their pinned preimages.
+- Both original ZIP-building methods (`LogViewerActivity` manual export, uploader crash scene collection) are deliberately **unavailable** pending native trusted review. Local log browsing, summary, and ordinary attachment send instruction bodies were not rewritten by these patches. Runtime manual export UX remains untested.
+- Android 35 fresh emulator install: **PASS**; offline ART package compile: **PASS**; explicit MainActivity launch and process survival: **PASS**. This is a limited launch check, not native P5 dialog or full feature validation.
+- All generated APKs were **temporary emulator-signed**, versionCode remains **138**, and were deleted from Runner after use. No original signing key used, no GitHub APK release created, and user's existing phone v138 is unchanged.
+
+### Release blockers and mandatory next work
+
+- `P5_TrustedNativeReview` still **not invoked** from `LogViewerActivity` lifecycle / user gesture, and `ApprovedDiagnosticSendGate` transport is intentionally unbound. Actual one-package native preview and one-shot dispatch are **not implemented in original host**.
+- Existing ZIPs and raw logs remain readable by Node with the same UID; Node generic shell/file/network tooling has not been isolated. Blocking ZIP creation through original known DEX direct callers is **not** a comprehensive Node exfiltration prevention layer.
+- No full Android/Kotlin Gradle host project is present in this repository; binary-level DEX patches alone do not provide a safe way to wire new P5 Activity methods or guarantee all network sinks.
+- Browser device settings UI is not hooked to the original activity; same-app WebView cookie/storage profile separation remains unverified.
+- No original-certificate signed `versionCode > 138` release, no data-preserving user phone update, and no ART proof of every P5 class under UI flows.
+
+```text
+P10_ALL_ORIGINAL_DIRECT_EXTERNAL_ZIP_BUILD_CALLS=ZERO_STATIC
+P10_EXACT_DEX_AND_METHOD_SCOPE=PASS
+P10_ANDROID35_INSTALL=PASS
+P10_ANDROID35_ART_COMPILE=PASS
+P10_ANDROID35_MAINACTIVITY_LAUNCH=PASS
+P10_NATIVE_MANUAL_EXPORT_USER_FLOW=NOT_VERIFIED
+P5_NATIVE_CONSENT_UI_WIRED=NO
+P5_EXCLUSIVE_APPROVED_SEND_TRANSPORT_WIRED=NO
+GENERIC_NODE_UID_FILE_EXFILTRATION_CLOSED=NO
+REAL_PHONE_DATA_PRESERVATION=NOT_TESTED
+FIXED_CERT_SIGNED_V139_APK=NOT_BUILT
+```
+
+**Do not ship the test-signed APK or expose a v139 installation link.** It does not include the production signer or complete host and egress integration.
