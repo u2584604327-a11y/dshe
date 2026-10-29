@@ -3,7 +3,21 @@ set -euo pipefail
 adb install --no-streaming out/p17-disposable.apk
 adb logcat -c
 adb shell am start -n com.dsh.p17.probe/.P17BrokerProbeActivity
-sleep 4
+# Do not click until real Binder authentication and pre-grant denial have
+# happened; fixed sleeps hid CI races and gave misleading failure evidence.
+ready=0
+for _ in $(seq 1 20); do
+  if adb logcat -d -s DSH_P17_BROKER:I '*:S' | grep -Fq 'P17_PREGRANT_DENIED=PASS'; then
+    ready=1
+    break
+  fi
+  sleep 1
+done
+if test "$ready" != 1; then
+  echo "::error::P18 pre-grant state not reached; no simulated user approval"
+  adb logcat -d -s DSH_P17_BROKER:I '*:S' | grep -E 'P17_|P18_' | tail -n 25 || true
+  exit 1
+fi
 # Use the actual Android UI hierarchy to locate the test-only user gesture.
 # Never approximate display density or click arbitrary screen locations.
 adb shell uiautomator dump /sdcard/p17-ui-test.xml >/dev/null
@@ -20,14 +34,29 @@ if not(x2>x1 and y2>y1):raise SystemExit("P17_BAD_BUTTON_BOUNDS")
 print((x1+x2)//2,(y1+y2)//2)
 PY
 )
+# Exactly one test-only input tap. Never silently retry a privileged gesture.
 adb shell input tap "$tapx" "$tapy"
 adb shell rm -f /sdcard/p17-ui-test.xml
 rm -f out/p17-ui-test.xml
-sleep 8
-adb logcat -d -s DSH_P17_BROKER:I '*:S' > out/p17-private-log.txt
+approved=0
+for _ in $(seq 1 20); do
+  adb logcat -d -s DSH_P17_BROKER:I '*:S' > out/p17-private-log.txt
+  if grep -Fq 'P17_ARBITRARY_FILE_SCOPE_DENIED=PASS' out/p17-private-log.txt; then
+    approved=1
+    break
+  fi
+  sleep 1
+done
+if test "$approved" != 1; then
+  # Only bounded, synthetic probe markers are printed; never app log contents.
+  echo '::error::P18 real user-click / Binder grant / query transition incomplete'
+  grep -E 'P17_|P18_' out/p17-private-log.txt | tail -n 40 || true
+  exit 1
+fi
 for marker in \
  'P17_REAL_BINDER_UID=PASS' \
  'P17_PREGRANT_DENIED=PASS' \
+ 'P18_USER_CLICK_RECEIVED=YES' \
  'P17_TRUSTED_UI_GRANT=PASS' \
  'P17_ONE_SHOT_APPROVED=PASS' \
  'P17_REPLAY_DENIED=PASS' \
@@ -46,3 +75,5 @@ echo 'P17_BINDER_SENDING_UID_ISOLATED=PASS_ANDROID35' >> "$GITHUB_STEP_SUMMARY"
 echo 'P17_HOST_UI_EXPLICIT_GRANT=PASS_ANDROID35' >> "$GITHUB_STEP_SUMMARY"
 echo 'P17_ONE_SHOT_REPLAY_AND_RAW_FILE_DENIAL=PASS_ANDROID35' >> "$GITHUB_STEP_SUMMARY"
 echo 'P17_DSH_NODE_ACTUAL_ISOLATED_MIGRATION=NO' >> "$GITHUB_STEP_SUMMARY"
+echo 'P18_UI_GESTURE_OBSERVED_AND_APPROVAL_DELIVERED=PASS_ANDROID35' >> "$GITHUB_STEP_SUMMARY"
+echo 'P18_GRANTS_REVOKED_ON_STOP_DISCONNECT=SOURCE_PRESENT_RUNTIME_NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
