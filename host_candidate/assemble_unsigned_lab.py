@@ -2,16 +2,20 @@
 """Bounded unsigned APK fusion LAB. Not an installable product, no signing/release."""
 import argparse,copy,hashlib,io,json,pathlib,re,zipfile
 from androguard.core.dex import DEX
-from patch_deny import apply as deny,sha as hash_bytes,EXPECTED_APK
+from patch_deny import sha as hash_bytes,EXPECTED_APK
+from patch_deny_art_safe import apply_art_safe as deny
+import patch_browser,patch_privacy,patch_native_export_reply
 from patch_browser import apply_browser
 from patch_privacy import apply_privacy
 from verify_p6_asset_preimages import EXPECTED_P6,EXPECTED_PATHS,sha_file
 from patch_logs_export_output import patch as patch_p7_logs
 from patch_native_export_reply import apply as patch_p8_export
-P8_DEX_SHA="d7a984597930c7599732d3d5c87df61d15c80bc4a1a942f0fd4d6db7dc2355b3"
+P1_SAFE_SHA="8565675b7da207e858f1c3dd69896ce5a68015a24605157a4a11b259218119b6"
+P2_BROWSER_SAFE_SHA="e392e65bf7592ddd9531af81459e678d1462423abed526d5eeddac248ab158a4"
+P8_DEX_SHA="086d0e431515d9f5072109e96a94cbbe7f37c578f1cc68722bcd787881d1acb3"
 P7_LOG_TOOL_PATH="assets/logs-tool.zip"
 
-COMBINED_SHA="9a7cd89f4a5c86394770febf703a9345a44d8c12c39abec9d494635587d8f221"
+COMBINED_SHA="8682204473860802b17b18ab487fa72380eb076d37495d2de4abb76abad0df6b"
 SIGNATURE_META=re.compile(r"META-INF/[^/]+\.(?:RSA|DSA|EC|SF)$",re.I)
 
 def addon_classes(dex):
@@ -46,11 +50,17 @@ def assemble(apkpath,p6path,p5path,outpath):
         if b"bundlePath: { type: 'string' }" in patched_log_js.encode("utf-8"):
             raise ValueError("P7_AI_VISIBLE_PATH_SCHEMA_STILL_PRESENT")
         overlays[P7_LOG_TOOL_PATH]=patched_log_plugin
-        p1,_=deny(original.read("classes.dex"))
-        p2,_=apply_browser(p1)
-        modified,_=apply_privacy(p2)
-        if hash_bytes(modified)!=COMBINED_SHA:raise ValueError("DEX_CANDIDATE_IDENTITY_FAIL")
-        modified,p8_report=patch_p8_export(modified)
+        p1,p1_report=deny(original.read("classes.dex"))
+        if hash_bytes(p1)!=P1_SAFE_SHA or p1_report["TRY_START_END_AND_HANDLER_ALIGNMENT"]!="PASS_STATIC":
+            raise ValueError("P1_ART_SAFE_PREIMAGE_OR_TRY_BOUNDARY_FAIL")
+        patch_browser.EXPECTED_P1=P1_SAFE_SHA
+        p2,_=patch_browser.apply_browser(p1)
+        if hash_bytes(p2)!=P2_BROWSER_SAFE_SHA:raise ValueError("ART_SAFE_BROWSER_CHAIN_MISMATCH")
+        patch_privacy.EXPECTED=P2_BROWSER_SAFE_SHA
+        modified,_=patch_privacy.apply_privacy(p2)
+        if hash_bytes(modified)!=COMBINED_SHA:raise ValueError("ART_SAFE_PRIVACY_CHAIN_MISMATCH")
+        patch_native_export_reply.EXPECTED_P2=COMBINED_SHA
+        modified,p8_report=patch_native_export_reply.apply(modified)
         if hash_bytes(modified)!=P8_DEX_SHA:raise ValueError("P8_BOUND_NATIVE_DEX_IDENTITY_FAIL")
         for name in dexnames:
             if addon_classes(original.read(name))&newclasses:raise ValueError("DUPLICATE_CLASS_IN_FUSED_DEX")
@@ -94,7 +104,9 @@ def assemble(apkpath,p6path,p5path,outpath):
     return {
       "ASSEMBLY":"UNSIGNED_TEMP_LAB_STRUCTURE_PASS",
       "ORIGINAL_APK_SHA256":EXPECTED_APK,"PATCHED_MAIN_DEX_SHA256":P8_DEX_SHA,
-      "P2_SEVEN_METHOD_DEX_SHA256":COMBINED_SHA,
+      "P2_BROWSER_PRIVACY_DENY_SAFE_SHA256":COMBINED_SHA,
+      "OLD_P2_ARRAY_PAYLOAD_ART":"KNOWN_FAIL",
+      "ART_SAFE_DENY_TRY_BOUNDARIES":p1_report["TRY_START_END_AND_HANDLER_ALIGNMENT"],
       "P8_NATIVE_EXPORT_BUNDLEPATH_REMOVED":p8_report["NATIVE_EXPORT_REPLY_BUNDLE_PATH_REMOVED"],
       "P5_ADDON_DEX_SHA256":hash_bytes(addon),"P5_CLASS_COUNT":len(newclasses),
       "ADDED_DEX_ENTRY":"classes3.dex","P6_OVERLAY_FILES":sorted(EXPECTED_PATHS),
