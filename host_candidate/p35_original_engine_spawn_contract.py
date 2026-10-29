@@ -69,7 +69,7 @@ def inspect(apk):
     # A naive replace-ProcessBuilder-with-Binder patch would violate all.
     must_have={
         3924:'Lcom/dsh/android/EngineManager;->access$setProcess$p(',
-        3980:'Lcom/dsh/android/EngineManager$start$2$ExternalSyntheticLambda0;-><init>(',
+        3980:'Lcom/dsh/android/EngineManager$start$2',
         3986:'Ljava/lang/Thread;-><init>(',
         4010:'Ljava/lang/Thread;->start()',
         4026:'Ljava/util/concurrent/CountDownLatch;->await(',
