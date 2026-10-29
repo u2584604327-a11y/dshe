@@ -22,7 +22,7 @@ def sha(path):
     return digest.hexdigest()
 
 def method_id(m):
-    return m.get_class_name()+'->'+m.get_name()+'('+m.get_descriptor().split(')',1)[0]+')'
+    return m.get_class_name()+'->'+m.get_name()+m.get_descriptor().split(')',1)[0]+')'
 
 def safe(s):
     return (s if len(s)<350 else
