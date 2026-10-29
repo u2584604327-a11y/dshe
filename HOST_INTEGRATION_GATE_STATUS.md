@@ -198,3 +198,49 @@ A separate private Actions workflow builds the P2–P8 *lab only*, with a fresh 
 Verified read-only two-DEX audit: https://github.com/u2584604327-a11y/dshe/actions/runs/40816918553. The original `AiBrowserView.currentWebView()` is `private final` (`0x12`) and has 18 `invoke-direct` calls, none directly from `BrowserBridge` in either original DEX. Blindly changing it to public would require modifying the call instruction types and is **not an authorized bounded fix**. No such potentially unsafe flags were changed.
 
 **Still blocked:** actual P5 native UI-to-legacy Activity wiring, default-closed one-shot transport integration, Node privilege/UID filesystem bypass, storage isolation, original-certificate v139 signing, and data-preserving real-phone upgrade. Never mark the temporary lab APK ready to install.
+
+## ART-safe replacement: Android 35 emulator launch PASS (2026-10-29)
+
+The **old** original P2 `patch_deny.py` is **ART_FAIL** (illegal `fill-array-data-payload` spans an existing try boundary); do not reuse it for a real APK. The replacement `host_candidate/patch_deny_art_safe.py` removes the pseudo-payload entirely, using existing original DEX strings and ordinary NOPs, preserving the pre-existing code headers/try table. Static gate: https://github.com/u2584604327-a11y/dshe/actions/runs/40818265220
+
+### New independently pinned DEX sequence
+
+- ART-safe native deny P1 DEX SHA256: `8565675b7da207e858f1c3dd69896ce5a68015a24605157a4a11b259218119b6`
+- Browser getter patch P2 SHA256: `e392e65bf7592ddd9531af81459e678d1462423abed526d5eeddac248ab158a4`
+- WebView settings patch P3 SHA256: `8682204473860802b17b18ab487fa72380eb076d37495d2de4abb76abad0df6b`
+- Native P8 `bundlePath` suppression SHA256: `086d0e431515d9f5072109e96a94cbbe7f37c578f1cc68722bcd787881d1acb3`
+- P5 D8 extension SHA256: `552d593f42596a624b36374243f48aec10ffec6a9006eaa1b4974bc84ffab56b`
+
+### Genuine disposable Android ART and launch
+
+Full P1–P8 fusion, test-sign/install, offline ART compilation and app launch: **PASS** at https://github.com/u2584604327-a11y/dshe/actions/runs/40818441206
+
+- SHA256 of ephemeral unsigned pre-alignment fusion: `6c492f80df83f77dfc34f9deb64ad0825a5f490e6cf8c72ddd80a7fea87887f7`.
+- 965 untouched APK file entries verified byte-for-byte, P5 63 compiled classes inserted as `classes3.dex`.
+- GitHub runner generated a new ephemeral self-signed keystore, **not** the original production certificate. Test APK and keystore were deleted after emulator testing, never published.
+- On a clean Android 35 emulator, APK install was **PASS**; offline `cmd package compile -m speed -f com.dsh.android` was **PASS**.
+- Explicit MainActivity launch succeeded, DSH process remained alive across the observation window; prior `VerifyError` was not detected. `DISPOSABLE_ANDROID_EMULATOR_LAUNCH=PASS`.
+- This proves a **limited startup ART gate**, not every P5 class or feature. No user data from a real device was present.
+- P5 new classes were compiled and packaged but original Activity is still **not wired** to `NativeDiagnosticReview`; no trusted native one-shot send has been enabled.
+- The P7/P8 path redaction does **not** create a separate Node UID or block generic same-UID reads. This remains a hard security blocker.
+
+### Current trustworthy gates
+
+```text
+EXACT_V138_INPUT_SHA=PASS
+OLD_P2_ART=FAIL_DO_NOT_SHIP
+NEW_ART_SAFE_DENY_STATIC=PASS
+NEW_P1_TO_P8_FUSED_APK_STRUCTURE=PASS
+DISPOSABLE_ANDROID35_OFFLINE_ART_COMPILE=PASS
+DISPOSABLE_ANDROID35_MAINACTIVITY_LAUNCH=PASS
+P5_NEW_CLASSES_EXECUTED=NOT_VERIFIED
+TRUSTED_NATIVE_REVIEW_WIRED=NO
+ALL_NODE_AND_NATIVE_DIAGNOSTIC_EGRESS_CLOSED=NOT_VERIFIED
+APP_BROWSER_DEVICE_SETTINGS_UI_WIRED=NO
+WEBVIEW_STORAGE_ISOLATION=NOT_VERIFIED
+PRODUCTION_V139_VERSIONCODE_GREATER_THAN_138=NO
+SIGNED_WITH_ORIGINAL_FIXED_CERTIFICATE=NO
+USER_PHONE_UPDATE_AND_DATA_RETENTION=NOT_TESTED
+```
+
+**Important:** No full DSH v139 release has been built or authorized. Do not share the throwaway emulator-signed APK as an installation candidate; do not ask the user to uninstall their installed v138.
