@@ -6,6 +6,7 @@ from patch_deny import sha as hash_bytes,EXPECTED_APK
 from patch_deny_art_safe import apply_art_safe as deny
 import patch_browser,patch_privacy,patch_native_export_reply
 from patch_native_export_failclosed import apply as patch_p9_export
+from patch_remaining_bundle_calls import apply as patch_p10_builders
 from patch_browser import apply_browser
 from patch_privacy import apply_privacy
 from verify_p6_asset_preimages import EXPECTED_P6,EXPECTED_PATHS,sha_file
@@ -15,6 +16,7 @@ P1_SAFE_SHA="8565675b7da207e858f1c3dd69896ce5a68015a24605157a4a11b259218119b6"
 P2_BROWSER_SAFE_SHA="e392e65bf7592ddd9531af81459e678d1462423abed526d5eeddac248ab158a4"
 P8_DEX_SHA="086d0e431515d9f5072109e96a94cbbe7f37c578f1cc68722bcd787881d1acb3"
 P9_DEX_SHA="db1d61fdae52f55b569cc92bc82afbc82c31f305295ef4a2fd3a431177038d29"
+P10_DEX_SHA="cfe19482edcd4bea7c1b476bb90da5b956759c98a2bb101ee9dd459be4a15474"
 P7_LOG_TOOL_PATH="assets/logs-tool.zip"
 
 COMBINED_SHA="8682204473860802b17b18ab487fa72380eb076d37495d2de4abb76abad0df6b"
@@ -66,6 +68,8 @@ def assemble(apkpath,p6path,p5path,outpath):
         if hash_bytes(modified)!=P8_DEX_SHA:raise ValueError("P8_BOUND_NATIVE_DEX_IDENTITY_FAIL")
         modified,p9_report=patch_p9_export(modified)
         if hash_bytes(modified)!=P9_DEX_SHA:raise ValueError("P9_FAIL_CLOSED_NATIVE_EXPORT_IDENTITY_FAIL")
+        modified,p10_report=patch_p10_builders(modified)
+        if hash_bytes(modified)!=P10_DEX_SHA:raise ValueError("P10_ALL_NATIVE_ZIP_BUILDER_CALLS_NOT_DENIED")
         for name in dexnames:
             if addon_classes(original.read(name))&newclasses:raise ValueError("DUPLICATE_CLASS_IN_FUSED_DEX")
         resultpath=pathlib.Path(outpath)
@@ -99,7 +103,7 @@ def assemble(apkpath,p6path,p5path,outpath):
             for name in names:
                 if name in overlays or name=="classes.dex" or name=="META-INF/MANIFEST.MF" or SIGNATURE_META.fullmatch(name):continue
                 if merged.read(name)!=original.read(name):raise AssertionError("UNMODIFIED_APK_ENTRY_CHANGED_"+name)
-            if hash_bytes(merged.read("classes.dex"))!=P9_DEX_SHA:raise AssertionError("PATCHED_DEX_CHANGED")
+            if hash_bytes(merged.read("classes.dex"))!=P10_DEX_SHA:raise AssertionError("PATCHED_DEX_CHANGED")
             if merged.read("classes3.dex")!=addon:raise AssertionError("P5_DEX_CHANGED")
             for name in EXPECTED_PATHS|{P7_LOG_TOOL_PATH}:
                 if merged.read(name)!=overlays[name]:raise AssertionError("OVERLAY_CHANGED_"+name)
@@ -107,7 +111,10 @@ def assemble(apkpath,p6path,p5path,outpath):
                 raise AssertionError("LEGACY_SIGNATURE_FILES_REMAIN")
     return {
       "ASSEMBLY":"UNSIGNED_TEMP_LAB_STRUCTURE_PASS",
-      "ORIGINAL_APK_SHA256":EXPECTED_APK,"PATCHED_MAIN_DEX_SHA256":P9_DEX_SHA,
+      "ORIGINAL_APK_SHA256":EXPECTED_APK,"PATCHED_MAIN_DEX_SHA256":P10_DEX_SHA,
+      "P9_NATIVE_RAW_ZIP_DENY_SHA256":P9_DEX_SHA,
+      "P10_EXTERNAL_DIRECT_LEGACY_ZIP_BUILD_CALLS":
+          p10_report["ALL_DIRECT_EXTERNAL_DIAGNOSTIC_BUILD_DEFAULT_CALLS"],
       "P8_NATIVE_PATH_REDACTED_SHA256":P8_DEX_SHA,
       "P9_NATIVE_RAW_ZIP_CREATION":"FAIL_CLOSED",
       "P9_FAIL_CLOSED_EVIDENCE":p9_report["NATIVE_LOG_EXPORT_BUNDLE_BUILDER_DISABLED"],
