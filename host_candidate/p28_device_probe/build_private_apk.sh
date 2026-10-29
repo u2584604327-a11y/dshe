@@ -55,7 +55,7 @@ with zipfile.ZipFile("out/p28-aligned.apk") as z:
   with open("out/p28-aligned.apk","rb") as raw:
    raw.seek(item.header_offset)
    local=raw.read(30)
-   if len(local)!=30 or local[:4]!=b"PK\\x03\\x04":
+   if len(local)!=30 or local[:4]!=bytes([0x50,0x4b,0x03,0x04]):
     raise ValueError("BAD_LOCAL_ZIP_HEADER")
    header=struct.unpack("<IHHHHHIIIHH",local)
    offset=item.header_offset+30+header[-2]+header[-1]
