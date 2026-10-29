@@ -166,3 +166,35 @@ The original `logs` tool's `action:"export"` returned an absolute `bundlePath` a
 - DATA_PRESERVING_DEVICE_INSTALL: **NOT_TESTED**.
 
 **Do not sign, publish or install the ephemeral assembly.** It is not a ready APK, and no original fixed signing private key should be uploaded to GitHub. Continue with real native host invocation and Node process capability boundaries, not only more standalone JVM tests.
+
+## P8 native mailbox path containment and disposable Android test (2026-10-29)
+
+### Verified P8 native DEX modification
+
+Source: `host_candidate/patch_native_export_reply.py`. Real v138+P2 in-memory replay: https://github.com/u2584604327-a11y/dshe/actions/runs/40817557005
+
+The original `LogCommandBridge.doExport(Lorg/json/JSONObject;)V` (code offset 3,287,332) invokes `File.getAbsolutePath()` and writes `bundlePath` into its JSON reply. This was verified independently in https://github.com/u2584604327-a11y/dshe/actions/runs/40817381857.
+
+P8 replaces four exact bytecode instructions at absolute DEX byte offsets **3,287,476–3,287,494**, 18 bytes total, with nine NOP code units. It preserves the original `DiagnosticBundle.build` call and bundle-size `JSONObject.put` operation. All other code method bodies remain identical and no new DEX refs were added. The full original v138 ZIP was kept intact; no signed update has been published.
+
+- P2 combined DEX SHA256: `9a7cd89f4a5c86394770febf703a9345a44d8c12c39abec9d494635587d8f221`
+- P2+P8 combined DEX SHA256: `d7a984597930c7599732d3d5c87df61d15c80bc4a1a942f0fd4d6db7dc2355b3`
+- `NATIVE_EXPORT_REPLY_BUNDLE_PATH_REMOVED=PASS_STATIC`
+- `ORIGINAL_DIAGNOSTIC_FILE_CREATION=UNCHANGED`
+- `P7_NODE_AI_VISIBLE_PATH_REDACTED=PASS_SYNTHETIC`
+- `NODE_SAME_UID_FILESYSTEM_ACCESS=UNRESOLVED`
+- `P8_ART=NOT_VERIFIED`
+
+### Disposable Android ART test — evidence boundary
+
+A separate private Actions workflow builds the P2–P8 *lab only*, with a fresh non-original ephemeral signing key generated inside the runner, no GitHub artifact upload or GitHub Release, and a new offline emulator.
+
+- The P2–P7 iteration at https://github.com/u2584604327-a11y/dshe/actions/runs/40817134153 **installed successfully** on Android 35, but the test's implicit `MAIN/LAUNCHER` intent did not resolve. No app-start or ART execution PASS was claimed. The signing key and APK were deleted.
+- The follow-up P2–P8 iteration at https://github.com/u2584604327-a11y/dshe/actions/runs/40817726760 adds offline `cmd package compile -m speed -f`, then checks a manifest-derived explicit Activity or `com.dsh.android.MainActivity` and monitors fatal errors. Its actual Actions result must be consulted independently before recording an ART PASS.
+- Android lab certificates **differ from** the original fixed signer, so this cannot upgrade the installed personal v138 app and must never be distributed as a real APK.
+
+### Native browser IllegalAccessError constraint
+
+Verified read-only two-DEX audit: https://github.com/u2584604327-a11y/dshe/actions/runs/40816918553. The original `AiBrowserView.currentWebView()` is `private final` (`0x12`) and has 18 `invoke-direct` calls, none directly from `BrowserBridge` in either original DEX. Blindly changing it to public would require modifying the call instruction types and is **not an authorized bounded fix**. No such potentially unsafe flags were changed.
+
+**Still blocked:** actual P5 native UI-to-legacy Activity wiring, default-closed one-shot transport integration, Node privilege/UID filesystem bypass, storage isolation, original-certificate v139 signing, and data-preserving real-phone upgrade. Never mark the temporary lab APK ready to install.
