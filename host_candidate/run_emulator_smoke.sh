@@ -16,7 +16,10 @@ adb shell svc data disable || true
 airplane="$(adb shell settings get global airplane_mode_on | tr -d '\r')"
 test "$airplane" = "1" || { echo "::error::Emulator airplane mode not confirmed"; exit 1; }
 
-if adb shell pm list packages com.dsh.android | grep -q '^package:com.dsh.android
+if adb shell pm list packages com.dsh.android | grep -q '^package:com.dsh.android$'; then
+  echo "::error::Not a clean emulator: DSH already installed."
+  exit 1
+fi
 adb install --no-streaming "$lab_apk"
 adb shell pm path com.dsh.android | grep -q 'package:'
 aapt="$sdk_root/build-tools/35.0.0/aapt"
