@@ -58,9 +58,18 @@ the real diagnostic send pathways remain unintegrated.
 VM identity/device impersonation not achieved or implied.
 No production v139 versionCode, original fixed signature, merge or deploy.
 
-P36_ORIGINAL_11_ARM64_LIBS_PACKAGING=CI_PENDING
+P36_ORIGINAL_11_ARM64_LIBS_PACKAGING=PASS_CI_40891336044_40891336046
 P36_REAL_NODE_STDOUT_TO_P32_BROKER_ON_PHONE=NOT_TESTED
 P36_REAL_NODE_CHILD_ISOLATED_UID=NOT_TESTED_THIS_INTEGRATION
 P36_REAL_NATIVE_UI_ONETIME_CONSENT=NOT_TESTED_THIS_INTEGRATION
 P36_REAL_DSH_ENGINEMANAGER_PROCESS_HANDLE_WIRING=NO
 P36_REAL_DSH_V139_RELEASE=BLOCKED
+
+## Verified GitHub private delivery
+
+- Build-only exact original ELF + APK QA: https://github.com/u2584604327-a11y/dshe/actions/runs/40891336044 (SUCCESS)
+- Independent private Draft delivery: https://github.com/u2584604327-a11y/dshe/actions/runs/40891336046 (SUCCESS)
+- Private unpublished P36 Draft id 427968015: https://github.com/u2584604327-a11y/dshe/releases/tag/untagged-d5956a5a3d74e84f668f
+- Exact assets verified via authenticated GitHub Release collection: P36-Private-ARM64-Original-Node-Binder-Bridge.apk (97,392,158 bytes), README-P36-PRIVATE.txt and SHA256SUMS.txt. draft=true; published_at=null.
+- P36_ANDROID36_PHYSICAL_PHONE_ACTUAL_NODE_TO_BINDER=AWAITING_OWNER_RESULT. GitHub CI can neither simulate original ARM64 physical Node nor prove original DSH EngineManager migration.
+- DO_NOT_PUBLISH_OR_SIGN_V139=YES.
