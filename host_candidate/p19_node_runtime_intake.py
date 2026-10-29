@@ -18,6 +18,7 @@ import zipfile
 EXPECTED_APK_SHA = "3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5"
 EXPECTED_NODE_ASSET_SHA = "ba16f7f4d0cc0b0272700effe06dc0d3682206afe1b54af75ca530a3e5c0d3bf"
 EXPECTED_NODE_BIN_SHA = "a0d21a1589312919114b24a5cc520c30ab7f26f9985b3f0c643c153172ebd1e6"
+EXPECTED_BOOTSTRAP_SHA = "b3739c14a2eb7421243b908e2fe2b9e54cbdf8477d210d09e8ac4452d864cad9"
 ANDROID_PLATFORM_LIBS = frozenset({
     "libc.so", "libm.so", "libdl.so", "liblog.so", "libandroid.so"
 })
@@ -90,29 +91,47 @@ def analyze(apk_path):
         raise ValueError("NOT_PINNED_V138")
     with zipfile.ZipFile(io.BytesIO(data)) as apk:
         node_asset = apk.read("assets/node-runtime.bin")
+        bootstrap_asset = apk.read("assets/bootstrap-aarch64.zip")
         if digest(node_asset) != EXPECTED_NODE_ASSET_SHA:
             raise ValueError("NODE_ASSET_PREIMAGE_CHANGED")
+        if digest(bootstrap_asset) != EXPECTED_BOOTSTRAP_SHA:
+            raise ValueError("BOOTSTRAP_PREIMAGE_CHANGED")
+    with zipfile.ZipFile(io.BytesIO(bootstrap_asset)) as bootstrap:
+        if len(bootstrap.namelist()) > 5000 or bootstrap.testzip() is not None:
+            raise ValueError("BOOTSTRAP_ARCHIVE_INVALID")
+        bootstrap_names = set(bootstrap.namelist())
     names, links, node_binary = audited_members(node_asset)
     if digest(node_binary) != EXPECTED_NODE_BIN_SHA:
         raise ValueError("NODE_BINARY_PREIMAGE_CHANGED")
     elf = readelf_metadata(node_binary)
     available = set(names)
+    combined = available | bootstrap_names
     link_targets_missing = sorted(link for link, dest in links.items() if dest not in available)
-    missing = sorted(name for name in elf["needed_libraries"]
-                     if name not in ANDROID_PLATFORM_LIBS
-                     and ("lib/" + name) not in available
-                     and ("lib/" + name not in links or links["lib/" + name] not in available))
+    link_targets_missing_combined = sorted(
+        link for link, dest in links.items() if dest not in combined
+    )
+    def missing_needed(available_names):
+        return sorted(name for name in elf["needed_libraries"]
+            if name not in ANDROID_PLATFORM_LIBS
+            and ("lib/" + name) not in available_names
+            and ("lib/" + name not in links or links["lib/" + name] not in available_names))
+    missing_node_zip = missing_needed(available)
+    missing_combined = missing_needed(combined)
     termux_runpath = any("/data/data/com.termux/files/usr/lib" in rp for rp in elf["runpaths"])
     # Do not make a dynamic linker claim merely from a static dependency list.
     return {
         "p19_input_apk_sha256": EXPECTED_APK_SHA,
         "node_zip_sha256": EXPECTED_NODE_ASSET_SHA,
         "node_executable_sha256": EXPECTED_NODE_BIN_SHA,
+        "bootstrap_zip_sha256": EXPECTED_BOOTSTRAP_SHA,
         "node_zip_entry_count": len(names),
         "node_zip_is_direct_elf": False,
         "node_binary": elf,
-        "node_zip_unresolved_needed": missing,
+        "node_zip_unresolved_needed": missing_node_zip,
         "declared_link_targets_absent": link_targets_missing,
+        "combined_bootstrap_node_unresolved_needed": missing_combined,
+        "combined_declared_link_targets_absent": link_targets_missing_combined,
+        "cross_asset_library_presence_proven": not missing_combined,
         "termux_absolute_runpath_present": termux_runpath,
         "isolated_uid_node_spawn_proven": False,
         "android_35_native_linker_success_proven": False,
@@ -131,6 +150,8 @@ def main():
     if args.verify_known_baseline_blockers:
         if not report["node_zip_unresolved_needed"] or not report["termux_absolute_runpath_present"]:
             raise ValueError("P19_BASELINE_CHANGED_OR_OBSERVED_BLOCKERS_MISSING")
+        if report["combined_bootstrap_node_unresolved_needed"] or not report["cross_asset_library_presence_proven"]:
+            raise ValueError("P19_CROSS_ASSET_DEPENDENCY_EXPECTATION_CHANGED")
         if report["isolated_uid_node_spawn_proven"]:
             raise ValueError("P19_FALSE_MIGRATION_PASS")
     Path(args.output).write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
