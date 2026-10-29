@@ -92,14 +92,14 @@ keytool -genkeypair -alias p36only -keyalg RSA -keysize 3072 \
  -keypass "$PASSWORD" -noprompt >/dev/null 2>&1
 "$BT/apksigner" sign --ks out/p36-test-key.p12 --ks-key-alias p36only \
  --ks-pass "pass:$PASSWORD" --key-pass "pass:$PASSWORD" \
- --out delivery/P36-Private-ARM64-Node-Boundary-Probe.apk out/p36-aligned.apk
-"$BT/apksigner" verify delivery/P36-Private-ARM64-Node-Boundary-Probe.apk
-"$BT/zipalign" -c -P 16 4 delivery/P36-Private-ARM64-Node-Boundary-Probe.apk
-"$BT/aapt" dump permissions delivery/P36-Private-ARM64-Node-Boundary-Probe.apk > out/p36/signed-perms.txt
+ --out delivery/P36-Private-ARM64-Original-Node-Binder-Bridge.apk out/p36-aligned.apk
+"$BT/apksigner" verify delivery/P36-Private-ARM64-Original-Node-Binder-Bridge.apk
+"$BT/zipalign" -c -P 16 4 delivery/P36-Private-ARM64-Original-Node-Binder-Bridge.apk
+"$BT/aapt" dump permissions delivery/P36-Private-ARM64-Original-Node-Binder-Bridge.apk > out/p36/signed-perms.txt
 if grep -Fq 'uses-permission:' out/p36/signed-perms.txt;then
  echo "::error::Signed test APK requests prohibited permissions";exit 1
 fi
-(cd delivery && sha256sum P36-Private-ARM64-Node-Boundary-Probe.apk > SHA256SUMS.txt)
+(cd delivery && sha256sum P36-Private-ARM64-Original-Node-Binder-Bridge.apk > SHA256SUMS.txt)
 cat > delivery/README-P36-PRIVATE.txt <<'TEXT'
 P36: PRIVATE original Node -> real Android Binder -> trusted native UI one-shot.
 Android API34+, arm64-v8a only. com.dsh.p36.nodebridge: separate test app,
