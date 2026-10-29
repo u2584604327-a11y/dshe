@@ -37,7 +37,7 @@ public final class P28Worker extends Service {
       "3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5";
   private static final int MAX_LIBS=10;
   private static boolean safeName(String s) {
-    return s!=null && s.matches("lib[a-zA-Z0-9_.-]{1,70}\\.so")
+    return s!=null && s.matches("lib[a-zA-Z0-9_.+-]{1,70}\\.so")
         && !s.contains("..") && s.indexOf('/')<0;
   }
   private static String hash(File f) throws Exception {
