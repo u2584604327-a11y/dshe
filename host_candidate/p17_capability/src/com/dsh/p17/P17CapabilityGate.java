@@ -48,10 +48,10 @@ public final class P17CapabilityGate {
   }
   /** Called only after trusted native IPC verifies Binder sender UID. */
   public synchronized boolean consume(String token,String scope,int authenticatedUid) {
-    if(token==null||token.length()!=64||!SCOPE_METADATA_COUNT.equals(scope)||
-       authenticatedUid<0)return false;
+    if(token==null||token.length()!=64)return false;
     Grant g=grants.remove(token); // burn even on wrong scope/UID (fail closed)
     if(g==null)return false;
+    if(!SCOPE_METADATA_COUNT.equals(scope)||authenticatedUid<0)return false;
     return g.isolatedUid==authenticatedUid&&g.scope.equals(scope)&&
         clock.nowMs()>=0&&clock.nowMs()<g.expiresMs;
   }
