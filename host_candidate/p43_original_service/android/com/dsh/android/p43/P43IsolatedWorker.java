@@ -53,7 +53,7 @@ public final class P43IsolatedWorker extends Service {
       }catch(IOException invalidInput){return;}
       // This probe intentionally uses *synthetic*, public, non-user data.
       // Actual runtime file leasing and script approval are not enabled.
-      byte[] expected="P45_SYNTHETIC_PRIVATE_ASSET_V1\\n".getBytes(StandardCharsets.UTF_8);
+      byte[] expected="P45_SYNTHETIC_PRIVATE_ASSET_V1".getBytes(StandardCharsets.UTF_8);
       if(!Arrays.equals(expected,content))return;
       final String assetHash;
       try {
