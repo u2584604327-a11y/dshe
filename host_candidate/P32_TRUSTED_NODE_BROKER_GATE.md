@@ -49,8 +49,40 @@ Do not mislabel this as migration of DSH or sign v139.
 6. Original signing key remains offline; no production release.
 
 P31_NODE_REAL_ARM64_ISOLATED_UID_PRIVATE_CANARY_TCP=PASS_NARROW_OWNER_REPORT
-P32_JVM_GRANT_AND_CONCURRENT_TESTS=CI_PENDING
-P32_ANDROID_MESSENGER_SOURCE_COMPILATION=CI_PENDING
+P32_JVM_GRANT_AND_CONCURRENT_TESTS=PASS_JAVA8_ONE_OF_20
+P32_ANDROID_MESSENGER_SOURCE_COMPILATION=PASS_API35
 P32_NODE_STDOUT_TO_REAL_DSH_HOST_IPC=NOT_IMPLEMENTED
 P32_DSH_REAL_NATIVE_MAIN_ACTIVITY_WIRED=NO
 P32_FIXED_SIGNATURE_V139_RELEASE=BLOCKED
+
+
+## Real CI / lifecycle evidence (2026-10-29)
+Full P32 Java8 + Android35 compilation SUCCESS:
+https://github.com/u2584604327-a11y/dshe/actions/runs/40876928271
+
+Verified security test output:
+- P32_ONE_SHOT_BINDER_POLICY_SYNTHETIC_TESTS=PASS
+- P32_NO_AUTHORIZATION_WITHOUT_TRUSTED_UI=PASS
+- P32_SCOPE_STRICT_NODE_STDOUT_AND_SIZE_BOUND=PASS
+- P32_TOKEN_EXPIRY_AND_LIFECYCLE_REVOKE=PASS
+- P32_PARALLEL_ONESHOT_1_OF_20=PASS
+- P32_ACTUAL_DSH_HOST_RUNTIME_CONNECTION=NOT_IMPLEMENTED
+- P32_RELEASE=BLOCKED
+
+The real Android35 Messenger adapter compiles in GitHub Actions but has
+not been installed into the original DSH App; the class alone cannot
+prove an actual Binder handshake or real Node output-to-host routing.
+A trusted native service-binding initiation method now arms exactly
+one inbound framework-authenticated HELLO; additional unsolicited HELLOs
+cannot silently reset an approved live worker instance.
+
+Owner-authorized cleanup of completed private P31 testing Draft:
+https://github.com/u2584604327-a11y/dshe/actions/runs/40876928418
+Result SUCCESS; separately authenticated releases listing contains no
+tag p31-private-positive-fs-control-20261029. Its underlying GitHub
+P31 source and owner-provided text evidence remain in the private repo.
+No original v138 signed APK Release, credential or production was touched.
+
+P32_NATIVE_BINDER_IPC_ADAPTER_COMPILED=YES
+P32_NATIVE_IPC_RUNTIME_GESTURE_AND_REAL_DSH_ART=NOT_TESTED
+P32_SIGNED_V139_RELEASE=BLOCKED
