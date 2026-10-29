@@ -22,7 +22,7 @@ public final class P32NodeIpcBrokerTest {
   private static final int HOST_UID=10234;
   private static final String GOOD="{\"op\":\"METADATA_COUNT\",\"limit\":3}";
   private static void eq(Object actual,Object expected,String label){
-    if(!expected.equals(actual))
+    if(!java.util.Objects.equals(expected,actual))
       throw new AssertionError(label+": "+actual+" != "+expected);
   }
   private static void yes(boolean b,String label){
