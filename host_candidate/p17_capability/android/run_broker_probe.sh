@@ -13,7 +13,7 @@ import re,xml.etree.ElementTree as ET
 root=ET.parse("out/p17-ui-test.xml").getroot()
 found=[n for n in root.iter("node") if n.attrib.get("text")=="批准一次计数" and n.attrib.get("enabled")=="true"]
 if len(found)!=1:raise SystemExit("P17_TRUSTED_UI_BUTTON_NOT_FOUND")
-m=re.fullmatch(r"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]",found[0].attrib.get("bounds",""))
+m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",found[0].attrib.get("bounds",""))
 if not m:raise SystemExit("P17_UI_BOUNDS_MISSING")
 x1,y1,x2,y2=map(int,m.groups())
 if not(x2>x1 and y2>y1):raise SystemExit("P17_BAD_BUTTON_BOUNDS")
