@@ -53,3 +53,21 @@ WEBVIEW_PROFILES_AND_STORAGE_ISOLATION=NOT_VERIFIED
 V139_COMPATIBLE_SIGNING_AND_DATA_PRESERVING_UPGRADE=NOT_VERIFIED
 PRODUCTION_V139_APK=NOT_BUILT
 ```
+
+## Actual Android 35 original LogViewer button test — VERIFIED PASS
+
+Official private GitHub Actions: https://github.com/u2584604327-a11y/dshe/actions/runs/40827698165 — **SUCCESS**, completed 2026-10-29.
+
+- Combined ART-safe P1–P10 native DEX, P11 Node summary-only asset and P5+P12 native classes were built together in one **disposable unsigned APK**. The third DEX contains **70 compiled P5+P12 class definitions**, SHA256 `8356fffceb6012c66432b72e1c7d93ce6e67322190e7b5a05e5c11efad2ef925`.
+- A new ephemeral APK signing identity was generated inside private Actions; the app and test-only instrumentation package were signed with that same **nonproduction** certificate. Both APKs and keystore were deleted before the run completed.
+- Android 35 emulator `adb install`, offline ART compile and MainActivity launch **PASS**. Existing P5 direct native-review Instrumentation **PASS**.
+- P12's own separate Instrumentation started the original `com.dsh.android.LogViewerActivity` using the real app process and found both existing view IDs. It then called the P12 adapter from **trusted test instrumentation**, performed clicks on both native Export and Upload buttons and observed no raw export:
+  - `P12_ORIGINAL_LOGVIEWER_LAUNCHED=PASS_ANDROID_FIXTURE`
+  - `P12_EXISTING_EXPORT_UPLOAD_BUTTONS=BOTH_INTERCEPTED_TEST_CALL`
+  - `P12_EMPTY_QUEUE_DEFAULT_DENY=NO_RAW_EXPORT_TRIGGERED`
+  - `P12_NATIVE_APPROVED_TRANSPORT=NOT_CONNECTED`
+  - `P12_ORIGINAL_ACTIVITY_LIFECYCLE_WIRED=NO_TEST_ONLY_ATTACH`
+  - `INSTRUMENTATION_CODE: -1` (successful tests)
+- The injected adapter preserves the native-origin-only entry; it does not bridge to model text, web pages or arbitrary files. Existing P10 fail-closed raw ZIP paths remain blocked. This test does **not** prove all other Node/Java generic file paths cannot access logs.
+
+**Crucial next step:** add a trusted automatic hook from original `LogViewerActivity` lifecycle **after its native views are initialized**, without changing or duplicating user conversation and other native functions. Existing original DEX cannot invoke a new `com.dsh.p12` method without an additional method reference; do not fake this by simply packaging `classes3.dex`. A manifest-controlled native initializer or a fully audited DEX+Manifest integration would require separate isolated ART and UI verification. No fixed-signed `versionCode>138` APK is ready, and none should be installed on the real user device.
