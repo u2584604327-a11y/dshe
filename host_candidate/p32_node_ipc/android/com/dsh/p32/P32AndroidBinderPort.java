@@ -45,7 +45,15 @@ public final class P32AndroidBinderPort {
   private Messenger isolatedReply=null;
   private int isolatedUid=-1;
   private String currentSession=null;
+  private boolean awaitingOneHello=false;
 
+  /** Called only from trusted Activity upon actual non-exported bindService startup.
+   * This arms exactly one framework-authenticated HELLO; unsolicited or
+   * duplicate HELLO cannot replace a live approved worker session. */
+  public void onTrustedServiceBindingInitiated(){
+    onWorkerDisconnect();
+    awaitingOneHello=true;
+  }
   /** The binder is only offered to a non-exported same-package service. */
   public Messenger getTrustedHostInbox(){return hostInbox;}
 
@@ -65,12 +73,14 @@ public final class P32AndroidBinderPort {
   }
   private void receiveHello(Message request){
     final int frameworkUid=request.sendingUid; // actual Android Binder identity
-    if(request.replyTo==null||!Process.isIsolatedUid(frameworkUid))return;
+    if(!awaitingOneHello||request.replyTo==null||
+        !Process.isIsolatedUid(frameworkUid))return;
     // A HELLO is always a new worker lifecycle; old grant is revoked.
     onWorkerDisconnect();
     String session=broker.bindAuthenticatedWorker(frameworkUid);
     if(session==null)return;
     currentSession=session;
+    awaitingOneHello=false;
     isolatedUid=frameworkUid;
     isolatedReply=request.replyTo;
     Bundle reply=new Bundle();
@@ -115,5 +125,6 @@ public final class P32AndroidBinderPort {
   public void onWorkerDisconnect(){
     broker.onWorkerServiceDisconnected();
     isolatedReply=null;isolatedUid=-1;currentSession=null;
+    awaitingOneHello=false;
   }
 }
