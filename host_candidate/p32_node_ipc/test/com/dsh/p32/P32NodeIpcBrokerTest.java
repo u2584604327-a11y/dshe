@@ -77,12 +77,14 @@ public final class P32NodeIpcBrokerTest {
     eq(b.receiveAuthenticatedWorkerRequest(HOST_UID,session,t,GOOD).outcome,
        P32NodeIpcBroker.Outcome.DENY_UNTRUSTED_SENDER,"nonisolated host forged sender");
     eq(b.receiveAuthenticatedWorkerRequest(WORKER_UID,session,t,GOOD).outcome,
-       P32NodeIpcBroker.Outcome.ALLOW_COUNT,"wrong UID rejection doesn't authorize it");
+       P32NodeIpcBroker.Outcome.DENY_NOT_BOUND,"wrong UID burns and unbinds");
+    session=b.bindAuthenticatedWorker(WORKER_UID);
     t=b.approveOneSyntheticCountOnTrustedUiClick();
     eq(b.receiveAuthenticatedWorkerRequest(WORKER_UID,"wrong-session",t,GOOD).outcome,
        P32NodeIpcBroker.Outcome.DENY_WRONG_SESSION,"session mismatch");
     eq(b.receiveAuthenticatedWorkerRequest(WORKER_UID,session,t,GOOD).outcome,
-       P32NodeIpcBroker.Outcome.ALLOW_COUNT,"wrong session does not produce grant");
+       P32NodeIpcBroker.Outcome.DENY_NOT_BOUND,"wrong session revokes whole binding");
+    session=b.bindAuthenticatedWorker(WORKER_UID);
 
     t=b.approveOneSyntheticCountOnTrustedUiClick();
     b.onTrustedUiBackground();
@@ -108,8 +110,12 @@ public final class P32NodeIpcBrokerTest {
     eq(b.receiveAuthenticatedWorkerRequest(WORKER_UID,first,oldGrant,GOOD).outcome,
        P32NodeIpcBroker.Outcome.DENY_WRONG_SESSION,"old session rejected");
 
+    eq(b.approveOneSyntheticCountOnTrustedUiClick(),null,
+       "stale session requires trusted fresh handshake");
+    String third=b.bindAuthenticatedWorker(WORKER_UID);
+    yes(!third.equals(second),"new bind after mismatch");
     String current=b.approveOneSyntheticCountOnTrustedUiClick();
-    eq(b.receiveAuthenticatedWorkerRequest(WORKER_UID,second,current,
+    eq(b.receiveAuthenticatedWorkerRequest(WORKER_UID,third,current,
         "{\"op\":\"METADATA_COUNT\",\"limit\":8}").count,8,
         "upper allowed bound");
 
