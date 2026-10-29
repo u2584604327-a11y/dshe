@@ -1,4 +1,4 @@
-name: DSH P2-P7 disposable ART emulator integration lab
+name: DSH P1-P10 disposable ART + P5 native UI emulator gate
 
 on:
   push:
@@ -6,6 +6,8 @@ on:
     paths:
       - 'host_candidate/assemble_unsigned_lab.py'
       - 'host_candidate/run_emulator_smoke.sh'
+      - 'host_candidate/build_instrumentation_lab.sh'
+      - 'host_candidate/test-only/**'
       - '.github/workflows/unsigned-integration-lab.yml'
   workflow_dispatch:
 
@@ -35,6 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n host_candidate/run_emulator_smoke.sh
+          bash -n host_candidate/build_instrumentation_lab.sh
           python3 -m py_compile host_candidate/assemble_unsigned_lab.py
           echo 'EMULATOR_SCRIPT_SYNTAX=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Fetch both SHA-pinned inputs from PRIVATE Releases only
@@ -98,6 +101,9 @@ jobs:
             --output out/native-dex out/p5-native.jar
           test -s out/native-dex/classes.dex
           echo 'P5_ANDROID_NATIVE_JAVAC_D8=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Build test-only same-certificate instrumentation skeleton
+        shell: bash
+        run: bash host_candidate/build_instrumentation_lab.sh
       - name: Fuse bounded host DEX + native P5 DEX + P6 assets, no signing
         shell: bash
         run: |
@@ -150,6 +156,13 @@ jobs:
             out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
           "$SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
             out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk > out/ephemeral-cert.txt
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" sign \
+            --ks out/EMULATOR_ONLY_EPHEMERAL.p12 --ks-key-alias dsh-ephemeral-ci \
+            --ks-pass "pass:$LAB_PASS" --key-pass "pass:$LAB_PASS" \
+            --out out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk \
+            out/P5_INSTRUMENTATION_ALIGNED_DO_NOT_SHARE.apk
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose \
+            out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk >/dev/null
           lab_cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' out/ephemeral-cert.txt | head -n 1)"
           test -n "$lab_cert"
           test "$lab_cert" != '90072b7de43e96999be92d99869ce5e5b7639b5f2449417b99a1790831b60ff8'
@@ -168,12 +181,12 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
-          script: bash host_candidate/run_emulator_smoke.sh out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk
+          script: bash host_candidate/run_emulator_smoke.sh out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk
       - name: Destroy transient APK and state remaining blockers
         if: always()
         shell: bash
         run: |
-          rm -f out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/EMULATOR_ONLY_EPHEMERAL.p12 /tmp/dsh-private-emulator-logcat.txt
+          rm -f out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/EMULATOR_ONLY_EPHEMERAL.p12 out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk out/P5_INSTRUMENTATION_ALIGNED_DO_NOT_SHARE.apk out/P5_INSTRUMENTATION_UNSIGNED_DO_NOT_SHARE.apk /tmp/dsh-private-emulator-logcat.txt
           {
             echo 'PRODUCTION_V139_APK_BUILT=NO'
             echo 'FIXED_CERTIFICATE_SIGNING=NOT_PERFORMED'
