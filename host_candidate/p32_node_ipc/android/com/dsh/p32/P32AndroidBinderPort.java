@@ -53,12 +53,13 @@ public final class P32AndroidBinderPort {
     String s=b.getString(key);
     return s!=null&&s.length()<=max?s:null;
   }
-  private void send(Messenger dest,int code,Bundle fields){
-    if(dest==null)return;
+  private boolean send(Messenger dest,int code,Bundle fields){
+    if(dest==null)return false;
     Message m=Message.obtain(null,code);
     m.setData(fields);
-    try{dest.send(m);}catch(RemoteException fail){
+    try{dest.send(m);return true;}catch(RemoteException fail){
       onWorkerDisconnect();
+      return false;
     }
   }
   private void receiveHello(Message request){
@@ -105,8 +106,7 @@ public final class P32AndroidBinderPort {
     command.putString("session",currentSession);
     command.putString("grant",token);
     command.putString("scope",P17CapabilityGate.SCOPE_METADATA_COUNT);
-    send(isolatedReply,GRANT,command);
-    return true;
+    return send(isolatedReply,GRANT,command);
   }
   /** Trusted Activity onStop(), worker onServiceDisconnected/nullBinding/death */
   public void onTrustedUiBackground(){onWorkerDisconnect();}
