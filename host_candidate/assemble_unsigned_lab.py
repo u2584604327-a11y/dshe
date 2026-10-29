@@ -11,8 +11,10 @@ from patch_browser import apply_browser
 from patch_privacy import apply_privacy
 from verify_p6_asset_preimages import EXPECTED_P6,EXPECTED_PATHS,sha_file
 from patch_logs_metadata_only import patch as patch_p11_logs
+from patch_token_usage_p14 import patch as patch_p14_token
 from p13_manifest_inject import inject as inject_p13_manifest
 P11_LOG_ZIP_SHA="29bcf54bb00ea989516b8bc7bdeb6bbd68f9a11a85082273399eb3597cdd76a0"
+P14_BROWSER_TOOL_SHA="be8201f11c7a12478d0552efaf129becde6d104ef2da203c2433b3dfc397a69f"
 from patch_native_export_reply import apply as patch_p8_export
 P1_SAFE_SHA="8565675b7da207e858f1c3dd69896ce5a68015a24605157a4a11b259218119b6"
 P2_BROWSER_SAFE_SHA="e392e65bf7592ddd9531af81459e678d1462423abed526d5eeddac248ab158a4"
@@ -52,6 +54,9 @@ def assemble(apkpath,p6path,p5path,outpath):
         if set(man["changes"])!=EXPECTED_PATHS:raise ValueError("P6_UNEXPECTED_PATHS")
         if set(patch.namelist())!=EXPECTED_PATHS|{"ASSET_DELTA_MANIFEST.json"}:raise ValueError("P6_EXTRA_FILES")
         overlays={n:patch.read(n) for n in EXPECTED_PATHS}
+        p14_browser,p14_js=patch_p14_token(overlays["assets/browser-tool.zip"])
+        if hash_bytes(p14_browser)!=P14_BROWSER_TOOL_SHA:raise ValueError("P14_BROWSER_TOKEN_OUTPUT_NOT_PINNED")
+        if "本轮用量（未提供）" not in p14_js:raise ValueError("P14_UNKNOWN_USAGE_STATUS_ABSENT")
     with zipfile.ZipFile(apkpath) as original:
         if original.testzip():raise ValueError("BASELINE_APK_CRC_FAIL")
         names=original.namelist()
@@ -103,7 +108,7 @@ def assemble(apkpath,p6path,p5path,outpath):
                     candidate=overlays[name]
                     if hash_bytes(candidate)!=spec["new_sha256"] or len(candidate)!=spec["new_size"]:
                         raise ValueError("P6_OVERLAY_OUTPUT_FAIL_"+name)
-                    data=candidate
+                    data=p14_browser if name=="assets/browser-tool.zip" else candidate
                 elif name==P7_LOG_TOOL_PATH:
                     data=patched_log_plugin
                 elif name=="AndroidManifest.xml":data=new_manifest
@@ -123,7 +128,8 @@ def assemble(apkpath,p6path,p5path,outpath):
             if merged.read("AndroidManifest.xml")!=new_manifest:raise AssertionError("P13_MANIFEST_CHANGED")
             if merged.read("classes3.dex")!=addon:raise AssertionError("P5_DEX_CHANGED")
             for name in EXPECTED_PATHS|{P7_LOG_TOOL_PATH}:
-                if merged.read(name)!=overlays[name]:raise AssertionError("OVERLAY_CHANGED_"+name)
+                expected=p14_browser if name=="assets/browser-tool.zip" else overlays[name]
+                if merged.read(name)!=expected:raise AssertionError("OVERLAY_CHANGED_"+name)
             if any(n=="META-INF/MANIFEST.MF" or SIGNATURE_META.fullmatch(n) for n in merged.namelist()):
                 raise AssertionError("LEGACY_SIGNATURE_FILES_REMAIN")
     return {
@@ -145,6 +151,8 @@ def assemble(apkpath,p6path,p5path,outpath):
       "P13_AUTOWIRE_REAL_ACTIVITY_RUNTIME":"PENDING_ANDROID_INSTRUMENTATION",
       "ADDED_DEX_ENTRY":"classes3.dex","P6_OVERLAY_FILES":sorted(EXPECTED_PATHS),
       "P11_SUMMARY_ONLY_LOG_TOOL_SHA256":hash_bytes(patched_log_plugin),
+      "P14_LAN_TOKEN_USAGE_BROWSER_ASSET_SHA256":hash_bytes(p14_browser),
+      "P14_TOKEN_USAGE":"PROVIDER_OR_ESTIMATE_OR_UNAVAILABLE",
       "P7_AI_VISIBLE_DIAGNOSTIC_PATH":"REDACTED",
       "P11_MODEL_RAW_LOG_CRASH_EXPORT":"DENIED_BEFORE_MAILBOX",
       "P7_NATIVE_MAILBOX_FILE_PATH":"UNVERIFIED_PRIVACY",
