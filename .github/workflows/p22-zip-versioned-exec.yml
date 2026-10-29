@@ -58,6 +58,7 @@ jobs:
             host_candidate/p22_ziplink/native/main.c \
             -L out/native -l:libp22version.so.3 \
             -o out/native/libp22probe_exec.so
+          "$CC" -fPIC -shared -O2 -Wl,-z,max-page-size=16384             host_candidate/p22_ziplink/native/zipbridge.c -ldl             -o out/native/libp22bridge.so
           readelf -d out/native/libp22probe_exec.so | grep -Fq 'Shared library: [libp22version.so.3]'
           readelf -d out/native/libp22version.so.3 | grep -Fq 'Library soname: [libp22version.so.3]'
           readelf -h out/native/libp22probe_exec.so | grep -Fq 'Advanced Micro Devices X86-64'
@@ -81,8 +82,9 @@ jobs:
           (cd out/dex && zip -q -j ../p22-unsigned.apk classes.dex)
           cp out/native/libp22version.so.3 out/apk/lib/x86_64/
           cp out/native/libp22probe_exec.so out/apk/lib/x86_64/
+          cp out/native/libp22bridge.so out/apk/lib/x86_64/
           (cd out/apk && zip -q -0 ../p22-unsigned.apk \
-            lib/x86_64/libp22probe_exec.so lib/x86_64/libp22version.so.3)
+            lib/x86_64/libp22probe_exec.so lib/x86_64/libp22version.so.3             lib/x86_64/libp22bridge.so)
           python3 host_candidate/p22_ziplink/align_test_apk.py out/p22-unsigned.apk \
             --out out/p22-aligned.apk --report out/p22-zip-align.json
           "$SDK_ROOT/build-tools/35.0.0/zipalign" -c -P 16 4 out/p22-aligned.apk
