@@ -6,6 +6,8 @@ from patch_deny import apply as deny,sha as hash_bytes,EXPECTED_APK
 from patch_browser import apply_browser
 from patch_privacy import apply_privacy
 from verify_p6_asset_preimages import EXPECTED_P6,EXPECTED_PATHS,sha_file
+from patch_logs_export_output import patch as patch_p7_logs
+P7_LOG_TOOL_PATH="assets/logs-tool.zip"
 
 COMBINED_SHA="9a7cd89f4a5c86394770febf703a9345a44d8c12c39abec9d494635587d8f221"
 SIGNATURE_META=re.compile(r"META-INF/[^/]+\.(?:RSA|DSA|EC|SF)$",re.I)
@@ -36,7 +38,12 @@ def assemble(apkpath,p6path,p5path,outpath):
         if len(names)!=len(set(names)):raise ValueError("DUPLICATE_BASELINE_NAMES")
         dexnames=sorted(x for x in names if re.fullmatch(r"classes(?:[2-9][0-9]*)?\.dex",x))
         if dexnames!=["classes.dex","classes2.dex"]:raise ValueError("UNEXPECTED_ORIGINAL_DEX_LAYOUT")
-        if not EXPECTED_PATHS.issubset(set(names)):raise ValueError("MISSING_ORIGINAL_ASSETS")
+        if not (EXPECTED_PATHS|{P7_LOG_TOOL_PATH}).issubset(set(names)):
+            raise ValueError("MISSING_ORIGINAL_ASSETS_OR_LOG_PLUGIN")
+        patched_log_plugin,patched_log_js=patch_p7_logs(original.read(P7_LOG_TOOL_PATH))
+        if b"bundlePath: { type: 'string' }" in patched_log_js.encode("utf-8"):
+            raise ValueError("P7_AI_VISIBLE_PATH_SCHEMA_STILL_PRESENT")
+        overlays[P7_LOG_TOOL_PATH]=patched_log_plugin
         p1,_=deny(original.read("classes.dex"))
         p2,_=apply_browser(p1)
         modified,_=apply_privacy(p2)
@@ -52,7 +59,7 @@ def assemble(apkpath,p6path,p5path,outpath):
                 name=member.filename
                 if name=="META-INF/MANIFEST.MF" or SIGNATURE_META.fullmatch(name):continue
                 data=original.read(name)
-                if name in overlays:
+                if name in overlays and name!=P7_LOG_TOOL_PATH:
                     spec=man["changes"][name]
                     if hash_bytes(data)!=spec["original_sha256"] or len(data)!=spec["original_size"]:
                         raise ValueError("P6_OVERLAY_PREIMAGE_FAIL_"+name)
@@ -60,6 +67,8 @@ def assemble(apkpath,p6path,p5path,outpath):
                     if hash_bytes(candidate)!=spec["new_sha256"] or len(candidate)!=spec["new_size"]:
                         raise ValueError("P6_OVERLAY_OUTPUT_FAIL_"+name)
                     data=candidate
+                elif name==P7_LOG_TOOL_PATH:
+                    data=patched_log_plugin
                 elif name=="classes.dex":data=modified
                 elif not member.is_dir():unchanged+=1
                 meta=copy.copy(member)
@@ -74,7 +83,7 @@ def assemble(apkpath,p6path,p5path,outpath):
                 if merged.read(name)!=original.read(name):raise AssertionError("UNMODIFIED_APK_ENTRY_CHANGED_"+name)
             if hash_bytes(merged.read("classes.dex"))!=COMBINED_SHA:raise AssertionError("PATCHED_DEX_CHANGED")
             if merged.read("classes3.dex")!=addon:raise AssertionError("P5_DEX_CHANGED")
-            for name in EXPECTED_PATHS:
+            for name in EXPECTED_PATHS|{P7_LOG_TOOL_PATH}:
                 if merged.read(name)!=overlays[name]:raise AssertionError("OVERLAY_CHANGED_"+name)
             if any(n=="META-INF/MANIFEST.MF" or SIGNATURE_META.fullmatch(n) for n in merged.namelist()):
                 raise AssertionError("LEGACY_SIGNATURE_FILES_REMAIN")
@@ -83,6 +92,9 @@ def assemble(apkpath,p6path,p5path,outpath):
       "ORIGINAL_APK_SHA256":EXPECTED_APK,"PATCHED_MAIN_DEX_SHA256":COMBINED_SHA,
       "P5_ADDON_DEX_SHA256":hash_bytes(addon),"P5_CLASS_COUNT":len(newclasses),
       "ADDED_DEX_ENTRY":"classes3.dex","P6_OVERLAY_FILES":sorted(EXPECTED_PATHS),
+      "P7_NESTED_LOG_EXPORT_TOOL_SHA256":hash_bytes(patched_log_plugin),
+      "P7_AI_VISIBLE_DIAGNOSTIC_PATH":"REDACTED",
+      "P7_NATIVE_MAILBOX_FILE_PATH":"UNVERIFIED_PRIVACY",
       "UNCHANGED_ENTRIES_CHECKED":unchanged,
       "UNSIGNED_LAB_FILE_SHA256":sha_file(resultpath),
       "UNSIGNED_LAB_FILE_BYTES":resultpath.stat().st_size,
