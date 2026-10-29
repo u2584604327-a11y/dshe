@@ -22,18 +22,33 @@ fi
 # Never approximate display density or click arbitrary screen locations.
 adb shell uiautomator dump /sdcard/p17-ui-test.xml >/dev/null
 adb exec-out cat /sdcard/p17-ui-test.xml > out/p17-ui-test.xml
-read -r tapx tapy < <(python3 - <<'PY'
+if ! python3 - <<'PY' > out/p17-tap-point.txt; then
 import re,xml.etree.ElementTree as ET
 root=ET.parse("out/p17-ui-test.xml").getroot()
-found=[n for n in root.iter("node") if n.attrib.get("text")=="批准一次计数" and n.attrib.get("enabled")=="true"]
-if len(found)!=1:raise SystemExit("P17_TRUSTED_UI_BUTTON_NOT_FOUND")
+nodes=list(root.iter("node"))
+found=[n for n in nodes if n.attrib.get("content-desc")=="P17_APPROVE_ONCE"]
+if len(found)!=1:
+    # The emulator contains only synthetic test UI. Print bounded metadata,
+    # not the entire hierarchy or private files.
+    print("P18_UI_TREE_NODE_COUNT="+str(len(nodes)),file=__import__("sys").stderr)
+    print("P18_PROBE_PACKAGE_VISIBLE="+str(any(n.attrib.get("package")=="com.dsh.p17.probe" for n in nodes)),file=__import__("sys").stderr)
+    raise SystemExit("P18_TEST_BUTTON_A11Y_LOCATOR_NOT_FOUND")
+if found[0].attrib.get("enabled")!="true":
+    raise SystemExit("P18_TEST_BUTTON_NOT_ENABLED")
 m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",found[0].attrib.get("bounds",""))
-if not m:raise SystemExit("P17_UI_BOUNDS_MISSING")
+if not m:raise SystemExit("P18_UI_BOUNDS_MISSING")
 x1,y1,x2,y2=map(int,m.groups())
-if not(x2>x1 and y2>y1):raise SystemExit("P17_BAD_BUTTON_BOUNDS")
+if not(x2>x1 and y2>y1):raise SystemExit("P18_BAD_BUTTON_BOUNDS")
 print((x1+x2)//2,(y1+y2)//2)
 PY
-)
+  echo '::error::P18 trusted test-only UI locator failed; no tap performed'
+  adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | tail -n 4 || true
+  adb logcat -d -s DSH_P17_BROKER:I '*:S' |
+    grep -E 'P17_|P18_' | tail -n 25 || true
+  exit 1
+fi
+read -r tapx tapy < out/p17-tap-point.txt
+rm -f out/p17-tap-point.txt
 # Exactly one test-only input tap. Never silently retry a privileged gesture.
 adb shell input tap "$tapx" "$tapy"
 adb shell rm -f /sdcard/p17-ui-test.xml
