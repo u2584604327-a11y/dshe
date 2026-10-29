@@ -4,7 +4,8 @@ on:
     paths:
       - '.github/workflows/p29-private-release-audit.yml'
 permissions:
-  contents: read
+  # Draft release listing requires push-equivalent access; the audit uses only GET.
+  contents: write
 jobs:
   audit-private-delivery-and-completed-p28-cleanup:
     if: >-
