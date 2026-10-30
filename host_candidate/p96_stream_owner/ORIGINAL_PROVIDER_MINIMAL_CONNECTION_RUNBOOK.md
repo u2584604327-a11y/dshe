@@ -38,3 +38,25 @@ node omnigate_local_preflight.mjs
 ## 不得误报
 
 当前仅验证只读 Node 检查器及归档静态接口：未安装新的 DSH APK、没有证明 DSH 与 OmniGate 的实机完整模型调用、没有完成严格沙箱内的本地 API Broker、B站登录/评论、WebView 隐藏或自动换对话实机验收。原始签名、原版模型、3080、Native API 监听端口及 8787、Cookie/session 均保持不变。禁止生成正式 v139 APK 或合并该 Draft PR，直至原版节点真实调用和授权发布链路经过手机端验证。
+
+
+## 原版 Pi-AI 模型路由配置（源码验证，不自动写入）
+
+原版签名 v138 的 `@deepseek-ai/dsh-llm-pi-ai/lib/index.js` 已按 APK SHA256 和包内源文件 SHA256 检查：其路由 schema 明确存在 `displayName`、`api`、`baseURL`、`models`、`apiKeyEnv`（凭证引用）、`defaultContextWindow`、`defaultMaxTokens` 和 `defaultInput`。每个自定义模型必须具备真实的 `id`；`maxTokens`、`contextWindow` 不可假冒远端能力。
+
+运行已有的离线纯 Node 配置生成器：
+
+```sh
+node original_dsh_omnigate_profile.mjs \
+  --model-id "REPLACE_WITH_ACTUAL_MODEL_ID" \
+  --context-window ACTUAL_VERIFIED_CONTEXT_CAPACITY \
+  --max-tokens ACTUAL_VERIFIED_OUTPUT_CAPACITY
+```
+
+命令中的模型 ID 与两项容量必须换成从正在使用的模型提供方、设备端模型清单或官方说明**实际核验**的值；任意缺项、负数、越界或伪造凭证参数均拒绝输出。若 DSH 实际需要凭证映射，仅允许追加 `--credential-env OMNIGATE_LOCAL_API_KEY`，并从 DSH 原有受信凭证机制设置该环境变量。**不是把 API Key 的真实内容作为参数、写入仓库或粘贴到聊天。**
+
+输出是原版 Pi-AI 的一个候选 *provider profile 对象*，**不是整个 DSH 设置文件**。它不自动导入、不自动增删配置、不能保证当前版本的设置 UI 具有粘贴该对象的入口。正式应用前必须验证原版 `dsh-llm-pi-ai` 插件的配置存储键和实际模型选择/修改 UI，采用原版配置流程并备份原设置；禁止通过猜测文件目录和覆盖用户数据强行安装配置。
+
+生成器只声明 `input:["text"]`；原版图片/文件发送和工具结果能力均需独立确认，不可用“支持 OpenAI 兼容协议”推断已经打通。
+
+源码校验与生成器回归记录：P96 现有 CI；未在用户手机运行，未连接当前 DSH Node 实际会话，未自动改变模型、OmniGate、沙箱、B站浏览器或登录信息。
