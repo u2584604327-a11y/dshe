@@ -269,42 +269,14 @@ jobs:
           # Exercise the exact original non-waking inject wrapper. Earlier
           # diagnostics proved inject(input) maps to send(input,"next-step",false);
           # never substitute an invented target string.
-          cp host_candidate/p96_stream_owner/p98_original_agent_inbox_once.mjs \
-            .p96private/agent-runtime/p98_original_agent_inbox_once.mjs
-          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
-            timeout 12s node .p96private/agent-runtime/p98_original_agent_inbox_once.mjs \
-            > .p96private/p98-inbox.log
+          cp host_candidate/p96_stream_owner/p98_original_agent_inbox_once.mjs .p96private/agent-runtime/p98_original_agent_inbox_once.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK timeout 12s node .p96private/agent-runtime/p98_original_agent_inbox_once.mjs > .p96private/p98-inbox.log
           cat .p96private/p98-inbox.log
-          grep -Eq '^P98_ORIGINAL_INBOX_(NO_MODEL_NETWORK_ATTEMPTS|BLOCKED_NETWORK_ATTEMPTS)=0          if grep -Fxq 'P98_ORIGINAL_INBOX_REAL_AGENTLOOP_INBOX_MUTATION=PASS' \
-              .p96private/p98-inbox.log; then
+          grep -Eq '^P98_ORIGINAL_INBOX_(NO_MODEL_NETWORK_ATTEMPTS|BLOCKED_NETWORK_ATTEMPTS)=0$' .p96private/p98-inbox.log
+          if grep -Fxq 'P98_ORIGINAL_INBOX_REAL_AGENTLOOP_INBOX_MUTATION=PASS' .p96private/p98-inbox.log; then
             echo 'P98_ORIGINAL_AGENTLOOP_INBOX_INJECT=PASS' >> "$GITHUB_STEP_SUMMARY"
           else
-            grep -Fxq 'P98_ORIGINAL_INBOX_RESULT=BLOCKED_ORIGINAL_INBOX_MUTATION_PRECONDITION' \
-              .p96private/p98-inbox.log
-            echo 'P98_ORIGINAL_AGENTLOOP_INBOX_INJECT=BLOCKED_PRECONDITION_NOT_MET' >> "$GITHUB_STEP_SUMMARY"
-          fi
-          echo 'P98_ORIGINAL_AGENTLOOP_AUTO_CONTINUATION=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
-
-          echo 'P96_ORIGINAL_ENGINE_ARCHIVE_EXACT_SHA_AND_CATEGORIES=PASS' >> "$GITHUB_STEP_SUMMARY"
-      - name: Erase local original and mark release boundary
-        if: always()
-        shell: bash
-        run: |
-          rm -rf .p96private
-          {
-            echo 'P96_DSH_ORIGINAL_CHAT_NETWORK_AND_UI_NOT_MODIFIED=YES'
-            echo 'P96_STREAM_PRODUCTION_OWNER_CALLSITE=NOT_VERIFIED'
-            echo 'P96_NO_SIGNER_NO_RELEASE_NO_DEVICE_CHANGES=YES'
-          } >> "$GITHUB_STEP_SUMMARY"
- \
-            .p96private/p98-inbox.log
-          if grep -Fxq 'P98_ORIGINAL_INBOX_REAL_AGENTLOOP_INBOX_MUTATION=PASS' \
-              .p96private/p98-inbox.log; then
-            echo 'P98_ORIGINAL_AGENTLOOP_INBOX_INJECT=PASS' >> "$GITHUB_STEP_SUMMARY"
-          else
-            grep -Fxq 'P98_ORIGINAL_INBOX_RESULT=BLOCKED_ORIGINAL_INBOX_MUTATION_PRECONDITION' \
-              .p96private/p98-inbox.log
+            grep -Fxq 'P98_ORIGINAL_INBOX_RESULT=BLOCKED_ORIGINAL_INBOX_MUTATION_PRECONDITION' .p96private/p98-inbox.log
             echo 'P98_ORIGINAL_AGENTLOOP_INBOX_INJECT=BLOCKED_PRECONDITION_NOT_MET' >> "$GITHUB_STEP_SUMMARY"
           fi
           echo 'P98_ORIGINAL_AGENTLOOP_AUTO_CONTINUATION=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
