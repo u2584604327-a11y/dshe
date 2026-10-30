@@ -78,7 +78,14 @@ def kind_of(name):
 def addon_metadata(blob):
     """Read-only dynamic-symbol metadata, via Linux anonymous memfd."""
     if not blob.startswith(b"\x7fELF") or len(blob) < 64:
-        return {"kind": "NON_ELF", "needed": (), "machine": "unknown"}
+        if len(blob) == 0: subtype = "empty"
+        elif len(blob) <= 2048 and all(
+                b in (9, 10, 13) or 32 <= b <= 126 for b in blob):
+            subtype = "small_ascii"
+        elif len(blob) <= 2048: subtype = "small_non_ascii"
+        else: subtype = "binary_or_large"
+        return {"kind": "NON_ELF", "needed": (),
+                "machine": "unknown", "nonelf": subtype}
     require(blob[4] in (1, 2) and blob[5] == 1, "ADDON_ELF_CLASS_OR_ENDIAN")
     machine = int.from_bytes(blob[18:20], "little")
     machine_name = {183: "aarch64", 62: "x86_64", 40: "arm32",
@@ -114,6 +121,8 @@ def scan(tar_file, check_addons=True):
     total = 0
     addon_machines = collections.Counter()
     needed = collections.Counter()
+    addon_platform_hints = collections.Counter()
+    needed_by_machine = collections.defaultdict(set)
     for item in tar_file:
         items += 1
         require(items <= MAX_FILES, "TAR_COUNT_LIMIT")
@@ -152,8 +161,20 @@ def scan(tar_file, check_addons=True):
             digest = h.digest()
             if addon is not None:
                 meta = addon_metadata(bytes(addon))
-                addon_machines[meta["kind"] + ":" + meta["machine"]] += 1
+                identity = meta["kind"] + ":" + meta["machine"]
+                if meta["kind"] == "NON_ELF":
+                    identity += ":" + meta["nonelf"]
+                addon_machines[identity] += 1
                 needed.update(meta["needed"])
+                needed_by_machine[meta["machine"]].update(meta["needed"])
+                # Original member paths are NEVER printed. These are only
+                # weak filename hints, NOT proven Android loader targets.
+                labels = set(re.split(r"[^a-z0-9]+", name.lower()))
+                for hint in ("android", "linux", "darwin", "windows",
+                             "win32", "musl", "glibc", "gnu",
+                             "aarch64", "arm64", "x64", "x86"):
+                    if hint in labels:
+                        addon_platform_hints[hint] += 1
         counts[category] += 1
         # Stable root digest includes full names and ALL file contents, but
         # outputs only one opaque overall digest, never a list of paths/hashes.
@@ -165,7 +186,9 @@ def scan(tar_file, check_addons=True):
         root.update(digest)
     return {"members": items, "regular_bytes": total, "counts": counts,
             "tree_sha256": root.hexdigest(),
-            "native_machines": addon_machines, "needed": needed}
+            "native_machines": addon_machines, "needed": needed,
+            "addon_platform_hints": addon_platform_hints,
+            "needed_by_machine": needed_by_machine}
 
 
 def exact_engine(path):
@@ -204,6 +227,13 @@ def render(r):
           ",".join(f"{k}:{v}" for k, v in sorted(r["native_machines"].items())))
     print("P54_ADDON_NEEDED_SONAMES=" +
           ",".join(k for k in sorted(r["needed"])))
+    print("P54_ADDON_NEEDED_BY_ELF_ARCH=" + ";".join(
+          machine + ":" + ",".join(sorted(deps))
+          for machine, deps in sorted(r["needed_by_machine"].items())))
+    print("P54_ADDON_FILENAME_PLATFORM_HINT_COUNTS=" + ",".join(
+          f"{k}:{v}" for k,v in sorted(r["addon_platform_hints"].items())))
+    print("P54_ADDON_PATH_HINTS_ARE_NOT_PROOF_OF_RUNTIME_LOAD=YES")
+    print("P54_PRODUCTION_ANDROID_ADDON_COMPATIBILITY=BLOCKED_UNVERIFIED")
     print("P54_ADDON_ANDROID_ABI_AND_DYNAMIC_LOADER=NOT_PROVEN")
     print("P54_DEVELOPMENT_SCRIPT_PATH_AND_ENTRYPOINT=NOT_DISCLOSED_OR_PROVEN")
     print("P54_PRODUCTION_JS_MODULE_RESOLUTION=NOT_IMPLEMENTED")
