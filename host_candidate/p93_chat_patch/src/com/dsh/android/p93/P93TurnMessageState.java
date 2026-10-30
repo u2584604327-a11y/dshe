@@ -5,7 +5,7 @@ package com.dsh.android.p93;
  */
 public final class P93TurnMessageState {
     public interface Sink {void accept(Frame frame);}
-    public enum Phase { WAITING, THINKING, STREAMING, TOOLS, COMPLETE, TRUNCATED, FAILED }
+    public enum Phase { WAITING, THINKING, STREAMING, TOOLS, AWAITING_TOOL_RESULT, COMPLETE, TRUNCATED, FAILED }
     public static final class Frame {
         public final String turnId, content;
         public final long generation, revision;
@@ -76,6 +76,17 @@ public final class P93TurnMessageState {
         synchronized(this){
             if(terminal)throw new IllegalStateException("P93_ALREADY_TERMINAL");
             terminal=true;phase=Phase.COMPLETE;revision++;
+        }
+        emit();
+    }
+    /** A completed SSE tool_call stream is NOT a completed original model task.
+     * The tool result must return through the original authenticated dispatcher.
+     */
+    public void awaitingToolResult(){
+        synchronized(this){
+            if(terminal)throw new IllegalStateException("P93_ALREADY_TERMINAL");
+            if(toolFragments<1)throw new IllegalStateException("P95_TOOL_FRAGMENTS_NOT_OBSERVED");
+            terminal=true;phase=Phase.AWAITING_TOOL_RESULT;revision++;
         }
         emit();
     }
