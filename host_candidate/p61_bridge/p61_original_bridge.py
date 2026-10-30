@@ -110,22 +110,37 @@ def analyze(primary,classes,assets):
     require(ret=="Ljava/util/List;","P60_LIST_RETURN_DRIFT")
     cl=[c for c in classes if c.get_name()==owner]
     require(len(cl)<=1,"CLASS_DUPLICATED")
-    mm=[]
+    same_name=[]
+    exact=[]
+    return_match=[]
     if cl:
-        for m in cl[0].get_methods():
-            if m.get_name()!=name:continue
-            desc="".join(m.get_descriptor().split())
-            if desc=="("+params+")"+ret:mm.append(m)
-    require(len(mm)<=1,"METHOD_DUPLICATED")
-    m=mm[0] if mm else None
+        for candidate in cl[0].get_methods():
+            if candidate.get_name()!=name:
+                continue
+            same_name.append(candidate)
+            desc="".join(candidate.get_descriptor().split())
+            if desc.endswith(")"+ret):
+                return_match.append(candidate)
+            if desc=="("+params+")"+ret:
+                exact.append(candidate)
+    require(len(exact)<=1,"METHOD_DUPLICATED")
+    m=exact[0] if exact else None
+    # Candidate classes may contain an overload, but an unmatched name is NOT
+    # proof of a resolved original method. Inspect alternative matches only
+    # as candidates, never as production command evidence.
+    candidate=same_name[0] if len(same_name)==1 else None
     return {
       "generated_name_match":True,
       "owner_class_definition_found":bool(cl),
+      "same_name_candidate_count":len(same_name),
+      "same_name_and_return_descriptor_count":len(return_match),
       "exact_method_definition_found":m is not None,
       "access_flags":flags(m.get_access_flags()) if m else None,
+      "candidate_only_access_flags":flags(candidate.get_access_flags()) if candidate and not m else None,
       "method_descriptor_argument_types":arity(params),
       "invoke_range":range_data(ins),
       "method_body":body(m),
+      "candidate_only_method_body":body(candidate) if candidate and not m else None,
       "list_elements_proven":False,
       "node_argv_proven":False,
       "ready_contract_proven":False
