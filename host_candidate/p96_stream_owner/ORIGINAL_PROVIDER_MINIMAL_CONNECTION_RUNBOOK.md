@@ -78,3 +78,16 @@ node original_dsh_omnigate_profile.mjs \
 2026-10-30 已修正 P92DshRouteGate：原版 DSH 用户 turn 与 HTTP 200 同时成立时，状态只允许进入 ORIGINAL_TRANSPORT_ACCEPTED_REPLY_UNVERIFIED，isConfirmed() 必须仍然为 false。若这之后连接断开，改为 UNKNOWN_AFTER_DISPATCH，禁止盲目重发。网页气泡路径 P90 的独立 readback/点击/用户 turn 验证及已确认状态不受影响。
 
 已在 JVM 回归中验证 P92_ORIGINAL_HTTP200_NEVER_FAKE_ASSISTANT_COMPLETION=PASS。这只是候选组件的防虚假成功修复，尚未接入原版 Android DSH；接入后实际模型回复必须由原版会话投影和可信 assistant 完成事件确认，不能从 HTTP200、SSE [DONE] 或单独 UI 点击推断。
+## 原版 AgentLoop、ToolRuntime 与 Cordis 真实运行时边界（2026-10-30）
+
+原版签名 v138 的精确哈希锁定源码首先确认原版 `@deepseek-ai/dsh-agent-loop` 直接依赖 `@deepseek-ai/dsh-tools`、`dsh-llm`、`dsh-session`、`dsh-session-persistence` 等组件。进一步通过临时原版依赖闭包、实际 Node20 import 成功加载 `AgentLoop`、`ToolRuntime` 和 `SessionController`，不是只扫描源码，也不是测试替身。
+
+对原版导出类的公开方法反射已确认：`AgentLoop.create/resume/resumeWith/prepare`；`ToolRuntime.register/execute/dispatchToolBody/notifyResult/createExecution/resolveExecution`；`SessionController.prompt/follow/liveProjections`。这些名称只证明原版模块表面，不代表调用参数、插件生命周期或生产环境受权接线已经验证。
+
+关键已证实回调：`ToolRuntime.notifyResult(exec,result)` 通过 Cordis 事件派发 `tools/result`，其参数携带原版 execution 和 result。CI 中实际加载了原版 `ToolRuntime` 和原版 `@deepseek-ai/cordis` 的 `Context`，使用严格无副作用的内存执行对象，调用原版 `notifyResult`，**真实 Cordis 订阅器恰好收到一次事件**。所有断言 PASS；未实例化 Android EngineManager，未调用原版浏览器、用户账号或模型。
+
+**原版运行链首选设计**：`AgentLoop → ToolRuntime.execute → 原版工具实现 / Android 可信宿主 Broker → ToolRuntime.notifyResult → 原版 agent/session 继续模型流`。现在已经验证的是事件派发接口，不是 AgentLoop 的后续消费。不能让 P94 独立转发器在同一原版调用中另行注入第二份 OpenAI `role=tool`：必须防止重复结果、重试副作用及跨会话串结果。P94 现为独立隔离候选，不是生产接线。
+
+接下来的实机验收必须使用原版 DSH 发起一条**无副作用的浏览器读取**，观察原版 ToolRuntime 是否调用真实浏览器执行器、P85 是否得到单次可信终态、原版 `tools/result` 是否触发、AgentLoop 是否在同一会话发起下一次模型请求，以及原版 WebView 聊天 UI 是否更新。只可在用户明确确认后执行评论发布、输入提交等外部副作用。原版模型所有者 409、隔离 UID 的 TCP EACCES、登录持久化和隐藏 WebView 保活均仍独立阻断。
+
+现阶段没有原版 Android EngineManager 可写原生源码，也没有手机实际调用验证，因此该 PR 保留 Draft，**不得生成或宣布正式升级 APK**。无需再写第二套 SSE 消费器、Model Tool Dispatcher 或 Session Store。
