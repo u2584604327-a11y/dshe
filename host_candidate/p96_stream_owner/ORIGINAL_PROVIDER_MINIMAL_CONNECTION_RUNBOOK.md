@@ -73,3 +73,8 @@ node original_dsh_omnigate_profile.mjs \
 以上证明原版 pi-ai 协议层真实文本流消费及无副作用工具结果往返；**不证明** DSH Cordis/agent-loop 已接入、真实 Android Native ApiServer 路由和 409 门禁通过、隔离 UID 可访问 8787、原版 WebView 登录保持、B站评论授权发布或 OmniGate 上限续接已在手机完成。
 
 后续只有原版 DSH agent/session 与模型调用之间的现有事件接线、隔离进程的可信本机通信、真实设备逐步验收可解除正式 APK 发布阻断。禁止重新建立第二套聊天引擎、盲目放开隔离网络或触碰实际用户凭证。
+## P92 传输成功不得冒充模型回复成功
+
+2026-10-30 已修正 P92DshRouteGate：原版 DSH 用户 turn 与 HTTP 200 同时成立时，状态只允许进入 ORIGINAL_TRANSPORT_ACCEPTED_REPLY_UNVERIFIED，isConfirmed() 必须仍然为 false。若这之后连接断开，改为 UNKNOWN_AFTER_DISPATCH，禁止盲目重发。网页气泡路径 P90 的独立 readback/点击/用户 turn 验证及已确认状态不受影响。
+
+已在 JVM 回归中验证 P92_ORIGINAL_HTTP200_NEVER_FAKE_ASSISTANT_COMPLETION=PASS。这只是候选组件的防虚假成功修复，尚未接入原版 Android DSH；接入后实际模型回复必须由原版会话投影和可信 assistant 完成事件确认，不能从 HTTP200、SSE [DONE] 或单独 UI 点击推断。
