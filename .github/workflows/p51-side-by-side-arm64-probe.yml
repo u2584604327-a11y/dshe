@@ -18,6 +18,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   p51-privately-distributed-side-by-side-exact-arm64-apk:
+    needs: p51-x86-private-sidecar-binder-and-p37-positive
+    permissions:
+      contents: write
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p51-side-by-side-original-derived-arm64-probe-20261030' &&
@@ -117,20 +120,55 @@ jobs:
             >> "$GITHUB_STEP_SUMMARY"
           echo 'P51_PRIVATE_ARTIFACT_SEPARATE_PACKAGE=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P51_ARM64_RUNTIME_NOT_TESTED_IN_CI=YES' >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload ONLY permissionless separate-package test APK to private Actions for one day
-        uses: actions/upload-artifact@v4
-        with:
-          name: P51-Side-by-Side-ARM64-Isolated-Node-TEST-ONLY
-          path: .p51delivery/P51-Side-by-Side-ARM64-Isolated-Node-TEST-ONLY.apk
-          if-no-files-found: error
-          retention-days: 1
-          compression-level: 0
+      - name: Create private DRAFT test Release after all package and emulator gates PASS
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GH_REPO" --jq .visibility)" = private
+          test "${{ github.event.pull_request.head.repo.full_name }}" = "$GH_REPO"
+          test "${{ github.event.pull_request.base.ref }}" = "dsh/p50-original-arm64-node-worker-integration-20261030"
+          test "$P51_SIDE_BY_SIDE" = 1
+          test "$P49_NODE_STAGE" = 1
+          apk=".p51delivery/P51-Side-by-Side-ARM64-Isolated-Node-TEST-ONLY.apk"
+          test -s "$apk"
+          python host_candidate/p51_side_by_side/p51_manifest.py verify "$apk"
+          sha="$(sha256sum "$apk" | cut -d' ' -f1)"
+          test "${#sha}" = 64
+          head_sha="${{ github.event.pull_request.head.sha }}"
+          tag="p51-sidecar-arm64-test-${head_sha:0:12}"
+          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1;then
+            echo 'P51_BLOCKED_TAG_ALREADY_EXISTS_NO_ASSET_OVERWRITE'
+            exit 1
+          fi
+          cat > .p51delivery/RELEASE_NOTES.txt <<EONOTE
+          P51 private ARM64 side-by-side test APK. NOT DSH v139.
+          SHA256: $sha
+          App package: com.dsh.p51.isolatedprobe (distinct from com.dsh.android).
+          Intended installation: Android 34+ ARM64. Original phone data untouched.
+          No declared permissions; launcher test UI and isolated worker only.
+          Contains original SHA-pinned v138 Node ELF and 10 libraries.
+          This has NOT passed an ARM64 phone runtime execution test.
+          On first launch it runs a bounded synthetic Node UID/BOOT/READY test.
+          Copy only the status (long-press) if testing. No automatic reports.
+          Never uninstall or replace your existing com.dsh.android app.
+          NOT original DSH MainActivity, production chat/browser or full VM.
+          Test cert is disposable; do not use as a formal software upgrade.
+          EONOTE
+          gh release create "$tag" "$apk#P51-Side-by-Side-ARM64-Isolated-Node-TEST-ONLY.apk" \
+            --repo "$GH_REPO" --target "$head_sha" --draft \
+            --title "P51 PRIVATE ARM64 ISOLATED NODE TEST ONLY - NOT DSH V139" \
+            --notes-file .p51delivery/RELEASE_NOTES.txt
+          gh release view "$tag" --repo "$GH_REPO" --json isDraft \
+            --jq .isDraft | grep -Fxq true
+          echo "P51_PRIVATE_DRAFT_TEST_RELEASE_TAG=$tag" >> "$GITHUB_STEP_SUMMARY"
+          echo "P51_PRIVATE_TEST_APK_SHA256=$sha" >> "$GITHUB_STEP_SUMMARY"
+          echo 'P51_ANDROID_ARM64_RUNTIME_TEST=NOT_DONE' >> "$GITHUB_STEP_SUMMARY"
       - name: Always wipe private source and derived APK, exact ELF, runtime lock, and signing key
         if: always()
         shell: bash
         run: |
           rm -rf .p43tmp .p49-private-build.log .p51delivery
-          echo 'P51_TEST_APK_PRIVATE_ACTIONS_ARTIFACT_ONLY_ONE_DAY=YES' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P51_PRIVATE_DRAFT_RELEASE_ONLY_NO_ACTIONS_ARTIFACT=YES' >> "$GITHUB_STEP_SUMMARY"
           echo 'P51_OWNER_DSH_APP_AND_DATA=NOT_TOUCHED' >> "$GITHUB_STEP_SUMMARY"
           echo 'P49_PRODUCTION_FIXED_SIGNING_KEY_USED=NO' >> "$GITHUB_STEP_SUMMARY"
           echo 'P50_ANDROID16_ARM64_RUNTIME_AND_NODE_ENV=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
