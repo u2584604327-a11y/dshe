@@ -26,6 +26,23 @@ for(const [pkg,cls] of specs){
     process.stdout.write('P96_ORIGINAL_CLASS='+cls+
       ' METHODS='+JSON.stringify(methods)+
       ' STATIC='+JSON.stringify(staticMethods)+'\n');
+    const focus=cls==='ToolRuntime'
+      ? ['register','execute','dispatchToolBody','notifyResult','createExecution','resolveExecution']
+      : cls==='AgentLoop'
+        ? ['create','resume','resumeWith','prepare']
+        : ['prompt','follow','liveProjections'];
+    for(const method of focus){
+      const fn=value.prototype?.[method];
+      if(typeof fn!=='function')continue;
+      const text=Function.prototype.toString.call(fn);
+      const scrubbed=text.slice(0,650)
+        .replace(/https?:\\/\\/[^\\s"'\\`]+/g,'<URL>')
+        .replace(/(?:Bearer |sk-)[A-Za-z0-9._-]{8,}/g,'<CREDENTIAL>')
+        .replace(/[\\u0000-\\u001f\\u007f]+/g,' ');
+      process.stdout.write('P96_ORIGINAL_METHOD_SIGNATURE='+cls+'.'+method+
+        ' ARITY='+fn.length+' SOURCE_PREFIX='+scrubbed+'\\n');
+    }
+
   }catch(e) {
     all=false;
     // Never disclose original package paths or host user directories.
