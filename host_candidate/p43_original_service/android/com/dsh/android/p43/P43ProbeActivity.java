@@ -275,6 +275,13 @@ public final class P43ProbeActivity extends Activity {
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
     if("com.dsh.p51.isolatedprobe".equals(getPackageName()) &&
+        getIntent()!=null && getIntent().getBooleanExtra("p79_mailbox",false)) {
+      com.dsh.android.p79.P79NativeBrowserMailboxProbe.run(
+          this,getIntent().getStringExtra("p79_cmd"),
+          getIntent().getStringExtra("p79_res"));
+      return;
+    }
+    if("com.dsh.p51.isolatedprobe".equals(getPackageName()) &&
         getIntent()!=null && getIntent().getBooleanExtra("p73_tools",false)) {
       com.dsh.android.p73.P73BrowserToolCallbackProbe.run(this);
       return;
