@@ -1,7 +1,7 @@
 name: DSH P14 LAN API token usage source-gated regression
 on:
   push:
-    branches: [main]
+    branches: [main, 'dsh/p96-original-engine-stream-owner-narrow-20261030']
     paths:
       - 'host_candidate/patch_token_usage_p14.py'
       - 'host_candidate/test_token_p14.mjs'
@@ -51,6 +51,7 @@ jobs:
           echo 'P14_TOKEN_SOURCE_3_STATE=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P14_OFFICIAL_PROVIDER_USAGE_PRESERVED=PASS_UNIT' >> "$GITHUB_STEP_SUMMARY"
           echo 'P14_BROWSER_RESOURCE_DIFF=ONE_NESTED_JS_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P14_MIXED_PROVIDER_ESTIMATE_PROVENANCE=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P14_REAL_LAN_PROVIDER_USAGE=NOT_VERIFIED' >> "$GITHUB_STEP_SUMMARY"
           echo 'P14_ANDROID_UI_RUNTIME=NOT_VERIFIED' >> "$GITHUB_STEP_SUMMARY"
       - name: No APK/key/diagnostic archive distribution
