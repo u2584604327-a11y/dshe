@@ -45,7 +45,8 @@ jobs:
             P92_MAIN_AND_OVERLAY_OWNER_EXCLUSIVE=PASS \
             P92_ORIGINAL_PROVIDER_NO_WEB_BUBBLE_DEPENDENCY=PASS \
             P92_ORIGINAL_SESSION_RECHECK_AND_409_NO_RETRY=PASS \
-            P92_HTTP200_AND_TURN_NOT_MODEL_REPLY=PASS; do
+            P92_HTTP200_AND_TURN_NOT_MODEL_REPLY=PASS \
+            P92_ORIGINAL_HTTP200_NEVER_FAKE_ASSISTANT_COMPLETION=PASS; do
             grep -Fxq "$gate" .p96-jvm/result.log
           done
           cat .p96-jvm/result.log
