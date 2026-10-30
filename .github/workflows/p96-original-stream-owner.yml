@@ -140,6 +140,13 @@ jobs:
             -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
             timeout 20s node .p96private/agent-runtime/p96_original_agent_runtime_probe.mjs
           echo 'P96_EXACT_ORIGINAL_AGENT_TOOL_RUNTIME_IMPORT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          cp host_candidate/p96_stream_owner/p96_original_tool_result_event_fixture.mjs \
+            .p96private/agent-runtime/p96_original_tool_result_event_fixture.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 18s node .p96private/agent-runtime/p96_original_tool_result_event_fixture.mjs
+          echo 'P96_ORIGINAL_TOOL_RUNTIME_RESULT_EVENT_IN_MEMORY=PASS' >> "$GITHUB_STEP_SUMMARY"
+
 
           echo 'P96_ORIGINAL_ENGINE_ARCHIVE_EXACT_SHA_AND_CATEGORIES=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Erase local original and mark release boundary
