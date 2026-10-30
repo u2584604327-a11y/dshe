@@ -204,6 +204,21 @@ public final class P43ProbeActivity extends Activity {
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
     if("com.dsh.p51.isolatedprobe".equals(getPackageName()) &&
+        getIntent()!=null && getIntent().getBooleanExtra("p72_accessor",false)) {
+      try {
+        Class<?> browser=Class.forName(
+            "com.dsh.android.browser.AiBrowserView",false,getClassLoader());
+        java.lang.reflect.Method accessor=browser.getDeclaredMethod("currentWebView");
+        if(accessor.getReturnType()==android.webkit.WebView.class &&
+           java.lang.reflect.Modifier.isPublic(accessor.getModifiers()))
+          android.util.Log.i("P72_WEBVIEW_ACCESS","P72_ORIGINAL_DERIVED_CURRENT_WEBVIEW_PUBLIC_ON_ART=PASS");
+        else android.util.Log.e("P72_WEBVIEW_ACCESS","P72_ORIGINAL_ACCESSOR_REMAINS_PRIVATE=FAIL");
+      }catch(Exception | LinkageError failure) {
+        android.util.Log.e("P72_WEBVIEW_ACCESS","P72_ART_ACCESSOR_RESOLUTION=FAIL");
+      }
+      return;
+    }
+    if("com.dsh.p51.isolatedprobe".equals(getPackageName()) &&
         getIntent()!=null && getIntent().getBooleanExtra("p71_profile",false)) {
       com.dsh.android.p71.P71WebViewProfileProbe.run(this);
       return;
