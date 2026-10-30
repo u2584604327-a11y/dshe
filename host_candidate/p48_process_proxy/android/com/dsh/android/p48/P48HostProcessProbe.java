@@ -2,6 +2,7 @@ package com.dsh.android.p48;
 
 import android.os.*;
 import com.dsh.p37.P37RemoteProcess;
+import com.dsh.android.p53.P53StartOrder;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -37,7 +38,7 @@ public final class P48HostProcessProbe {
   private final AtomicReference<String> stdout=new AtomicReference<>("");
   private final AtomicReference<String> stderr=new AtomicReference<>("");
   private int workerUid=-1;
-  private long expectedSequence=1;
+  private final P53StartOrder startOrder=new P53StartOrder();
   private P37RemoteProcess proxy;
   private boolean complete,failed,started,childStartedAck;
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()) {
@@ -53,6 +54,9 @@ public final class P48HostProcessProbe {
       try{b=m.getData();}catch(RuntimeException e){failClosed("P48_BAD_BUNDLE");return;}
       if(!session.equals(b.getString("session"))) {
         failClosed("P48_SESSION_MISMATCH");return;
+      }
+      if(!startOrder.accept(m.what,b.getLong("seq",-1))) {
+        failClosed("P53_PROTOCOL_ORDER_OR_REPLAY_REJECTED");return;
       }
       if(m.what==P48FixedIsolatedChild.HELLO) {
         if(workerUid!=-1 || b.getLong("seq",-1)!=0){
@@ -77,9 +81,8 @@ public final class P48HostProcessProbe {
         listener.report("P53_BINDER_HELLO_ALONE_NOT_CHILD_STARTED=PASS");
         return;
       }
-      if(proxy==null || workerUid!=sender ||
-         b.getLong("seq",-1)!=expectedSequence++){
-        failClosed("P48_FRAME_SEQUENCE_OR_PROXY_MISSING");return;
+      if(proxy==null || workerUid!=sender){
+        failClosed("P48_PROXY_OR_WORKER_MISMATCH");return;
       }
       if(m.what==P48FixedIsolatedChild.CHILD_STARTED) {
         // P53 one-shot proof: only this isolated UID + session + strict
