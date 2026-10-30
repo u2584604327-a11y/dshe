@@ -42,6 +42,16 @@ try{
  handle=await loop.create('p98_synthetic_inbox_no_model');
  if(typeof handle?.send!=='function' || typeof handle?.inbox?.current!=='function')
    throw Error('ORIGINAL_HANDLE_SEND_INBOX_MISSING');
+ const appendCode=Function.prototype.toString.call(
+   Object.getPrototypeOf(handle.inbox).append);
+ const appendSignature=appendCode.match(/^[^(]*\(([^)]{0,250})\)/)?.[1]||'';
+ const appendFields=[...appendCode.matchAll(
+   /(?:this|input|target|message|items|events|data)\??\.([a-zA-Z_$][a-zA-Z0-9_$]{0,60})/g
+ )].map(x=>x[1]);
+ log('INBOX_APPEND_PARAMETERS',JSON.stringify(appendSignature.split(',')
+   .map(x=>x.trim()).filter(x=>/^[a-zA-Z_$][a-zA-Z0-9_$]{0,60}$/.test(x))));
+ log('INBOX_APPEND_FIELD_REFERENCES',JSON.stringify(
+    [...new Set(appendFields)].slice(0,40)));
  const before=handle.inbox.current();
  const input={role:'user',content:[{type:'text',text:'synthetic safe message'}],
    timestamp:1};
@@ -62,6 +72,8 @@ try{
 }catch(e){
  log('RESULT','BLOCKED_'+(e?.code||e?.name||'UNKNOWN'));
  log('ERROR',String(e?.message||'').slice(0,100).replace(/\/[\w/.-]+/g,'<PATH>'));
+ log('SAFE_CALL_STACK',JSON.stringify(String(e?.stack||'').split('\n')
+   .slice(1,8).map(line=>line.match(/at\s+([a-zA-Z_$][a-zA-Z0-9_$.]{0,90})/)?.[1]||'UNKNOWN')));
  process.exitCode=2;
 }finally{
  if(handle){
