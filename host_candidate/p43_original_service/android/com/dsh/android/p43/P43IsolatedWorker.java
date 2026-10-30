@@ -10,6 +10,7 @@ import java.security.MessageDigest;
 import java.util.Arrays;
 import com.dsh.android.p48.P48FixedIsolatedChild;
 import com.dsh.android.p50.P50OriginalNodeFixedChild;
+import com.dsh.android.p76.P76EngineArchiveFdProbe;
 /**
  * P43 separate isolated-Service test inside original DSH APK only.
  * No Node, files, networking, credentials or capabilities.
@@ -21,8 +22,21 @@ public final class P43IsolatedWorker extends Service {
   private String acceptedSession;
   private P48FixedIsolatedChild p48Child;
   private P50OriginalNodeFixedChild p50Child;
+  private boolean p76ArchiveUsed;
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()) {
     @Override public void handleMessage(Message message) {
+      if(message.what==P76EngineArchiveFdProbe.TRANSFER){
+        if(!used || p76ArchiveUsed || !android.os.Process.isIsolated() ||
+           message.sendingUid!=acceptedHostUid || message.replyTo==null ||
+           acceptedSession==null)return;
+        final Bundle bundle;
+        try{bundle=message.getData();}catch(RuntimeException bad){return;}
+        if(!acceptedSession.equals(bundle.getString("session")))return;
+        p76ArchiveUsed=true;
+        P76EngineArchiveFdProbe.receiveInIsolatedWorker(
+            bundle,message.replyTo,acceptedSession);
+        return;
+      }
       // P48 is a second, separately sequenced one-shot session, allowed ONLY
       // after P43/P44/P45/P46's verified original-host initiation.
       if(message.what==P48FixedIsolatedChild.START) {

@@ -98,6 +98,17 @@ public final class P43ProbeActivity extends Activity {
       log("P43_ORIGINAL_DSH_APPLICATION_AND_ISOLATED_SERVICE_BOUND=PASS");
       log("P43_REAL_NODE_IN_ORIGINAL_ENGINE=NO");
       log("P43_V139_RELEASE=BLOCKED");
+      if(remote!=null && getIntent()!=null &&
+         getIntent().getBooleanExtra("p76_archive",false)) {
+        com.dsh.android.p76.P76EngineArchiveFdProbe.start(
+          P43ProbeActivity.this,remote,session,
+          new com.dsh.android.p76.P76EngineArchiveFdProbe.Listener(){
+            @Override public void report(String status){log(status);}
+            @Override public void fail(String code){
+              log("P76_ORIGINAL_ARCHIVE_TRANSPORT=FAIL_"+code);
+            }
+          });
+      }
       if(remote!=null && p48==null) {
         // Only a *real* ARM64 test device with the P49 exact Node lock
         // opts into P50; x86 CI continues the P48 positive system-UID probe.
