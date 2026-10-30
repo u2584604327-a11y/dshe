@@ -251,6 +251,12 @@ jobs:
           grep -Fxq 'P98_ORIGINAL_SESSION_CREATED=NO' .p96private/p98-contract.log
           cat .p96private/p98-contract.log
           echo 'P98_EXACT_AGENT_SESSION_METHOD_CONTRACT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          python host_candidate/p96_stream_owner/p99_session_command_contract.py --original "$f" > .p96private/p99-command.log
+          grep -Fxq 'P99_SESSION_COMMAND_CLASS_FOUND=PASS' .p96private/p99-command.log
+          grep -Fxq 'P99_SESSION_COMMAND_SOURCE_EXPORTED=NO' .p96private/p99-command.log
+          grep -Fxq 'P99_SESSION_COMMAND_RUNTIME_EXECUTED=NO' .p96private/p99-command.log
+          cat .p96private/p99-command.log
+          echo 'P99_ORIGINAL_SESSION_COMMAND_PROMPT_SOURCE_CONTRACT=PASS' >> "$GITHUB_STEP_SUMMARY"
           # One-shot real AgentLoop.create; no user prompt, agent or network.
           cp host_candidate/p96_stream_owner/p98_original_agent_session_once.mjs \
             .p96private/agent-runtime/p98_original_agent_session_once.mjs
