@@ -29,8 +29,14 @@ for(const [pkg,cls] of specs){
   }catch(e) {
     all=false;
     // Never disclose original package paths or host user directories.
+    const missing=/Cannot find (?:package|module) '([^']{1,130})'/.exec(
+      String(e?.message||''))?.[1]||'UNKNOWN';
+    // Output only the missing module specifier, never host absolute paths.
+    const safe=/^[@a-zA-Z0-9._/-]{1,130}$/.test(missing)
+      ? missing : 'NOT_SAFE_TO_LOG';
     process.stdout.write('P96_ORIGINAL_CLASS='+cls+
-      ' IMPORT_FAILED='+(e?.code||e?.name||'UNKNOWN')+'\n');
+      ' IMPORT_FAILED='+(e?.code||e?.name||'UNKNOWN')+
+      ' MISSING_SPECIFIER='+safe+'\n');
   }
 }
 process.stdout.write('P96_ORIGINAL_AGENT_LOOP_TOOL_RUNTIME_MODULE_IMPORT='+
