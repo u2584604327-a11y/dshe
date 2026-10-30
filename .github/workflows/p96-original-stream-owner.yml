@@ -266,6 +266,20 @@ jobs:
             .p96private/p98-session.log
           cat .p96private/p98-session.log
           echo 'P98_REAL_AGENTLOOP_SESSION_CREATE_DIAGNOSTIC_NOT_DEVICE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          # Real original inbox mutation; no driver wakeup or network egress.
+          cp host_candidate/p96_stream_owner/p98_original_agent_inbox_once.mjs \
+            .p96private/agent-runtime/p98_original_agent_inbox_once.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 12s node .p96private/agent-runtime/p98_original_agent_inbox_once.mjs \
+            > .p96private/p98-inbox.log
+          grep -Fxq 'P98_ORIGINAL_INBOX_REAL_AGENTLOOP_INBOX_MUTATION=PASS' \
+            .p96private/p98-inbox.log
+          grep -Fxq 'P98_ORIGINAL_INBOX_NO_MODEL_NETWORK_ATTEMPTS=0' \
+            .p96private/p98-inbox.log
+          cat .p96private/p98-inbox.log
+          echo 'P98_REAL_ORIGINAL_AGENTLOOP_INBOX_NO_WAKEUP=PASS' >> "$GITHUB_STEP_SUMMARY"
+
 
 
 
