@@ -173,6 +173,16 @@ jobs:
             .p96private/agentloop-readiness.log
           cat .p96private/agentloop-readiness.log
           echo 'P96_REAL_AGENTLOOP_INJECTION_CONTRACT_OBSERVED=PASS' >> "$GITHUB_STEP_SUMMARY"
+          cp host_candidate/p96_stream_owner/p96_agentloop_services_audit.mjs \
+            .p96private/agent-runtime/p96_agentloop_services_audit.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 15s node .p96private/agent-runtime/p96_agentloop_services_audit.mjs \
+            > .p96private/agent-services.log
+          grep -Fxq 'P96_AGENT_SERVICE_DEPENDENCY_AUDIT=PASS' .p96private/agent-services.log
+          cat .p96private/agent-services.log
+          echo 'P96_ORIGINAL_AGENT_SERVICE_EXPORTS_DISCOVERED=PASS' >> "$GITHUB_STEP_SUMMARY"
+
 
 
 
