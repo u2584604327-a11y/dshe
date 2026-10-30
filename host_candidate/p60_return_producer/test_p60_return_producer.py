@@ -64,7 +64,7 @@ check(o["producer_input_origin_categories"]=={"UNKNOWN_INVOKE_ARGUMENT_ENCODING"
 # unknown producer cannot be normalized to an empty list.
 n=I("move-result-object",operands=[r(4)])
 check(follow_local_return([(0,n),(2,process)],1,4,set(),set())["status"]==
-      "UNKNOWN_RESULT_NOT_INVOKE","unbacked_result")
+      "UNKNOWN_MISSING_RESULT_PRODUCER","unbacked_result")
 check(owner_category("Lsecret/company/Payload;")=="OTHER_NAMESPACE","no_raw_owner")
 print("P60_PRODUCER_SYNTHETIC_TESTS=PASS assertions="+str(checks))
 print("P60_SYNTHETIC_ONLY_REAL_APK_NOT_READ=YES")
