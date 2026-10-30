@@ -105,6 +105,35 @@ try{
    log('INBOX_PROTOTYPE_METHODS',JSON.stringify(methods(handle.inbox)));
    log('SESSION_PROTOTYPE_METHODS',JSON.stringify(methods(handle.session)));
    log('DISPATCH_PROTOTYPE_METHODS',JSON.stringify(methods(handle.dispatch)));
+   function safeOwnShape(object){
+     if(!object || typeof object!=='object')return [];
+     return Object.keys(object)
+       .filter(key=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(key))
+       .slice(0,45).map(key=>{
+         const value=object[key];
+         return {
+           key,
+           type:Array.isArray(value)?'array':typeof value,
+           length:Array.isArray(value)||typeof value==='string'?value.length:undefined,
+           nullValue:value===null
+         };
+       });
+   }
+   for(const name of ['current','mutate','splice','append','push','shift','clear']){
+     const contract=safeMethodContract(handle.inbox,name);
+     if(contract)log('INBOX_'+name.toUpperCase()+'_CONTRACT',JSON.stringify(contract));
+   }
+   log('INBOX_OWN_SHAPE',JSON.stringify(safeOwnShape(handle.inbox)));
+   const inboxCtor=Object.getPrototypeOf(handle.inbox)?.constructor;
+   log('INBOX_CONSTRUCTOR_ARITY',typeof inboxCtor==='function'?inboxCtor.length:'MISSING');
+   const projectionService=context.get('sessionProjections');
+   log('SESSION_PROJECTION_SERVICE_TYPE',typeof projectionService);
+   log('SESSION_PROJECTION_SERVICE_METHODS',JSON.stringify(methods(projectionService)));
+   log('SESSION_PROJECTION_SERVICE_OWN_SHAPE',JSON.stringify(safeOwnShape(projectionService)));
+   for(const name of methods(projectionService).map(x=>x.name).slice(0,20)){
+     const contract=safeMethodContract(projectionService,name);
+     if(contract)log('SESSION_PROJECTION_'+name.toUpperCase()+'_CONTRACT',JSON.stringify(contract));
+   }
    for(const field of ['session','inbox','dispatch','phase','ctx']){
      const obj=handle[field];
      log('ACTUAL_HANDLE_'+field.toUpperCase()+'_TYPE',typeof obj);
