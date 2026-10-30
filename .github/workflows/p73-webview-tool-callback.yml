@@ -43,6 +43,7 @@ jobs:
           test "$P51_SIDE_BY_SIDE" = 1
           bash -n host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           bash -n host_candidate/p73_webview_callback/run_emulator_tool.sh
+          python -m pip install --no-cache-dir -r host_candidate/requirements.txt
           python host_candidate/p72_webview_access/test_exact_patch.py
           mkdir -p .p73_jvm
           javac --release 8 -d .p73_jvm host_candidate/p71_browser_runtime/src/com/dsh/android/p71/P71ToolReplyOnce.java host_candidate/p71_browser_runtime/test/com/dsh/android/p71/P71ToolReplyOnceTest.java
