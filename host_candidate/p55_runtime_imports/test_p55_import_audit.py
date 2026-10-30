@@ -8,7 +8,7 @@ import tarfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from p55_exact_original_import_audit import (
-    audit_tar, normalize_import, parse_package, candidate_values, print_report
+    audit_tar, normalize_import, normalize_entry, parse_package, candidate_values, print_report
 )
 
 test_count = 0
@@ -89,5 +89,18 @@ except ValueError as error:
     verify("P55_BLOCKED_" in str(error), "duplicate_tar_member")
 else:
     raise AssertionError("duplicate archive member accepted")
+verify(normalize_entry("deep/app/package.json", "lib/server.js") ==
+       "deep/app/lib/server.js", "bare package main resolved inside package")
+verify(normalize_entry("deep/app/package.json", "node --eval 'bad'") is None,
+       "scripts are never interpreted as file path")
+deep = scan([
+    ("many/deep/levels/engine/package.json",
+     b'{"main":"lib/server.js","scripts":{"start":"node lib/server.js"}}'),
+    ("many/deep/levels/engine/lib/server.js", b"module.exports = 0;")
+])
+verify(deep["minimum_non_dependency_package_depth"] == 4,
+       "deep root metadata relative depth")
+verify(deep["root_metadata_entrypoint_literal_exists"] == 1,
+       "deep start path exists")
 print("P55_STATIC_STARTUP_AND_NATIVE_IMPORT_SYNTHETIC_TESTS=PASS assertions="+str(test_count))
 print("P55_ORIGINAL_JS_FILE_NAMES_AND_CONTENTS_LEAKED=NO")
