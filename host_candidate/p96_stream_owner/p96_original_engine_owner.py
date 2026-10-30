@@ -102,7 +102,7 @@ def inventory(original):
                 require(len(blob)==member.size,"SHORT_MEMBER")
                 total+=len(blob);scanned+=1
                 if name.startswith("node_modules/@deepseek-ai/dsh/"):
-                    for hit in re.finditer(rb'(?:\\bfrom\\s+|\\bimport\\s*\\(|\\brequire\\s*\\()\\s*[\\\"\\\']([^\\\"\\\'\\r\\n]{1,128})[\\\"\\\']',blob):
+                    for hit in re.finditer(rb"(?:\bfrom\s+|\bimport\s*\(|\brequire\s*\()\s*['\"]([^'\"\r\n]{1,128})['\"]",blob):
                         dep=hit.group(1).decode("ascii",errors="ignore")
                         if re.fullmatch(r"[A-Za-z0-9._@/+:-]{1,128}",dep) and not dep.startswith(("http:","https:")):
                             if len(original_app_static_imports)<160:
