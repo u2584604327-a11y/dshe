@@ -1,7 +1,6 @@
 package com.dsh.android.p78;
 
 import com.dsh.android.p77.P77TarAudit;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -15,7 +14,8 @@ import java.util.Arrays;
 public final class P78ModuleSlot {
   public static final int MAX_JS_BYTES=65536;
   private final String session;
-  private final ByteArrayOutputStream buffer=new ByteArrayOutputStream(MAX_JS_BYTES);
+  private byte[] buffer;
+  private int filled;
   private String opaqueId;
   private String moduleSha;
   private int declared=-1;
@@ -47,31 +47,35 @@ public final class P78ModuleSlot {
     if(!canonicalName.endsWith(".js") && !canonicalName.endsWith(".cjs") &&
        !canonicalName.endsWith(".mjs"))return false;
     if(canonicalName.indexOf('\\')>=0||canonicalName.startsWith("/")||
-       canonicalName.contains("/../")||canonicalName.contains("/./"))
+       canonicalName.equals("..")||canonicalName.startsWith("../")||
+       canonicalName.contains("/../")||canonicalName.contains("/./")||
+       canonicalName.startsWith("./")||canonicalName.contains("//"))
       throw new IOException("P78_UNSAFE_SOURCE_NAME");
     opaqueId=hex(digest().digest(canonicalName.getBytes(StandardCharsets.UTF_8)));
     declared=(int)size;
+    buffer=new byte[declared];filled=0;
     collecting=true;
     return true;
   }
   public void accept(byte[] source,int offset,int length)throws IOException {
     if(!collecting||sealed||finished||source==null ||
        offset<0||length<0||offset>source.length-length||
-       buffer.size()+length>declared)
+       filled+length>declared)
       throw new IOException("P78_MODULE_WINDOW_BOUNDS");
-    buffer.write(source,offset,length);
+    System.arraycopy(source,offset,buffer,filled,length);
+    filled+=length;
   }
   public void endMember()throws IOException {
-    if(!collecting||finished||buffer.size()!=declared)
+    if(!collecting||finished||filled!=declared)
       throw new IOException("P78_MODULE_SHORT_READ");
     collecting=false;finished=true;
-    moduleSha=hex(digest().digest(buffer.toByteArray()));
+    moduleSha=hex(digest().digest(buffer));
   }
   /** The only production sealing function. Synthetic archives MUST NOT seal. */
   public void sealOriginal(P77TarAudit.Result source)throws IOException {
     if(source==null || !source.isExactOriginal() || !finished||
        collecting || moduleSha==null || declared<=0 ||
-       buffer.size()!=declared || sealed)
+       filled!=declared || sealed)
       throw new IOException("P78_EXACT_ORIGINAL_ROOT_OR_WINDOW_REQUIRED");
     sealed=true;
   }
@@ -91,8 +95,8 @@ public final class P78ModuleSlot {
        !requestedId.equals(opaqueId))
       throw new SecurityException("P78_NOT_AUTHORIZED_OR_ALREADY_CONSUMED");
     taken=true;
-    byte[] bytes=buffer.toByteArray();
-    buffer.reset();
+    byte[] bytes=buffer;
+    buffer=null;filled=0;
     return bytes;
   }
 }
