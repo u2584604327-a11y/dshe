@@ -293,7 +293,7 @@ def main():
     agent_serialize = method_contract(agent_body, "serializeImageAdmission")
     resolve_bindings = []
     for rhs in re.findall(
-        r"\\bresolve\\s*=\\s*((?:this\\.)?[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*){0,6})",
+        r"\bresolve\s*=\s*((?:this\.)?[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*){0,6})",
         agent_body,
     ):
         if rhs not in resolve_bindings:
