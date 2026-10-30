@@ -13,7 +13,8 @@ ext.BASE_PACKAGES=(
     "@deepseek-ai/dsh-tools",
     "@deepseek-ai/dsh-api-session-controller",
 )
-ext.MAX_PACKAGE_GRAPH=300
+ext.MAX_PACKAGE_GRAPH=400
+ext.INCLUDE_PRESENT_PEERS=True
 ext.MAX_FILES=20000
 ext.MAX_BYTES=350*1024*1024
 ext.MAX_MEMBER=12*1024*1024
