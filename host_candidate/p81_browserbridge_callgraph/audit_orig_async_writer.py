@@ -28,7 +28,7 @@ def ident(method):
  return (method.get_class_name(),method.get_name(),
          re.sub(r"\s+","",method.get_descriptor()))
 def tag(key):
- return digest(("::".join(key)).encode())[:12]
+ return digest((key[0]+"::"+key[1]+key[2]).encode())[:12]
 def resolved(output):
  m=CALL.search(output)
  if not m:return None
