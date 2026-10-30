@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Locale;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
@@ -96,12 +97,26 @@ public final class P43ProbeActivity extends Activity {
       log("P43_REAL_NODE_IN_ORIGINAL_ENGINE=NO");
       log("P43_V139_RELEASE=BLOCKED");
       if(remote!=null && p48==null) {
+        // Only a *real* ARM64 test device with the P49 exact Node lock
+        // opts into P50; x86 CI continues the P48 positive system-UID probe.
+        boolean useExactNode=false;
+        for(String abi:Build.SUPPORTED_ABIS)
+          if("arm64-v8a".equals(abi))useExactNode=true;
+        if(useExactNode){
+          try(InputStream lock=getAssets().open("p49-original-node-lock.json")){
+            useExactNode=lock.read()!=-1;
+          }catch(IOException missing){useExactNode=false;}
+        }
+        final boolean p50Enabled=useExactNode;
         p48=new P48HostProcessProbe(remote,session,new P48HostProcessProbe.Listener(){
           @Override public void report(String line){log(line);}
           @Override public void fail(String code){
             log("P48_REAL_ORIGINAL_PROCESS_PROXY=BLOCKED_"+code);
           }
-        });
+        },p50Enabled);
+        log(p50Enabled?
+            "P50_EXACT_ORIGINAL_NODE_TEST_REQUESTED=YES":
+            "P50_X86_OR_MISSING_LOCK_ORIGINAL_NODE_NOT_REQUESTED=YES");
         p48.start();
       }
     }
