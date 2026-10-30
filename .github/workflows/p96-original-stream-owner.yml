@@ -124,6 +124,8 @@ jobs:
             --original "$f" > .p96private/agent-contract.log
           grep -Fxq 'P96_AGENT_ORIGINAL_SOURCE_LOCK=PASS' .p96private/agent-contract.log
           grep -Fxq 'P96_AGENT_ORIGINAL_TOOL_DISPATCH_WIRED=NO' .p96private/agent-contract.log
+          grep '^P96_ORIGINAL_AGENTLOOP_PACKAGE_NODE_ENGINE=' \
+            .p96private/agent-contract.log
           grep '^P96_AGENT_EVENT_CONTRACT=' .p96private/agent-contract.log >> "$GITHUB_STEP_SUMMARY"
           grep '^P96_AGENT_HOOK=' .p96private/agent-contract.log | head -n 28
           echo 'P96_AGENT_FIRSTPARTY_DISPATCH_CONTRACT_SOURCE_CHECK=PASS' >> "$GITHUB_STEP_SUMMARY"
