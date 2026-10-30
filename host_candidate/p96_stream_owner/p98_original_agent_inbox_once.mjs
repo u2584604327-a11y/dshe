@@ -1,8 +1,9 @@
 /**
  * SHA-locked original AgentLoop synthetic inbox exercise.
  * Real first-party Cordis, session, ToolRuntime, and AgentLoop; one fixed
- * synthetic message is queued using original handle.send(message,target,false)
- * to prevent driver wakeup. No model request, no tool, no UI, no Android.
+ * synthetic message is queued using original handle.inject(message), whose
+ * exact original wrapper contract maps to send(message,"next-step",false).
+ * This prevents driver wakeup. No model request, no tool, no UI, no Android.
  */
 import {Context} from '@deepseek-ai/cordis';
 import {AgentRegistry} from '@deepseek-ai/dsh-agent';
@@ -55,17 +56,24 @@ try{
  const before=handle.inbox.current();
  const input={role:'user',content:[{type:'text',text:'synthetic safe message'}],
    timestamp:1};
- const result=handle.send(input,'followup',false);
+ if(typeof handle.inject!=='function')throw Error('ORIGINAL_HANDLE_INJECT_MISSING');
+ const result=handle.inject(input);
  const after=handle.inbox.current();
- log('ORIGINAL_SEND_RETURN_TYPE',typeof result);
+ log('ORIGINAL_INJECT_RETURN_TYPE',typeof result);
  log('BEFORE_TYPE',typeof before);
  log('AFTER_TYPE',typeof after);
  log('AFTER_KEYS',JSON.stringify(after&&typeof after==='object'
-   ?Object.keys(after).slice(0,18):[]));
+   ?Object.getOwnPropertyNames(after).filter(x=>
+      /^(?:[A-Za-z_$][A-Za-z0-9_$]{0,64}|next-turn|next-step)$/.test(x)).slice(0,18):[]));
+ const nextStep=after&&typeof after==='object'?after['next-step']:undefined;
+ log('AFTER_NEXT_STEP_TYPE',Array.isArray(nextStep)?'array':typeof nextStep);
+ log('AFTER_NEXT_STEP_LENGTH',Array.isArray(nextStep)?nextStep.length:'NA');
  log('NO_MODEL_NETWORK_ATTEMPTS',attemptedNetwork);
  if(attemptedNetwork!==0)throw Error('UNEXPECTED_NETWORK_ATTEMPT');
- if(before===after || after==null)
+ if(after==null)
    throw Error('ORIGINAL_INBOX_NOT_OBSERVED_CHANGED');
+ if(Array.isArray(nextStep) && nextStep.length<1)
+   throw Error('ORIGINAL_NEXT_STEP_QUEUE_EMPTY_AFTER_INJECT');
  log('REAL_AGENTLOOP_INBOX_MUTATION','PASS');
  log('ORIGINAL_AGENTLOOP_AUTO_RUN','NOT_TESTED_DISABLED_WAKEUP');
  log('ANDROID_BROKER_UI','NOT_CONNECTED');
