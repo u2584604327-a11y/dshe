@@ -45,6 +45,8 @@ def inspect(apk):
     try:
      d=json.loads(rawfile)
      entries.append({"path":name,"packageMain":d.get("main"),
+                     "nodeEngineRequirement":str(d.get("engines",{}).get("node","UNDECLARED"))[:80]
+                         if isinstance(d.get("engines"),dict) else "UNDECLARED",
                      "packageExports":sorted(d.get("exports",{}))[:25]
                          if isinstance(d.get("exports"),dict) else []})
     except (UnicodeError,ValueError):pass
