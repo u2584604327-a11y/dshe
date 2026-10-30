@@ -108,6 +108,13 @@ jobs:
             -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
             timeout 15s node .p96private/runtime/p96_original_pi_ai_probe.mjs
           echo 'P96_ORIGINAL_PI_AI_RUNTIME_IMPORT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          cp host_candidate/p96_stream_owner/p96_real_original_stream_fixture.mjs \
+            .p96private/runtime/p96_real_original_stream_fixture.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 18s node .p96private/runtime/p96_real_original_stream_fixture.mjs
+          echo 'P96_EXACT_ORIGINAL_PI_AI_STREAM_TO_LOCAL_SSE_FIXTURE=PASS' >> "$GITHUB_STEP_SUMMARY"
+
           echo 'P96_ORIGINAL_ENGINE_ARCHIVE_EXACT_SHA_AND_CATEGORIES=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Erase local original and mark release boundary
         if: always()
