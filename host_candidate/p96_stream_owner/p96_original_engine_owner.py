@@ -73,6 +73,7 @@ def inventory(original):
     owner_categories=collections.Counter()
     original_app_files=0
     original_app_entrypaths=[]
+    original_app_static_imports=[]
     ranked=[]
     with gzip.GzipFile(fileobj=io.BytesIO(raw)) as gzip_stream:
         with tarfile.open(fileobj=gzip_stream,mode="r|") as tar:
@@ -100,6 +101,12 @@ def inventory(original):
                 blob=reader.read(MAX_ANALYZED_FILE+1)
                 require(len(blob)==member.size,"SHORT_MEMBER")
                 total+=len(blob);scanned+=1
+                if name.startswith("node_modules/@deepseek-ai/dsh/"):
+                    for hit in re.finditer(rb'(?:\\bfrom\\s+|\\bimport\\s*\\(|\\brequire\\s*\\()\\s*[\\\"\\\']([^\\\"\\\'\\r\\n]{1,128})[\\\"\\\']',blob):
+                        dep=hit.group(1).decode("ascii",errors="ignore")
+                        if re.fullmatch(r"[A-Za-z0-9._@/+:-]{1,128}",dep) and not dep.startswith(("http:","https:")):
+                            if len(original_app_static_imports)<160:
+                                original_app_static_imports.append({"module":name,"import":dep})
                 found=classify(blob)
                 if not found:continue
                 owner=category(name)
@@ -122,6 +129,7 @@ def inventory(original):
       "owner_family_matches":dict(owner_categories),
       "exact_logged_original_dsh_npm_package_file_count":original_app_files,
       "original_dsh_npm_js_paths_sample":original_app_entrypaths[:32],
+      "original_dsh_npm_static_import_edges":original_app_static_imports[:80],
       "top_opaque_candidate_modules":ranked[:MAX_RESULT_ROWS],
       "chat_response_owner_proven":False,
       "original_engine_or_ui_modified":False,
