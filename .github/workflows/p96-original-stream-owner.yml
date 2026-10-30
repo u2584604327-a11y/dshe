@@ -252,6 +252,8 @@ jobs:
             -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
             timeout 12s node .p96private/agent-runtime/p98_original_agent_session_once.mjs \
             > .p96private/p98-session.log
+          grep -Fxq 'P98_ORIGINAL_SESSION_ACTUAL_SESSION_CREATED_AND_STORED=PASS' \
+            .p96private/p98-session.log
           grep -Fxq 'P98_ORIGINAL_SESSION_SOURCE_LOCKED_ONE_SHOT_PROBE=PASS' \
             .p96private/p98-session.log
           grep -Fxq 'P98_ORIGINAL_SESSION_ORIGINAL_ANDROID_ENGINE_ATTACHED=NO' \
