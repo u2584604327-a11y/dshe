@@ -25,7 +25,7 @@ function adb(args){return execFileSync("adb",args,{encoding:"utf8",timeout:15000
 function result(id){
  const log=adb(["logcat","-d","-v","tag","-s","P86_NATIVE_REPLY:I","*:S"]);
  for(const line of log.split("\n")){
-  const m=/P86_NATIVE_REPLY(?:\\([^)]*\\))?:\\s+(p86[a-z0-9]{2,24})\|(0|1)\|([A-Z][A-Z0-9_]{1,63})/.exec(line);
+  const m=/P86_NATIVE_REPLY(?:\([^)]*\))?:\s+(p86[a-z0-9]{2,24})\|(0|1)\|([A-Z][A-Z0-9_]{1,63})/.exec(line);
   if(m&&m[1]===id)return {id,ok:m[2]==="1",code:m[3],outcomeUnknown:false,retrySafe:false,
     result:m[2]==="1"?"synthetic_native_callback":null};
  }
