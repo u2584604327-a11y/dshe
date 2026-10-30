@@ -95,9 +95,17 @@ try{
        .map(x=>x[1]);
      const safeLiterals=[...source.matchAll(/['"]([A-Za-z_$][A-Za-z0-9_$-]{0,31})['"]/g)]
        .map(x=>x[1]).filter(x=>/^(?:nextTurn|nextStep|followup|steer|inject|user|assistant|tool|idle|running|aborted)$/.test(x));
+     const sendMatch=source.match(/\.send\(\s*[^,]{1,120},\s*([^,)]{1,120}),\s*([^)\n]{1,120})\)/);
+     const cleanExpr=(value)=>{
+       const v=String(value||'').trim();
+       return /^(?:true|false|[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*){0,4}|['"][A-Za-z_$][A-Za-z0-9_$-]{0,31}['"])$/.test(v)
+         ? v : 'COMPLEX_OR_UNSAFE';
+     };
      return {name,arity:method.length,parameters,
        referencedFields:[...new Set(fields)].slice(0,45),
        safeLiterals:[...new Set(safeLiterals)],
+       sendTargetExpression:sendMatch?cleanExpr(sendMatch[1]):null,
+       sendWakeupExpression:sendMatch?cleanExpr(sendMatch[2]):null,
        isAsync:method.constructor.name==='AsyncFunction'};
    }
    function safeOwnShape(object){
@@ -121,8 +129,24 @@ try{
    log('INJECT_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'inject')));
    const currentInbox=handle.inbox.current();
    log('INBOX_CURRENT_RETURN_TYPE',Array.isArray(currentInbox)?'array':typeof currentInbox);
+   log('INBOX_CURRENT_RETURN_CONSTRUCTOR',
+     /^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(currentInbox?.constructor?.name||'')
+       ?currentInbox.constructor.name:'UNKNOWN');
+   log('INBOX_CURRENT_RETURN_IS_MAP',currentInbox instanceof Map);
+   log('INBOX_CURRENT_RETURN_IS_SET',currentInbox instanceof Set);
    log('INBOX_CURRENT_RETURN_SHAPE',JSON.stringify(
      currentInbox && typeof currentInbox==='object' ? safeOwnShape(currentInbox) : []));
+   log('INBOX_CURRENT_RETURN_OWN_PROPERTY_NAMES',JSON.stringify(
+     currentInbox && typeof currentInbox==='object'
+       ?Object.getOwnPropertyNames(currentInbox)
+          .filter(x=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(x)).slice(0,45):[]));
+   log('INBOX_CURRENT_RETURN_PROTOTYPE_METHODS',JSON.stringify(methods(currentInbox)));
+   if(currentInbox instanceof Map){
+     log('INBOX_CURRENT_RETURN_MAP_SIZE',currentInbox.size);
+     log('INBOX_CURRENT_RETURN_MAP_SAFE_KEYS',JSON.stringify(
+       [...currentInbox.keys()].filter(x=>typeof x==='string' &&
+         /^[A-Za-z_$][A-Za-z0-9_$-]{0,64}$/.test(x)).slice(0,45)));
+   }
    log('SESSION_APPEND_CONTRACT',JSON.stringify(safeMethodContract(handle.session,'append')));
    log('SESSION_COMMIT_CONTRACT',JSON.stringify(safeMethodContract(handle.session,'commit')));
    log('INBOX_PROTOTYPE_METHODS',JSON.stringify(methods(handle.inbox)));
