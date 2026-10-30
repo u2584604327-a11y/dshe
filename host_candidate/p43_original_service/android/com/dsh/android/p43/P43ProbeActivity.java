@@ -278,7 +278,8 @@ public final class P43ProbeActivity extends Activity {
         getIntent()!=null && getIntent().getBooleanExtra("p79_mailbox",false)) {
       com.dsh.android.p79.P79NativeBrowserMailboxProbe.run(
           this,getIntent().getStringExtra("p79_cmd"),
-          getIntent().getStringExtra("p79_res"));
+          getIntent().getStringExtra("p79_res"),
+          getIntent().getBooleanExtra("p83_hidden_browser",false));
       return;
     }
     if("com.dsh.p51.isolatedprobe".equals(getPackageName()) &&
