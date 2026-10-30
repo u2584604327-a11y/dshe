@@ -66,8 +66,14 @@ ok(first["tree_sha256"] != reordered["tree_sha256"], "tar order commits")
 ok(safe_name("./engine/main.js") == "engine/main.js", "single root prefix")
 for name in ("../backdoor.js", "/tmp/escape.js", "root/../other.js",
              "foo\\bar.js", "foo//bar.js", "foo/./bar.js", "",
-             ".", "folder/\nsecret", "a/\x00b"):
+             ".", "folder/\nsecret"):
     reject(((name, b"test", tarfile.REGTYPE),), "unsafe name " + repr(name))
+try:
+    safe_name("a/\x00b")
+except ValueError as exc:
+    ok("P54_BLOCKED_" in str(exc), "embedded NUL direct input")
+else:
+    raise AssertionError("embedded NUL accepted")
 reject((a, a), "duplicate member")
 reject((a, ("./engine/main.js", b"x", tarfile.REGTYPE)),
        "normalized duplicate")
