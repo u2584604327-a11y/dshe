@@ -181,12 +181,15 @@ def main():
 
     constructor = method_contract(class_body, "constructor")
     prompt = method_contract(class_body, "prompt")
+    resolve_agent = method_contract(class_body, "resolveAgent")
     require(prompt is not None, "P99_PROMPT_NOT_FOUND")
+    require(resolve_agent is not None, "P99_RESOLVE_AGENT_NOT_FOUND")
 
     print("P99_SESSION_COMMAND_CLASS_TOKEN_OCCURRENCES=" + str(len(occurrences)))
     print("P99_SESSION_COMMAND_CLASS_FOUND=PASS")
     print("P99_SESSION_COMMAND_CONSTRUCTOR=" + json.dumps(constructor, sort_keys=True))
     print("P99_SESSION_COMMAND_PROMPT=" + json.dumps(prompt, sort_keys=True))
+    print("P99_SESSION_COMMAND_RESOLVE_AGENT=" + json.dumps(resolve_agent, sort_keys=True))
     print("P99_SESSION_COMMAND_SOURCE_EXPORTED=NO")
     print("P99_SESSION_COMMAND_RUNTIME_EXECUTED=NO")
 
