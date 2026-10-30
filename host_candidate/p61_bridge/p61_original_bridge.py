@@ -18,6 +18,7 @@ def ref(ins):
     m=PAT.search(ins.get_output()) if ins.get_name().startswith("invoke-") else None
     return m.groups() if m else None
 def arity(desc):
+    desc="".join(desc.split())
     i=0;n=0
     while i<len(desc):
         while i<len(desc) and desc[i]=="[":i+=1
@@ -121,7 +122,7 @@ def analyze(primary,classes,assets):
             desc="".join(candidate.get_descriptor().split())
             if desc.endswith(")"+ret):
                 return_match.append(candidate)
-            if desc=="("+params+")"+ret:
+            if desc=="("+"".join(params.split())+")"+ret:
                 exact.append(candidate)
     require(len(exact)<=1,"METHOD_DUPLICATED")
     m=exact[0] if exact else None
