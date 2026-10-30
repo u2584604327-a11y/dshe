@@ -42,8 +42,8 @@ public final class P95StreamToMessage implements P89ExistingStreamPump.Observer 
                 } else {
                     // This assistant stream ended to request tools, but the
                     // original MODEL TASK is not complete until results return.
-                    turn.awaitingToolResult();
                     onTools.onToolCalls(ready);
+                    turn.awaitingToolResult();
                 }
             }
         } catch (RuntimeException bad) {
