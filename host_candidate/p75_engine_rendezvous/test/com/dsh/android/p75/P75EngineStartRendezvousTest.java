@@ -78,6 +78,27 @@ public final class P75EngineStartRendezvousTest {
     check(!P75EngineStartRendezvous.authenticatedChildStarted(S,remote(),99055,UID),
           "late_child_after_cancel_denied");
     check(!P75EngineStartRendezvous.isArmed(),"cancel_cleanup");
+    // A real Process may exit after CHILD_STARTED but before the waiting
+    // original-engine thread resumes. It is still the correct Process object.
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    AtomicReference<Process> shortResult=new AtomicReference<>();
+    AtomicReference<Throwable> shortError=new AtomicReference<>();
+    Thread quick=new Thread(()->{
+      try{
+        P75EngineStartRendezvous.claimOnEngineThread(S);
+        shortResult.set(P75EngineStartRendezvous.startOrDeny(fixture()));
+      }catch(Throwable e){shortError.set(e);}
+    });
+    quick.start();
+    check(P75EngineStartRendezvous.awaitOriginalBridgeEntered(2000),
+          "early_exit_wait_entered");
+    P37RemoteProcess shortLived=remote();
+    check(P75EngineStartRendezvous.authenticatedChildStarted(S,shortLived,99055,UID),
+          "early_exit_child_authenticated");
+    check(shortLived.onAuthenticatedExit(99055,S,0),"early_exit_auth");
+    quick.join(2500);
+    check(!quick.isAlive() && shortError.get()==null &&
+          shortResult.get()==shortLived,"early_exit_keeps_actual_process_facade");
     System.out.println("P75_CROSS_THREAD_ENGINE_BINDER_RENDEZVOUS_JVM=PASS assertions="+count);
     System.out.println("P75_NON_MAIN_LAUNCH_WAITS_FOR_AUTHENTICATED_CHILD=PASS");
     System.out.println("P75_UNAUTHORIZED_ARGV_AND_NO_HOST_FALLBACK=PASS");
