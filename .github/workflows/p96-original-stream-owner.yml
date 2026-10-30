@@ -163,6 +163,12 @@ jobs:
             -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
             timeout 18s node .p96private/agent-runtime/p96_original_tool_runtime_execute_fixture.mjs
           echo 'P96_REAL_ORIGINAL_TOOL_RUNTIME_REGISTER_EXECUTE_NOTIFY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          cp host_candidate/p96_stream_owner/p96_original_model_toolruntime_roundtrip.mjs \
+            .p96private/agent-runtime/p96_original_model_toolruntime_roundtrip.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 20s node .p96private/agent-runtime/p96_original_model_toolruntime_roundtrip.mjs
+          echo 'P96_ORIGINAL_PI_AI_AND_TOOL_RUNTIME_CORDIS_ROUNDTRIP=PASS' >> "$GITHUB_STEP_SUMMARY"
 
           cp host_candidate/p96_stream_owner/p96_toolruntime_setup_audit.mjs \
             .p96private/agent-runtime/p96_toolruntime_setup_audit.mjs
