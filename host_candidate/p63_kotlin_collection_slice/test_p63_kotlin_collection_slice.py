@@ -2,7 +2,7 @@
 """P63 public Kotlin methods, operand validation and conservative return path."""
 import pathlib,sys
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
-from p63_kotlin_collection_slice import safe_api,ret_type,encoded_arguments,analyze_callee
+from p63_kotlin_collection_slice import safe_api,safe_public_kotlin_method,ret_type,encoded_arguments,analyze_callee
 n=0
 def check(ok,label):
     global n
@@ -27,10 +27,16 @@ def literal(r,s):return I("const-string","",[reg(r),(256,0,s)])
 check(safe_api("Lkotlin/collections/CollectionsKt;","listOf")=="LIST_OF","safe_public")
 check(safe_api("Lcom/dsh/android/Private;","listOf")=="NOT_KOTLIN_COLLECTION","no_private")
 check(ret_type("Ljava/util/List;")=="LIST","return_category")
+check(safe_public_kotlin_method("Lkotlin/collections/CollectionsKt;","listOf")=="listOf","public_method")
+check(safe_public_kotlin_method("Lcom/dsh/android/Secret;","secret")=="NON_KOTLIN_OWNER","only_std")
+check(safe_public_kotlin_method("Lkotlin/collections/CollectionsKt;","bad/slash")=="UNSAFE_PUBLIC_SYMBOL_FORMAT","symbol_allowlist")
 known=inv("listOf",[2])
 check(encoded_arguments(known,("Lkotlin/collections/CollectionsKt;","listOf","Ljava/lang/Object;"))["status"]=="ARG_REGISTERS_DECODED","one_register")
 missing=inv("listOf",[])
 check(encoded_arguments(missing,("Lkotlin/collections/CollectionsKt;","listOf","Ljava/lang/Object;"))["status"]=="UNKNOWN_REGISTER_DECODING","missing")
+zero=I("invoke-static","{}, Lkotlin/collections/CollectionsKt;->emptyList()Ljava/util/List;",[])
+check(encoded_arguments(zero,("Lkotlin/collections/CollectionsKt;","emptyList",""))["status"]=="ARG_REGISTERS_DECODED","zero_arg_static_valid")
+check(encoded_arguments(zero,("Lkotlin/collections/CollectionsKt;","emptyList",""))["argument_regs"]==[],"zero_arg_regs_empty")
 mismatch=inv("listOf",[2,3])
 check(encoded_arguments(mismatch,("Lkotlin/collections/CollectionsKt;","listOf","Ljava/lang/Object;"))["status"]=="UNKNOWN_REGISTER_COUNT_MISMATCH","mismatch")
 range_call=inv("listOf",[2],form="invoke-static/range")

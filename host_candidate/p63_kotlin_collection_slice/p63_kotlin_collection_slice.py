@@ -35,6 +35,14 @@ def safe_api(owner,name):
     if not owner.startswith("Lkotlin/collections/"):
         return "NOT_KOTLIN_COLLECTION"
     return PUBLIC_API_NAMES.get(name,"OTHER_KOTLIN_COLLECTION_API")
+def safe_public_kotlin_method(owner,name):
+    # Only symbols from Kotlin's public collections namespace, never DSH
+    # classes, private member symbols, strings, asset paths or payload data.
+    if not owner.startswith("Lkotlin/collections/"):
+        return "NON_KOTLIN_OWNER"
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$-]{0,63}", name):
+        return "UNSAFE_PUBLIC_SYMBOL_FORMAT"
+    return name
 def ret_type(ret):
     if ret=="Ljava/util/List;":return "LIST"
     if ret=="Ljava/lang/String;":return "STRING"
@@ -47,7 +55,7 @@ def encoded_arguments(ins,info):
     rs=regs(ins)
     if ins.get_name().endswith("/range"):
         return {"status":"UNKNOWN_RANGE_REGISTER_MAPPING","raw_register_operand_count":len(rs)}
-    if not ins.get_name().startswith("invoke-") or not rs:
+    if not ins.get_name().startswith("invoke-"):
         return {"status":"UNKNOWN_REGISTER_DECODING","raw_register_operand_count":len(rs)}
     member=not ins.get_name().startswith("invoke-static")
     formal=arity(info[2])
@@ -55,6 +63,8 @@ def encoded_arguments(ins,info):
     # non-register operands. Only decoded registers count here.
     if formal is None:
         return {"status":"UNKNOWN_FORMAL_ARITY","raw_register_operand_count":len(rs)}
+    if not rs and (member or formal>0):
+        return {"status":"UNKNOWN_REGISTER_DECODING","raw_register_operand_count":len(rs)}
     input_regs=rs[1:] if member else rs
     if len(input_regs)!=formal:
         return {"status":"UNKNOWN_REGISTER_COUNT_MISMATCH","raw_register_operand_count":len(rs)}
@@ -69,6 +79,7 @@ def call_summary(ops,idx,assets,targets):
     encode=encoded_arguments(ins,(owner,name,params))
     raw=encode["raw_register_operand_count"]
     result={"public_api_category":safe_api(owner,name),
+            "public_kotlin_std_method":safe_public_kotlin_method(owner,name),
             "return_descriptor_category":ret_type(ret),
             "formal_parameter_types":arity(params),
             "invoke_form":"RANGE" if ins.get_name().endswith("/range") else "NON_RANGE",
