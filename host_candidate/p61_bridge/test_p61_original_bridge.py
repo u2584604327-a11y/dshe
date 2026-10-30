@@ -20,6 +20,7 @@ target="Lcom/dsh/android/Probe;->access$make(Ljava/lang/Object;I)Ljava/util/List
 call=I("invoke-static/range","{v3 .. v4}, "+target,[R(3),R(4),(256,0,target)],count=2)
 check(ref(call)==("Lcom/dsh/android/Probe;","access$make","Ljava/lang/Object;I","Ljava/util/List;"),"reference")
 check(arity("Ljava/lang/Object;I")==2,"arity")
+check(arity("Ljava/lang/Object; I")==2,"arity_with_dex_whitespace")
 check(arity("Ljava/lang/Object")==None,"bad_descriptor")
 check(flags(0x1048)=={"synthetic":True,"bridge":True,"static":True},"flags")
 check(range_data(call)["interval_validated"],"range")
