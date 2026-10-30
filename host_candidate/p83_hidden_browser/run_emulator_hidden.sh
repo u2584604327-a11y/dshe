@@ -24,7 +24,11 @@ adb shell am start -n com.dsh.p51.isolatedprobe/com.dsh.android.p43.P43ProbeActi
 for i in $(seq 1 65);do
  logs="$(adb logcat -d -v brief -s P79_BROWSER_MAILBOX:I '*:S')"
  if grep -Fq 'P79_REAL_ANDROID_FILE_MAILBOX_WEBVIEW_REPLY_CHAIN=PASS' <<< "$logs";then break;fi
- if grep -Fq '=FAIL' <<< "$logs";then echo 'P79_NATIVE_MAILBOX=FAIL';exit 1;fi
+ if grep -Fq '=FAIL' <<< "$logs";then
+   printf '%s\n' "$logs" | grep -E 'P79_MAILBOX_[A-Z0-9_]+=FAIL|P83_[A-Z0-9_]+=FAIL' | tail -n 12 || true
+   echo 'P83_HIDDEN_BROWSER_NATIVE_MAILBOX=FAIL'
+   exit 1
+ fi
  sleep 2
 done
 logs="$(adb logcat -d -v brief -s P79_BROWSER_MAILBOX:I '*:S')"
