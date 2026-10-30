@@ -139,6 +139,10 @@ export async function probe({port = 8787} = {}) {
   const data = models.json?.data;
   result.model_count = Array.isArray(data) && data.length <= 10000
     ? data.length : null;
+  if (result.model_count === null || result.model_count === 0) {
+    result.verdict = 'MODEL_CATALOG_EMPTY_OR_INVALID';
+    return result;
+  }
   result.verdict = 'READONLY_LOCAL_API_READY_NOT_MODEL_TURN_PROOF';
   return result;
 }
