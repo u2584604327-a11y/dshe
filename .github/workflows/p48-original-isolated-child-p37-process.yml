@@ -7,7 +7,7 @@ on:
       - 'host_candidate/p48_process_proxy/**'
       - 'host_candidate/p43_original_service/**'
       - 'host_candidate/P48_ORIGINAL_HOST_ISOLATED_CHILD_P37_GATE.md'
-      - '.github/workflows/p47-original-engine-no-fallback.yml'
+      - '.github/workflows/p48-original-isolated-child-p37-process.yml'
 permissions:
   contents: read
 concurrency:
