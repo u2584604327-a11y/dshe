@@ -104,7 +104,13 @@ public final class P75EngineStartRendezvous {
       throw new IOException("P75_ENGINE_START_INTERRUPTED",cancelled);
     }
     synchronized(LOCK){
-      if(!got || p.terminal || p.proxy==null || !p.proxy.isAlive()) {
+      // ProcessBuilder.start() may return a Process whose short-lived child
+      // exited after authenticated CHILD_STARTED. REMOTE_EXIT is legitimate;
+      // identity loss, kill, buffer failure and transport loss are NOT.
+      P37RemoteProcess.TerminalReason reason=p.proxy==null ? null : p.proxy.terminalReason();
+      if(!got || p.terminal || p.proxy==null ||
+         (reason!=P37RemoteProcess.TerminalReason.RUNNING &&
+          reason!=P37RemoteProcess.TerminalReason.REMOTE_EXIT)) {
         if(pending==p)pending=null;
         p.terminal=true;
         throw new IOException("P75_CHILD_ACK_MISSING_OR_TIMEOUT");
