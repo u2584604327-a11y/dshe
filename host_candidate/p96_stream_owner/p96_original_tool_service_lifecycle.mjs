@@ -11,7 +11,7 @@ try{
  report('PROVIDER_REGISTERED', typeof owner==='function');
  report('PROVIDED_SERVICE_READ', typeof ctx.get('systemPrompt'));
  report('PROVIDED_PROPERTY_READ', typeof ctx.systemPrompt);
- const fork=ctx.plugin(ToolRuntime,{mode:'native',maxParallelSubCalls:1});
+ const fork=await ctx.plugin(ToolRuntime,{mode:'native',maxParallelSubCalls:1});
  report('FORK_TYPE',typeof fork);
  report('FORK_KEYS',Object.keys(fork||{}).slice(0,18).join(','));
  report('FORK_STATUS_INITIAL',fork?.status);
