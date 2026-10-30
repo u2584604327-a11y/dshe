@@ -3,9 +3,15 @@
  * runtime closure. Prints method names/arities and safe own-key types only.
  * No service plugin, session, network, model, tool, file, or Android action.
  */
-import {Context} from '@deepseek-ai/cordis';
+import * as Cordis from '@deepseek-ai/cordis';
+const {Context}=Cordis;
 
 const safe=(s)=>/^[A-Za-z_$][A-Za-z0-9_$]{0,70}$/.test(s);
+
+const exportedFunctions=Object.entries(Cordis)
+  .filter(([name,value])=>safe(name)&&typeof value==='function')
+  .map(([name,value])=>({name,arity:value.length}))
+  .slice(0,100);
 const methods=Object.getOwnPropertyNames(Context.prototype)
   .filter(name=>name!=='constructor'&&safe(name))
   .map(name=>{
@@ -46,6 +52,9 @@ function protoChain(value){
   }
   return out;
 }
+process.stdout.write('P99_CORDIS_EXPORTED_FUNCTIONS='+JSON.stringify(exportedFunctions)+'\n');
+process.stdout.write('P99_CORDIS_SERVICE_EXPORT_TYPE='+typeof Cordis.Service+'\n');
+process.stdout.write('P99_CORDIS_SERVICE_CONTRACT='+JSON.stringify(safeFnContract(Cordis.Service))+'\n');
 process.stdout.write('P99_CORDIS_CONTEXT_METHODS='+JSON.stringify(methods)+'\n');
 process.stdout.write('P99_CORDIS_CONTEXT_OWN_SHAPE='+JSON.stringify(own)+'\n');
 process.stdout.write('P99_CORDIS_CONTEXT_PROTO_CHAIN='+JSON.stringify(protoChain(ctx))+'\n');
