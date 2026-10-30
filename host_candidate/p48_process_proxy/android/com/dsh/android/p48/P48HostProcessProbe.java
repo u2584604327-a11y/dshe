@@ -19,8 +19,9 @@ public final class P48HostProcessProbe {
     void fail(String code);
   }
   /**
-   * P52: deliver a live java.lang.Process facade at authenticated Binder
-   * HELLO. HELLO is NOT a proven Node execve nor a production READY signal.
+   * P53: deliver a live java.lang.Process facade only AFTER an authenticated
+   * CHILD_STARTED frame emitted after isolated ProcessBuilder.start returns.
+   * HELLO alone never authorizes this callback. Neither proves Node READY.
    * Only trusted same-app code may receive the facade; no global registry.
    */
   public interface LiveProcessReceiver {
@@ -38,7 +39,7 @@ public final class P48HostProcessProbe {
   private int workerUid=-1;
   private long expectedSequence=1;
   private P37RemoteProcess proxy;
-  private boolean complete,failed,started;
+  private boolean complete,failed,started,childStartedAck;
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()) {
     @Override public void handleMessage(Message m) {
       if(failed||complete)return;
@@ -72,18 +73,39 @@ public final class P48HostProcessProbe {
                    "p48-host-stdout").start();
         new Thread(()->collect(proxy.getErrorStream(),stderr),
                    "p48-host-stderr").start();
-        if(liveProcessReceiver!=null){
-          try {liveProcessReceiver.onLiveProxy(proxy,workerUid);}
-          catch(RuntimeException rejected){
-            failClosed("P52_LIVE_PROCESS_RECEIVER_REJECTED");return;
-          }
-        }
         listener.report("P48_ORIGINAL_APP_BOUND_P37_REMOTE_PROCESS=PASS");
+        listener.report("P53_BINDER_HELLO_ALONE_NOT_CHILD_STARTED=PASS");
         return;
       }
       if(proxy==null || workerUid!=sender ||
          b.getLong("seq",-1)!=expectedSequence++){
         failClosed("P48_FRAME_SEQUENCE_OR_PROXY_MISSING");return;
+      }
+      if(m.what==P48FixedIsolatedChild.CHILD_STARTED) {
+        // P53 one-shot proof: only this isolated UID + session + strict
+        // monotone seq can attest ProcessBuilder.start() returned.
+        // This is NOT a production Node READY nor pid/SELinux attestation.
+        if(childStartedAck || b.containsKey("data") ||
+           b.containsKey("exitCode")) {
+          failClosed("P53_DUPLICATE_OR_MALFORMED_CHILD_STARTED");return;
+        }
+        childStartedAck=true;
+        if(liveProcessReceiver!=null){
+          try {liveProcessReceiver.onLiveProxy(proxy,workerUid);}
+          catch(RuntimeException rejected){
+            failClosed("P53_CHILD_STARTED_RECEIVER_REJECTED");return;
+          }
+        }
+        listener.report("P53_AUTHENTICATED_CHILD_STARTED_BEFORE_PROCESS_HANDOFF=PASS");
+        return;
+      }
+      // Explicit pre-start FAIL is allowed to terminate without ever
+      // handing out a fake Process. Stdout/stderr/exit are never allowed.
+      if(m.what==P48FixedIsolatedChild.FAIL){
+        failClosed("P48_WORKER_CHILD_DENIED_OR_FAILED");return;
+      }
+      if(!childStartedAck){
+        failClosed("P53_FRAME_BEFORE_REAL_CHILD_STARTED");return;
       }
       if(m.what==P48FixedIsolatedChild.STDOUT ||
          m.what==P48FixedIsolatedChild.STDERR) {
@@ -100,8 +122,6 @@ public final class P48HostProcessProbe {
           failClosed("P48_EXIT_REJECTED");return;
         }
         verifyAsync(exit);
-      }else if(m.what==P48FixedIsolatedChild.FAIL) {
-        failClosed("P48_WORKER_CHILD_DENIED_OR_FAILED");
       }else failClosed("P48_UNRECOGNIZED_MESSAGE");
     }
   });
@@ -164,7 +184,7 @@ public final class P48HostProcessProbe {
       final boolean completeReaders=done;
       main.post(()->{
         if(failed||complete)return;
-        if(!completeReaders || exit!=0 || proxy==null ||
+        if(!childStartedAck || !completeReaders || exit!=0 || proxy==null ||
            proxy.terminalReason()!=P37RemoteProcess.TerminalReason.REMOTE_EXIT||
            proxy.isAlive() ||
            !stdout.get().equals(exactOriginalArm64Node?
