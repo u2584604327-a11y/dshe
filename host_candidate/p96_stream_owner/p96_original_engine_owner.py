@@ -30,10 +30,15 @@ def file_hash(path):
     return h.hexdigest()
 def category(path):
     low=path.lower()
-    if "node_modules/@deepseek-ai/dsh/" in low:return "ORIGINAL_DSH_NODE_MODULE"
-    if "/dist/" in low or "/frontend/" in low or "/web/" in low or "/public/" in low:
+    # Node dependencies often live at the archive ROOT and contain /dist/.
+    # Never mistake third-party SDK builds for our original DSH frontend.
+    if low.startswith("node_modules/@deepseek-ai/dsh/") or \
+       "/node_modules/@deepseek-ai/dsh/" in low:
+        return "ORIGINAL_DSH_NODE_MODULE"
+    if low.startswith("node_modules/") or "/node_modules/" in low:
+        return "THIRD_PARTY_NODE_MODULE"
+    if any(hint in low for hint in ("/frontend/","/web/","/public/","/ui/")):
         return "WEB_OR_FRONTEND_ASSET"
-    if "/node_modules/" in low:return "THIRD_PARTY_NODE_MODULE"
     return "ORIGINAL_OTHER"
 def classify(blob):
     found={name:sum(needle in blob for needle in patterns)
@@ -99,7 +104,7 @@ def inventory(original):
                 # Private CI only: canonical archive member names are needed
                 # to find an actual original patch target. No source content,
                 # home paths, credentials or website/account data are emitted.
-                if entry["score"]>=20 and owner!="THIRD_PARTY_NODE_MODULE":
+                if entry["score"]>=14 and owner!="THIRD_PARTY_NODE_MODULE":
                     if len(name)<=180 and re.fullmatch(r"[A-Za-z0-9._@/+-]+",name):
                         entry["source_member"]=name
                 ranked.append(entry)
@@ -119,6 +124,8 @@ def selftest():
     assert c["SSE_DELTA_TOOL"]==1 and c["ORIGINAL_HTTP_CHAT"]==1
     assert category("a/node_modules/@deepseek-ai/dsh/lib/index.js")=="ORIGINAL_DSH_NODE_MODULE"
     assert category("a/node_modules/third_party/foo.js")=="THIRD_PARTY_NODE_MODULE"
+    assert category("node_modules/@google/genai/dist/web/index.mjs")=="THIRD_PARTY_NODE_MODULE"
+    assert category("node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js")=="THIRD_PARTY_NODE_MODULE"
     assert normalized_name("./a/ok.js")=="a/ok.js"
     try:normalized_name("../foo.js")
     except ValueError:pass
