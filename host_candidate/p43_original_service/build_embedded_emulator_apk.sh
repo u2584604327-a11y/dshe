@@ -98,7 +98,8 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p67_authenticated_handoff/src/com/dsh/android/p67/P67AuthenticatedHandoff.java \
   host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java \
   host_candidate/p71_browser_runtime/src/com/dsh/android/p71/P71ToolReplyOnce.java \
-  host_candidate/p71_browser_runtime/android/com/dsh/android/p71/P71WebViewProfileProbe.java
+  host_candidate/p71_browser_runtime/android/com/dsh/android/p71/P71WebViewProfileProbe.java \
+  host_candidate/p73_webview_callback/android/com/dsh/android/p73/P73BrowserToolCallbackProbe.java
 jar cf "$DIR/p43.jar" -C "$DIR/classes" .
 "$BT/d8" --min-api 26 --lib "$SDK/platforms/android-35/android.jar" \
   --output "$DIR/dex" "$DIR/p43.jar"
@@ -175,7 +176,8 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p67/P67AuthenticatedHandoff;',
                   'Lcom/dsh/android/p68/P68AndroidBinderIntake;',
                   'Lcom/dsh/android/p71/P71ToolReplyOnce;',
-                  'Lcom/dsh/android/p71/P71WebViewProfileProbe;'):
+                  'Lcom/dsh/android/p71/P71WebViewProfileProbe;',
+                  'Lcom/dsh/android/p73/P73BrowserToolCallbackProbe;'):
   if expected not in names:raise RuntimeError('P43_SERVICE_CLASS_MISSING')
 print("P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA")
 print("P43_ORIGINAL_P40_TRAMPOLINE_AND_P43_CLASSES3=PASS_STATIC")

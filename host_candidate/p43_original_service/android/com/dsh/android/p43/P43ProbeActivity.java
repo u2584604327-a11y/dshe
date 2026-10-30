@@ -204,6 +204,11 @@ public final class P43ProbeActivity extends Activity {
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
     if("com.dsh.p51.isolatedprobe".equals(getPackageName()) &&
+        getIntent()!=null && getIntent().getBooleanExtra("p73_tools",false)) {
+      com.dsh.android.p73.P73BrowserToolCallbackProbe.run(this);
+      return;
+    }
+    if("com.dsh.p51.isolatedprobe".equals(getPackageName()) &&
         getIntent()!=null && getIntent().getBooleanExtra("p72_accessor",false)) {
       try {
         Class<?> browser=Class.forName(
