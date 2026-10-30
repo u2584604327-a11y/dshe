@@ -32,7 +32,7 @@ try {
         type:'object',properties:{value:{type:'string'}},
         required:['value'],additionalProperties:false
       },
-      render:value=>[{type:'text',text:value.value}]
+      render:()=>[{type:'text',text:'fixture-read-success'}]
     },
     async execute(args) {
       executions++;
