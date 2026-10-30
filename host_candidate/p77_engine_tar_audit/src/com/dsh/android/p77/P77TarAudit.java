@@ -1,5 +1,7 @@
 package com.dsh.android.p77;
 
+import com.dsh.android.p78.P78ModuleSlot;
+
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -106,12 +108,17 @@ public final class P77TarAudit {
     return name;
   }
   private static void consume(InputStream in,long bytes,MessageDigest md)throws IOException{
+    consume(in,bytes,md,null);
+  }
+  private static void consume(InputStream in,long bytes,MessageDigest md,
+                              P78ModuleSlot selected)throws IOException{
     byte[] buffer=new byte[65536];long remaining=bytes;
     while(remaining>0){
       int n=in.read(buffer,0,(int)Math.min(remaining,buffer.length));
       if(n<0)throw new EOFException("P77_TRUNCATED_MEMBER");
       if(n==0)continue;
       if(md!=null)md.update(buffer,0,n);
+      if(selected!=null)selected.accept(buffer,0,n);
       remaining-=n;
     }
   }
@@ -146,6 +153,10 @@ public final class P77TarAudit {
     return attrs;
   }
   public static Result inspectGzip(InputStream source)throws IOException{
+    return inspectGzip(source,null);
+  }
+  public static Result inspectGzip(InputStream source,
+                                    P78ModuleSlot selectedModule)throws IOException{
     try(GZIPInputStream tar=new GZIPInputStream(source,65536)){
       MessageDigest root=digest();
       root.update("P54_IMMUTABLE_ENGINE_TREE_V1\0".getBytes(StandardCharsets.US_ASCII));
@@ -200,8 +211,11 @@ public final class P77TarAudit {
           total+=size;
           if(total>MAX_TOTAL)throw new IOException("P77_TOTAL_DECOMPRESSED_LIMIT");
         }
+        boolean selected=selectedModule!=null &&
+             selectedModule.begin(name,directory,size);
         MessageDigest member=digest();
-        consume(tar,size,member);
+        consume(tar,size,member,selected?selectedModule:null);
+        if(selected)selectedModule.endMember();
         pad(tar,size);
         byte[] path=name.getBytes(StandardCharsets.UTF_8);
         root.update(ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN)
@@ -215,7 +229,9 @@ public final class P77TarAudit {
       }
       if(longName!=null||!pending.isEmpty())
         throw new IOException("P77_DANGLING_EXTENDED_HEADER");
-      return new Result(members,addons,total,hex(root.digest()));
+      Result complete=new Result(members,addons,total,hex(root.digest()));
+      if(selectedModule!=null)selectedModule.sealOriginal(complete);
+      return complete;
     }
   }
 }
