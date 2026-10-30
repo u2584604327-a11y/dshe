@@ -51,7 +51,7 @@ def call_info(ins):
     return found.groups() if found else None
 
 def constructor_mode(info):
-    if info is None: return "UNKNOWN"
+    if info is None: return None
     cls,name,args=info
     if cls!="Ljava/lang/ProcessBuilder;" or name!="<init>":
         return None
