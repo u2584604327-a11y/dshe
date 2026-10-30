@@ -114,6 +114,8 @@ jobs:
             -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
             timeout 18s node .p96private/runtime/p96_real_original_stream_fixture.mjs
           echo 'P96_EXACT_ORIGINAL_PI_AI_STREAM_TO_LOCAL_SSE_FIXTURE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          python host_candidate/p96_stream_owner/p96_pi_ai_tool_context.py \
+            .p96private/runtime
           cp host_candidate/p96_stream_owner/p96_real_original_tool_fixture.mjs \
             .p96private/runtime/p96_real_original_tool_fixture.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
