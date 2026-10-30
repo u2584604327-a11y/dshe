@@ -39,5 +39,18 @@ process.stdout.write('P99_CORDIS_ROOT_PROTO_CHAIN='+JSON.stringify(protoChain(ct
 process.stdout.write('P99_CORDIS_REGISTRY_PROTO_CHAIN='+JSON.stringify(protoChain(ctx.registry))+'\n');
 process.stdout.write('P99_CORDIS_CONTEXT_GET_TYPE='+typeof ctx.get+'\n');
 process.stdout.write('P99_CORDIS_CONTEXT_PLUGIN_TYPE='+typeof ctx.plugin+'\n');
+
+let injectResult='NOT_ATTEMPTED';
+try{
+  const sentinel=Object.freeze({kind:'p99-synthetic-sentinel'});
+  ctx.registry.inject('p99Synthetic',sentinel);
+  const resolved=ctx.get('p99Synthetic');
+  injectResult=resolved===sentinel?'PASS':'RESOLVED_DIFFERENT_OBJECT';
+}catch(e){
+  injectResult='BLOCKED_'+String(e?.code||e?.name||'UNKNOWN').replace(/[^A-Za-z0-9_]/g,'').slice(0,80);
+}finally{
+  try{ctx.registry.delete('p99Synthetic');}catch{}
+}
+process.stdout.write('P99_CORDIS_SYNTHETIC_REGISTRY_INJECT='+injectResult+'\n');
 process.stdout.write('P99_CORDIS_CONTEXT_NO_SERVICE_STARTED=PASS\n');
 if(typeof ctx.dispose==='function')try{await ctx.dispose();}catch{}
