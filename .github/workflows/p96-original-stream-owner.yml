@@ -57,6 +57,8 @@ jobs:
         run: |
           set -euo pipefail
           node --test host_candidate/p96_stream_owner/omnigate_local_preflight.test.mjs
+          node --test host_candidate/p96_stream_owner/original_dsh_omnigate_profile.test.mjs
+          echo 'P96_ORIGINAL_PI_AI_CONFIG_PROFILE_NO_SECRET_AND_NO_GUESS=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P96_DSH_8787_HOST_AND_OVERLAY_READONLY_PREFLIGHT=PASS' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify exact private original and perform read-only check
