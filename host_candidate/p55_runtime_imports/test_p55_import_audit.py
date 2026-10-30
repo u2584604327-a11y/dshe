@@ -68,8 +68,6 @@ verify(normalize_import("engine/main.js", "../outside.js") == "outside.js",
        "lexical_relative_path_not_emitted")
 verify(normalize_import("engine/main.js", "../../../escape.js") is None,
        "escape_root_rejected")
-verify(parse_package(b'{"main":"x","main":"y"}') is None if False else True,
-       "explicit duplicate json tested below")
 try:
     parse_package(b'{"main":"x","main":"y"}')
 except ValueError as error:
