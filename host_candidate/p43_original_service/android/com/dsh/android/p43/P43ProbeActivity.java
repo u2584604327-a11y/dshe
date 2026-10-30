@@ -147,8 +147,8 @@ public final class P43ProbeActivity extends Activity {
       Method method=klass.getDeclaredMethod("start",ProcessBuilder.class);
       // Under no circumstance should this return a host Process.
       Object unexpectedlyStarted=method.invoke(null,candidate);
-      if(unexpectedlyStarted instanceof Process)
-        ((Process)unexpectedlyStarted).destroyForcibly();
+      if(unexpectedlyStarted instanceof java.lang.Process)
+        ((java.lang.Process)unexpectedlyStarted).destroyForcibly();
       return false;
     }catch(InvocationTargetException result) {
       Throwable cause=result.getCause();
