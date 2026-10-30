@@ -135,6 +135,31 @@ def method_contract(class_body, method_name):
         if len(assignments) >= 40:
             break
 
+    call_assignments = []
+    for field, chain, method, args in re.findall(
+        r"this\.([A-Za-z_$][A-Za-z0-9_$]{0,80})\s*=\s*((?:[A-Za-z_$][A-Za-z0-9_$]{0,80}\.){1,5})([A-Za-z_$][A-Za-z0-9_$]{0,80})\s*\(([^)]{0,1000})\)",
+        body,
+    ):
+        chain = chain.rstrip(".")
+        ids = [
+            x for x in re.findall(r"\b([A-Za-z_$][A-Za-z0-9_$]{0,80})\b", args)
+            if safe_ident(x) and x not in {"true", "false", "null", "undefined", "await"}
+        ]
+        item = {
+            "field": field,
+            "callee": chain + "." + method,
+            "argIdentifiers": list(dict.fromkeys(ids))[:40],
+        }
+        if item not in call_assignments:
+            call_assignments.append(item)
+        if len(call_assignments) >= 30:
+            break
+
+    param_use_counts = {
+        p: len(re.findall(r"\b" + re.escape(p) + r"\b", body))
+        for p in params
+    }
+
     object_calls = []
     for root, method, args in re.findall(
         r"\b([A-Za-z_$][A-Za-z0-9_$]{0,80})\.([A-Za-z_$][A-Za-z0-9_$]{0,80})\s*\(([^)]{0,900})\)",
@@ -211,6 +236,8 @@ def method_contract(class_body, method_name):
         "directCallShapes": direct_call_shapes,
         "safeLiterals": safe_literals,
         "assignments": assignments,
+        "callAssignments": call_assignments,
+        "paramUseCounts": param_use_counts,
         "sourceSize": len(body),
     }
 
