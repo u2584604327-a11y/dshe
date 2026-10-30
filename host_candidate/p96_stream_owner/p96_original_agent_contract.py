@@ -93,6 +93,9 @@ def inspect(apk):
      "packageMain":e.get("packageMain"),
      "packageExports":e.get("packageExports",[]),
      "markers":e.get("markers",{})},sort_keys=True))
+ for e in entries:
+  if e["path"]=="node_modules/@deepseek-ai/dsh-agent-loop/package.json":
+   print("P96_ORIGINAL_AGENTLOOP_PACKAGE_NODE_ENGINE="+e.get("nodeEngineRequirement","UNDECLARED"))
  print("P96_AGENT_ORIGINAL_TOOL_DISPATCH_WIRED=NO")
  print("P96_AGENT_SOURCE_MUTATION=NO")
 if __name__=="__main__":
