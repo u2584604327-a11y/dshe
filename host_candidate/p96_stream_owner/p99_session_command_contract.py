@@ -244,6 +244,15 @@ def main():
     agent_resolve = method_contract(agent_body, "resolveAgent")
     agent_selection = method_contract(agent_body, "selectionFor")
     agent_serialize = method_contract(agent_body, "serializeImageAdmission")
+    resolve_bindings = []
+    for rhs in re.findall(
+        r"\\bresolve\\s*=\\s*((?:this\\.)?[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*){0,6})",
+        agent_body,
+    ):
+        if rhs not in resolve_bindings:
+            resolve_bindings.append(rhs)
+        if len(resolve_bindings) >= 12:
+            break
 
     print("P99_SESSION_COMMAND_CLASS_TOKEN_OCCURRENCES=" + str(occurrences))
     print("P99_SESSION_COMMAND_CLASS_FOUND=PASS")
@@ -253,6 +262,7 @@ def main():
     print("P99_AGENT_CONTROLLER_CLASS_TOKEN_OCCURRENCES=" + str(agent_occurrences))
     print("P99_AGENT_CONTROLLER_CONSTRUCTOR=" + json.dumps(agent_constructor, sort_keys=True))
     print("P99_AGENT_CONTROLLER_RESOLVE_AGENT=" + json.dumps(agent_resolve, sort_keys=True))
+    print("P99_AGENT_CONTROLLER_RESOLVE_BINDINGS=" + json.dumps(resolve_bindings, sort_keys=True))
     print("P99_AGENT_CONTROLLER_SELECTION_FOR=" + json.dumps(agent_selection, sort_keys=True))
     print("P99_AGENT_CONTROLLER_SERIALIZE_IMAGE=" + json.dumps(agent_serialize, sort_keys=True))
     print("P99_SESSION_COMMAND_SOURCE_EXPORTED=NO")
