@@ -10,6 +10,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import java.io.File;
 import java.io.FileInputStream;
+import com.dsh.android.p77.P77TarAudit;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -61,12 +62,14 @@ public final class P76EngineArchiveFdProbe {
            !android.os.Process.isIsolatedUid(m.sendingUid) ||
            !session.equals(b.getString("session")) ||
            !b.getBoolean("verified",false) ||
+           !b.getBoolean("p77_full_tree_verified",false) ||
            b.getLong("bytes",-1)!=expectedBytes[0] ||
            expectedSha[0]==null || !expectedSha[0].equals(b.getString("sha256"))) {
           terminal[0]=true;listener.fail("P76_REPLY_UID_SESSION_OR_HASH_MISMATCH");return;
         }
         terminal[0]=true;
         listener.report("P76_REAL_ORIGINAL_ENGINE_GZIP_READONLY_FD_ISOLATED_SHA=PASS");
+        listener.report("P77_REAL_ORIGINAL_TAR_FULL_TREE_SHA_MATCH_IN_ISOLATED_UID=PASS");
         listener.report("P76_ISOLATED_SOURCE_ARCHIVE_NOT_EXECUTED=YES");
         listener.report("P76_PRODUCTION_NODE_MODULE_LOADING_READY=NOT_WIRED");
       }
@@ -160,7 +163,8 @@ public final class P76EngineArchiveFdProbe {
     } catch(RuntimeException badParcel){return;}
     if(fd==null)return;
     new Thread(()->{
-      try(InputStream in=new ParcelFileDescriptor.AutoCloseInputStream(fd)){
+      try(ParcelFileDescriptor.AutoCloseInputStream in=
+          new ParcelFileDescriptor.AutoCloseInputStream(fd)){
         MessageDigest digest=sha();
         long count=0;byte[] buffer=new byte[65536];int n,first=-1,second=-1;
         while((n=in.read(buffer))!=-1){
@@ -173,9 +177,16 @@ public final class P76EngineArchiveFdProbe {
         if(count!=expectedLength || first!=0x1f || second!=0x8b ||
            !expectedHash.equals(hex(digest.digest())))
           throw new IOException("P76_WORKER_HASH_OR_SIZE_MISMATCH");
+        // The same O_RDONLY unlinked FD is seekable; no raw file path,
+        // extraction, chmod or Node script execution is involved.
+        in.getChannel().position(0);
+        P77TarAudit.Result original=P77TarAudit.inspectGzip(in);
+        if(!original.isExactOriginal())
+          throw new IOException("P77_ORIGINAL_FULL_TREE_HASH_MISMATCH");
         Bundle b=new Bundle();b.putString("session",session);
         b.putLong("bytes",count);b.putString("sha256",expectedHash);
         b.putBoolean("verified",true);
+        b.putBoolean("p77_full_tree_verified",true);
         Message ack=Message.obtain(null,ACK);ack.setData(b);reply.send(ack);
       }catch(Exception failure){
         // Never send an unverified success; no private archive bytes or paths
