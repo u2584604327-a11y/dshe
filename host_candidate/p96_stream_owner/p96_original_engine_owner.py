@@ -74,6 +74,8 @@ def inventory(original):
     original_app_files=0
     original_app_entrypaths=[]
     original_app_static_imports=[]
+    original_boot_packages=collections.Counter()
+    original_boot_imports=[]
     ranked=[]
     with gzip.GzipFile(fileobj=io.BytesIO(raw)) as gzip_stream:
         with tarfile.open(fileobj=gzip_stream,mode="r|") as tar:
@@ -89,6 +91,8 @@ def inventory(original):
                 if name.endswith(".node"):add_ons+=1
                 if name.startswith("node_modules/@deepseek-ai/dsh/"):
                     original_app_files+=1
+                for prefix in ("node_modules/@deepseek-ai/dsh-app-boot/", "node_modules/@deepseek-ai/dsh-http-proxy/"):
+                    if name.startswith(prefix):original_boot_packages[prefix]+=1
                     if name.endswith((".js",".mjs",".cjs")) and len(original_app_entrypaths)<120:
                         original_app_entrypaths.append(name)
                 if not name.endswith((".js",".mjs",".cjs",".html")):continue
@@ -107,6 +111,15 @@ def inventory(original):
                         if re.fullmatch(r"[A-Za-z0-9._@/+:-]{1,128}",dep) and not dep.startswith(("http:","https:")):
                             if len(original_app_static_imports)<160:
                                 original_app_static_imports.append({"module":name,"import":dep})
+                if name.startswith(("node_modules/@deepseek-ai/dsh-app-boot/", "node_modules/@deepseek-ai/dsh-http-proxy/")):
+                    if len(original_boot_imports)<120:
+                        imports=[]
+                        for hit in re.finditer(rb"(?:\\bfrom\\s+|\\bimport\\s*\\(|\\brequire\\s*\\()\\s*['\\\"]([^'\\\"\\r\\n]{1,128})['\\\"]",blob):
+                            dep=hit.group(1).decode("ascii",errors="ignore")
+                            if re.fullmatch(r"[A-Za-z0-9._@/+:-]{1,128}",dep) and not dep.startswith(("http:","https:")):
+                                imports.append(dep)
+                            if len(imports)>=16:break
+                        original_boot_imports.append({"path":name,"imports":imports,"signals":classify(blob)})
                 found=classify(blob)
                 if not found:continue
                 owner=category(name)
@@ -130,6 +143,8 @@ def inventory(original):
       "exact_logged_original_dsh_npm_package_file_count":original_app_files,
       "original_dsh_npm_js_paths_sample":original_app_entrypaths[:32],
       "original_dsh_npm_static_import_edges":original_app_static_imports[:80],
+      "original_boot_package_file_counts":dict(original_boot_packages),
+      "original_boot_package_entry_imports":original_boot_imports[:40],
       "top_opaque_candidate_modules":ranked[:MAX_RESULT_ROWS],
       "chat_response_owner_proven":False,
       "original_engine_or_ui_modified":False,
