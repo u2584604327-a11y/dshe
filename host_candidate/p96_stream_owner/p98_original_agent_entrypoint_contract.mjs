@@ -24,13 +24,22 @@ function info(klass,method){
   const body=Function.prototype.toString.call(fn);
   const declared=body.match(/^[^(]*\(([^)]{0,450})\)/)?.[1]??'';
   const params=declared.split(',').map(x=>x.trim()).filter(safe).slice(0,12);
-  const propertyNames=[...body.matchAll(/(?:this|args|options|input|params|session|turn)\.([A-Za-z_$][A-Za-z0-9_$]{0,70})/g)]
+  const propertyNames=[...body.matchAll(/(?:this|args|options|input|params|session|turn|request|signal)\??\.([A-Za-z_$][A-Za-z0-9_$]{0,70})/g)]
     .map(x=>x[1]).filter(safe);
   const calls=[...body.matchAll(/(?:this\.)?([A-Za-z_$][A-Za-z0-9_$]{0,70})\s*\(/g)]
     .map(x=>x[1]).filter(x=>safe(x)&&!['if','for','while','switch','catch'].includes(x));
+  const safeLiterals=[...body.matchAll(/['"]([A-Za-z_$][A-Za-z0-9_$-]{0,40})['"]/g)]
+    .map(x=>x[1]).filter(x=>/^(?:user|assistant|tool|prompt|follow|session|agent|message|content|text|timezone|timeZone|clientTimeZone|principal|id|sessionId|agentId|command|commands|next-turn|next-step)$/.test(x));
+  const requestFields=[...body.matchAll(/request\??\.([A-Za-z_$][A-Za-z0-9_$]{0,70})/g)]
+    .map(x=>x[1]).filter(safe);
+  const signalFields=[...body.matchAll(/signal\??\.([A-Za-z_$][A-Za-z0-9_$]{0,70})/g)]
+    .map(x=>x[1]).filter(safe);
   return {
     method,arity:fn.length,params,
     propertyNames:[...new Set(propertyNames)].slice(0,40),
+    requestFields:[...new Set(requestFields)].slice(0,40),
+    signalFields:[...new Set(signalFields)].slice(0,20),
+    safeLiterals:[...new Set(safeLiterals)].slice(0,30),
     calledIdentifiers:[...new Set(calls)].slice(0,45),
     isAsync:fn.constructor?.name==='AsyncFunction',
     sourceSize:body.length
@@ -38,7 +47,11 @@ function info(klass,method){
 }
 for(const [label,klass,focus] of selected){
   const methods=focus.map(x=>info(klass,x)).filter(Boolean);
-  process.stdout.write('P98_ORIGINAL_ENTRYPOINT='+label+' '+JSON.stringify(methods)+'\n');
+  const staticKeys=Object.getOwnPropertyNames(klass)
+    .filter(x=>safe(x)&&!['length','name','prototype'].includes(x)).slice(0,25);
+  process.stdout.write('P98_ORIGINAL_ENTRYPOINT='+label+' '+JSON.stringify({
+    constructorArity:klass.length,staticKeys,methods
+  })+'\n');
 }
 process.stdout.write('P98_ORIGINAL_ENTRYPOINT_SOURCE_ONLY=PASS\n');
 process.stdout.write('P98_ORIGINAL_SESSION_CREATED=NO\n');
