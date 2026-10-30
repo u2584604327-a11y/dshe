@@ -62,6 +62,22 @@ try{
    log('CREATE_RETURN_TYPE',typeof handle);
    log('CREATE_RETURN_KEYS',Object.keys(handle||{}).slice(0,15).join(','));
    log('SESSION_STORE_GET_TYPE',typeof context.get('sessions')?.get(id));
+   const stored=context.get('sessions')?.get(id);
+   if(!stored || typeof handle!=='object' || handle.id!==id)
+      throw new Error('ORIGINAL_SESSION_NOT_CREATED_OR_PERSISTED');
+   const ownFunctions=Object.entries(handle).filter(([key,value])=>
+     typeof value==='function'&&/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(key))
+     .map(([key,value])=>({name:key,arity:value.length})).slice(0,45);
+   log('ACTUAL_HANDLE_FUNCTIONS',JSON.stringify(ownFunctions));
+   for(const field of ['session','inbox','dispatch','phase','ctx']){
+     const obj=handle[field];
+     log('ACTUAL_HANDLE_'+field.toUpperCase()+'_TYPE',typeof obj);
+     if(obj && typeof obj==='object'){
+       const keys=Object.keys(obj).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,30);
+       log('ACTUAL_HANDLE_'+field.toUpperCase()+'_KEYS',JSON.stringify(keys));
+     }
+   }
+   log('ACTUAL_SESSION_CREATED_AND_STORED','PASS');
  }catch(error){
    const code=String(error?.code||error?.name||'UNKNOWN')
      .replace(/[^a-zA-Z0-9_]/g,'').slice(0,80);
@@ -88,4 +104,8 @@ log('CREATE_OUTCOME',outcome);
 log('MODEL_POST_COUNT','0_EXPECTED');
 log('ORIGINAL_ANDROID_ENGINE_ATTACHED','NO');
 log('ORIGINAL_AGENT_AUTOCONTINUATION','NOT_TESTED');
+if(outcome!=='CREATED_WITHOUT_USER_PROMPT'){
+  log('ACTUAL_SESSION_CREATED_AND_STORED','FAIL');
+  process.exitCode=2;
+}
 log('SOURCE_LOCKED_ONE_SHOT_PROBE','PASS');
