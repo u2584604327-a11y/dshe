@@ -5,10 +5,11 @@ import json
 import pathlib
 import sys
 import tarfile
+import zipfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from p55_exact_original_import_audit import (
-    audit_tar, normalize_import, normalize_entry, parse_package, candidate_values, print_report
+    audit_tar, normalize_import, normalize_entry, parse_package, candidate_values, scan_original_apk_js_assets
 )
 
 test_count = 0
@@ -105,5 +106,25 @@ verify(deep["minimum_non_dependency_package_depth"] == 4,
        "deep root metadata relative depth")
 verify(deep["root_metadata_entrypoint_literal_exists"] == 1,
        "deep start path exists")
+asset_bytes = io.BytesIO()
+with zipfile.ZipFile(asset_bytes, "w") as z:
+    z.writestr("assets/boot.js",
+      "const x = require('./side.js'); const y='engine.bin';"
+      "const z='node_modules'; process.argv;"
+      "createServer(()=>{});")
+    z.writestr("assets/side.js", "module.exports=1;")
+asset_bytes.seek(0)
+with zipfile.ZipFile(asset_bytes) as z:
+    asset_shape = scan_original_apk_js_assets(z)
+verify(asset_shape["apk_js_source_examined"] == 2,
+       "apk JS scan only permitted source")
+verify(asset_shape["apk_js_import_targets_present_inside_apk"] == 1,
+       "apk import relative from actual asset directory")
+verify(asset_shape["apk_js_source_containing_node_modules"] == 1,
+       "only aggregate Node modules string count")
+verify(asset_shape["apk_js_source_containing_engine_bin"] == 1,
+       "aggregate engine gzip string count")
+verify(asset_shape["apk_js_source_containing_argv_access"] == 1,
+       "bounded argv access count")
 print("P55_STATIC_STARTUP_AND_NATIVE_IMPORT_SYNTHETIC_TESTS=PASS assertions="+str(test_count))
 print("P55_ORIGINAL_JS_FILE_NAMES_AND_CONTENTS_LEAKED=NO")
