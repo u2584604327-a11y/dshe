@@ -91,10 +91,10 @@ def inventory(original):
                 if name.endswith(".node"):add_ons+=1
                 if name.startswith("node_modules/@deepseek-ai/dsh/"):
                     original_app_files+=1
-                for prefix in ("node_modules/@deepseek-ai/dsh-app-boot/", "node_modules/@deepseek-ai/dsh-http-proxy/"):
-                    if name.startswith(prefix):original_boot_packages[prefix]+=1
                     if name.endswith((".js",".mjs",".cjs")) and len(original_app_entrypaths)<120:
                         original_app_entrypaths.append(name)
+                for prefix in ("node_modules/@deepseek-ai/dsh-app-boot/", "node_modules/@deepseek-ai/dsh-http-proxy/"):
+                    if name.startswith(prefix):original_boot_packages[prefix]+=1
                 if not name.endswith((".js",".mjs",".cjs",".html")):continue
                 if member.size>MAX_ANALYZED_FILE:
                     skipped+=1;continue
