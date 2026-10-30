@@ -48,3 +48,14 @@ report('AGENT_LOOP_SERVICE',typeof ctx.get('agentLoop'));
 report('ACTUAL_MODEL_TOOL_AUTOCONTINUATION','NOT_TESTED');
 report('ANDROID_ENGINE_MANAGER_CONNECTED','NO');
 report('ORIGINAL_SERVICE_PROVIDERS_SOURCE_LOCKED','YES');
+report('NODE_MAJOR',process.versions.node.split('.')[0]);
+report('PROMISE_WITH_RESOLVERS',typeof Promise.withResolvers);
+const agent=ctx.get('agentLoop');
+if (missing.length!==0 || typeof agent?.create!=='function' ||
+    typeof Promise.withResolvers!=='function') {
+  report('REAL_AGENTLOOP_SERVICE_READY','FAIL');
+  process.exitCode=2;
+} else {
+  report('REAL_AGENTLOOP_SERVICE_READY','PASS');
+}
+
