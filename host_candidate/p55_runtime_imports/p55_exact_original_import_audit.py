@@ -285,6 +285,55 @@ def audit_tar(stream):
     return counts
 
 
+def scan_original_apk_js_assets(z):
+    """Aggregate-only shapes from APK JS assets, not proof of engine entry."""
+    c = collections.Counter()
+    members = [x for x in z.infolist()
+               if x.filename.startswith("assets/")
+               and x.filename.lower().endswith((".js", ".mjs", ".cjs"))
+               and not x.is_dir()]
+    require(len(members) <= 32, "TOO_MANY_APK_JS_ASSETS")
+    known = set(z.namelist())
+    for item in members:
+        if item.file_size > MAX_JS_BYTES:
+            c["apk_js_oversize"] += 1
+            continue
+        body = z.read(item)
+        require(len(body) == item.file_size, "APK_JS_SHORT_READ")
+        try:
+            source = body.decode("utf-8")
+        except UnicodeError:
+            c["apk_js_not_utf8"] += 1
+            continue
+        c["apk_js_source_examined"] += 1
+        c["apk_js_source_bytes_examined"] += len(body)
+        c["apk_js_source_containing_node_modules"] += int(
+            "node_modules" in source)
+        c["apk_js_source_containing_engine_bin"] += int(
+            "engine.bin" in source)
+        c["apk_js_source_containing_runtime_bootstrap"] += int(
+            "bootstrap" in source.lower())
+        c["apk_js_source_containing_spawn_api"] += int(bool(re.search(
+            r"\b(?:spawn|execFile|fork|ProcessBuilder)\s*\(", source)))
+        c["apk_js_source_containing_http_server_api"] += int(bool(re.search(
+            r"\b(?:createServer|\.listen|WebSocketServer)\s*\(", source)))
+        c["apk_js_source_containing_argv_access"] += int(
+            "process.argv" in source)
+        c["apk_js_platform_condition_hints"] += len(RE_PLATFORM.findall(source))
+        c["apk_js_native_loader_hints"] += len(RE_NATIVE_LOADER.findall(source))
+        c["apk_js_native_addon_strings"] += len(RE_NODE_STRING.findall(source))
+        for match in RE_LITERAL_IMPORT.finditer(source):
+            c["apk_js_literal_imports"] += 1
+            spec = match.group(2)
+            if spec.startswith(("./", "../")):
+                guess = normalize_import(item.filename, spec)
+                if guess is not None and guess in known:
+                    c["apk_js_import_targets_present_inside_apk"] += 1
+                else:
+                    c["apk_js_relative_imports_unresolved"] += 1
+    return c
+
+
 def run_exact_original(apk):
     # P54 full SHA/TAR audit is an independent prerequisite, not a shortcut.
     immutable = exact_engine(apk)
@@ -305,6 +354,7 @@ def run_exact_original(apk):
                 asset_counts["apk_asset_shell_members"] += 1
             elif name.endswith(".zip"):
                 asset_counts["apk_asset_zip_members"] += 1
+        apk_asset_js_shapes = scan_original_apk_js_assets(z)
         encoded = z.read(ENGINE_ENTRY)
     with gzip.GzipFile(fileobj=io.BytesIO(encoded), mode="rb") as g:
         with tarfile.open(fileobj=g, mode="r|") as t:
@@ -313,6 +363,7 @@ def run_exact_original(apk):
             "SECOND_PASS_MEMBER_COUNT_CHANGED")
     require(summary["native_addon_members"] == 9, "ADDON_MEMBER_COUNT_CHANGED")
     summary.update(asset_counts)
+    summary.update(apk_asset_js_shapes)
     return summary
 
 
@@ -333,6 +384,19 @@ def print_report(c):
         "non_dependency_conventional_name_cli",
         "apk_asset_js_members", "apk_asset_json_members",
         "apk_asset_shell_members", "apk_asset_zip_members",
+        "apk_js_source_examined", "apk_js_source_bytes_examined",
+        "apk_js_oversize", "apk_js_not_utf8",
+        "apk_js_source_containing_node_modules",
+        "apk_js_source_containing_engine_bin",
+        "apk_js_source_containing_runtime_bootstrap",
+        "apk_js_source_containing_spawn_api",
+        "apk_js_source_containing_http_server_api",
+        "apk_js_source_containing_argv_access",
+        "apk_js_platform_condition_hints",
+        "apk_js_native_loader_hints",
+        "apk_js_native_addon_strings", "apk_js_literal_imports",
+        "apk_js_import_targets_present_inside_apk",
+        "apk_js_relative_imports_unresolved",
         "source_or_json_over_limit", "candidate_source_bytes_examined",
         "package_json_members", "rootish_package_metadata",
         "non_dependency_package_metadata", "node_modules_package_metadata",
