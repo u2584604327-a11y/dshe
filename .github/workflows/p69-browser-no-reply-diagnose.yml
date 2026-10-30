@@ -51,6 +51,9 @@ jobs:
           grep -Fxq 'P69_EXACT_SIGNED_V138_AND_P6_ASSET_INSPECTION=PASS' .p69_private/categorical.log
           grep -Fxq 'P69_ORIGINAL_SOURCE_OR_STRING_LITERALS_PRINTED=NO' .p69_private/categorical.log
           grep '^P69_BROWSER_' .p69_private/categorical.log | head -n 45
+          python host_candidate/p69_browser_reply/detail_mailbox.py --original "$original" --p6 "$p6" > .p69_private/backend_skeleton.log
+          grep -Fxq 'P69_MASKED_LITERAL_VALUES_LEAKED=NO' .p69_private/backend_skeleton.log
+          grep '^P69_TOOL_BACKEND_' .p69_private/backend_skeleton.log | head -n 44
           echo 'P69_ORIGINAL_BROWSER_ASSET_PROVENANCE=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P69_BROWSER_NO_REPLY_ROOT_CAUSE=STATIC_TRIAGE_ONLY' >> "$GITHUB_STEP_SUMMARY"
           echo 'P69_ANDROID_RUNTIME_TOOL_REPLY=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
