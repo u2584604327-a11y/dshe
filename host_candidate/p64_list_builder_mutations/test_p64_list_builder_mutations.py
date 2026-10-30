@@ -2,7 +2,7 @@
 """P64 list mutation categories and conservative branch control regression."""
 import pathlib,sys
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
-from p64_list_builder_mutations import classify_any,mutation_record,summarize
+from p64_list_builder_mutations import classify_any,safe_file_api,mutation_record,summarize
 n=0
 def check(x,label):
     global n
@@ -38,6 +38,9 @@ check([x for x in x["detected_public_kotlin_builder_call_order"]]==["createListB
 check(x["mutator_calls"][0]["operation"]=="add","mutation_detect")
 check(x["mutator_calls"][0]["bounded_element_input_categories"].get("CONST_JS_SHAPED")==1,"literal_category_only")
 check(x["build_input_bounded_origin"]["original_build_list_input_origin"]=="OPAQUE_INVOKE_RESULT","builder_origin_opaque")
+check(x["mutator_calls"][0]["bounded_element_producer_families"].get("DIRECT_CONST_JS_SHAPED")==1,"literal_producer_category")
+check(safe_file_api(call("Ljava/io/File;","getAbsolutePath","","Ljava/lang/String;",[3],"invoke-virtual"))=="FILE_ABSOLUTE_PATH","safe_file_public_api")
+check(safe_file_api(call("Lcom/dsh/android/Secret;","getAbsolutePath","","Ljava/lang/String;",[3]))=="NOT_FILESYSTEM_HELPER","dont_expose_app_method")
 check(x["original_argv_elements_and_order_proven"]==False,"no_runtime_claim")
 branched=ops[:3]+[(5,I("if-eqz",r=[r(0)],off=3))]+ops[3:]
 y=summarize(M(branched),set(),False)
