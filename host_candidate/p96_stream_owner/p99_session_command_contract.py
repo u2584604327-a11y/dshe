@@ -136,6 +136,23 @@ def method_contract(class_body, method_name):
     }
 
 
+def find_class_body(source, class_name, required_method):
+    occurrences = list(re.finditer(r"\b" + re.escape(class_name) + r"\b", source))
+    require(bool(occurrences), "P99_CLASS_TOKEN_NOT_FOUND_" + class_name)
+    for match in occurrences:
+        search_end = min(len(source), match.end() + 800)
+        brace = source.find("{", match.end(), search_end)
+        if brace < 0:
+            continue
+        try:
+            candidate = balanced_block(source, brace)
+        except Exception:
+            continue
+        if method_contract(candidate, required_method) is not None:
+            return candidate, len(occurrences)
+    raise RuntimeError("P99_CLASS_BODY_NOT_FOUND_" + class_name)
+
+
 def extract_source(apk):
     require(apk.stat().st_size == SOURCE_BYTES, "APK_SIZE_DRIFT")
     require(file_hash(apk) == SOURCE_SHA, "APK_SHA_DRIFT")
@@ -162,22 +179,7 @@ def main():
     args = parser.parse_args()
     source = extract_source(pathlib.Path(args.original))
 
-    class_body = None
-    occurrences = list(re.finditer(r"\b" + re.escape(CLASS_NAME) + r"\b", source))
-    require(bool(occurrences), "P99_CLASS_TOKEN_NOT_FOUND")
-    for match in occurrences:
-        search_end = min(len(source), match.end() + 600)
-        brace = source.find("{", match.end(), search_end)
-        if brace < 0:
-            continue
-        try:
-            candidate = balanced_block(source, brace)
-        except Exception:
-            continue
-        if method_contract(candidate, "prompt") is not None:
-            class_body = candidate
-            break
-    require(class_body is not None, "P99_CLASS_BODY_NOT_FOUND")
+    class_body, occurrences = find_class_body(source, CLASS_NAME, "prompt")
 
     constructor = method_contract(class_body, "constructor")
     prompt = method_contract(class_body, "prompt")
@@ -185,11 +187,22 @@ def main():
     require(prompt is not None, "P99_PROMPT_NOT_FOUND")
     require(resolve_agent is not None, "P99_RESOLVE_AGENT_NOT_FOUND")
 
-    print("P99_SESSION_COMMAND_CLASS_TOKEN_OCCURRENCES=" + str(len(occurrences)))
+    agent_body, agent_occurrences = find_class_body(source, "ApiSessionAgentController", "resolveAgent")
+    agent_constructor = method_contract(agent_body, "constructor")
+    agent_resolve = method_contract(agent_body, "resolveAgent")
+    agent_selection = method_contract(agent_body, "selectionFor")
+    agent_serialize = method_contract(agent_body, "serializeImageAdmission")
+
+    print("P99_SESSION_COMMAND_CLASS_TOKEN_OCCURRENCES=" + str(occurrences))
     print("P99_SESSION_COMMAND_CLASS_FOUND=PASS")
     print("P99_SESSION_COMMAND_CONSTRUCTOR=" + json.dumps(constructor, sort_keys=True))
     print("P99_SESSION_COMMAND_PROMPT=" + json.dumps(prompt, sort_keys=True))
     print("P99_SESSION_COMMAND_RESOLVE_AGENT=" + json.dumps(resolve_agent, sort_keys=True))
+    print("P99_AGENT_CONTROLLER_CLASS_TOKEN_OCCURRENCES=" + str(agent_occurrences))
+    print("P99_AGENT_CONTROLLER_CONSTRUCTOR=" + json.dumps(agent_constructor, sort_keys=True))
+    print("P99_AGENT_CONTROLLER_RESOLVE_AGENT=" + json.dumps(agent_resolve, sort_keys=True))
+    print("P99_AGENT_CONTROLLER_SELECTION_FOR=" + json.dumps(agent_selection, sort_keys=True))
+    print("P99_AGENT_CONTROLLER_SERIALIZE_IMAGE=" + json.dumps(agent_serialize, sort_keys=True))
     print("P99_SESSION_COMMAND_SOURCE_EXPORTED=NO")
     print("P99_SESSION_COMMAND_RUNTIME_EXECUTED=NO")
 
