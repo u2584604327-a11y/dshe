@@ -42,6 +42,7 @@ jobs:
           test "$(gh api "repos/$GH_REPO" --jq .visibility)" = private
           test "$P47_NO_HOST_FALLBACK" = 1
           test "$P49_NODE_STAGE" = 1
+          bash -n host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           python -m py_compile host_candidate/p49_original_node_stage.py
           python -m py_compile host_candidate/p47_no_fallback/p47_gate.py
           ! grep -Ei 'Runtime\.getRuntime\(\)\.exec\(|\bsu\b|magisk|kernelsu' \
