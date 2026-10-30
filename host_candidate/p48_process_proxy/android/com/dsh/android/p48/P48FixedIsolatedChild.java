@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class P48FixedIsolatedChild {
   public static final int START=481, HELLO=482, STDOUT=483, STDERR=484,
-      EXIT=485, FAIL=486, STOP=487, KILL=488;
+      EXIT=485, FAIL=486, STOP=487, KILL=488, CHILD_STARTED=489;
   private final Messenger host;
   private final String session;
   private long sequence;
@@ -72,6 +72,9 @@ public final class P48FixedIsolatedChild {
           .directory(new File("/")).start();
       child=p;
       if(stopped){p.destroyForcibly();throw new IOException("P48_STOP_BEFORE_EXEC");}
+      // P53: irreversible ordering: Binder HELLO is only a session
+      // greeting, never a claim that ProcessBuilder.start() succeeded.
+      emit(CHILD_STARTED,null,0);
       // /system/bin/id emits a short UID and no stderr. waitFor is bounded
       // before draining; this executable never outputs more than 128 bytes.
       if(!p.waitFor(8,TimeUnit.SECONDS)) {
