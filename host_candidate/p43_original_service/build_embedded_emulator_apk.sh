@@ -79,6 +79,14 @@ else
   python host_candidate/p43_original_service/inject_original_manifest.py verify \
     "$DIR/rebuilt-unsigned.apk"
 fi
+# P74 only for permissionless disposable sidecar: original production P47
+# source remains unchanged and rejects all starts by default.
+P74_P47_GATE_SOURCE=host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java
+if test "${P74_FIXTURE_ENGINE_BRIDGE:-0}" = 1; then
+  test "${P51_SIDE_BY_SIDE:-0}" = 1 || { echo 'P74_BLOCKED_NO_SIDECAR';exit 1; }
+  P74_P47_GATE_SOURCE="$DIR/p74src/com/dsh/android/p47/P47LaunchGate.java"
+  python host_candidate/p74_engine_fixture/patch_disposable_p47_gate.py     host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java     "$P74_P47_GATE_SOURCE"
+fi
 # A third dex guarantees no replacement of original classes.dex/classes2.dex.
 javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   -d "$DIR/classes" \
@@ -89,7 +97,7 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p43_original_service/android/com/dsh/android/p43/P46FixtureData.java \
   host_candidate/p43_original_service/android/com/dsh/android/p43/P46HostBroker.java \
   host_candidate/p43_original_service/android/com/dsh/android/p43/P46WorkerBundle.java \
-  host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java \
+  "$P74_P47_GATE_SOURCE" \
   host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java \
   host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48FixedIsolatedChild.java \
   host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48HostProcessProbe.java \
@@ -99,7 +107,8 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java \
   host_candidate/p71_browser_runtime/src/com/dsh/android/p71/P71ToolReplyOnce.java \
   host_candidate/p71_browser_runtime/android/com/dsh/android/p71/P71WebViewProfileProbe.java \
-  host_candidate/p73_webview_callback/android/com/dsh/android/p73/P73BrowserToolCallbackProbe.java
+  host_candidate/p73_webview_callback/android/com/dsh/android/p73/P73BrowserToolCallbackProbe.java \
+  host_candidate/p74_engine_fixture/src/com/dsh/android/p74/P74OriginalEngineFixtureHandoff.java
 jar cf "$DIR/p43.jar" -C "$DIR/classes" .
 "$BT/d8" --min-api 26 --lib "$SDK/platforms/android-35/android.jar" \
   --output "$DIR/dex" "$DIR/p43.jar"
@@ -177,7 +186,8 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p68/P68AndroidBinderIntake;',
                   'Lcom/dsh/android/p71/P71ToolReplyOnce;',
                   'Lcom/dsh/android/p71/P71WebViewProfileProbe;',
-                  'Lcom/dsh/android/p73/P73BrowserToolCallbackProbe;'):
+                  'Lcom/dsh/android/p73/P73BrowserToolCallbackProbe;',
+                  'Lcom/dsh/android/p74/P74OriginalEngineFixtureHandoff;'):
   if expected not in names:raise RuntimeError('P43_SERVICE_CLASS_MISSING')
 print("P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA")
 print("P43_ORIGINAL_P40_TRAMPOLINE_AND_P43_CLASSES3=PASS_STATIC")

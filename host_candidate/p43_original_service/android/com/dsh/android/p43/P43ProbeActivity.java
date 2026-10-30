@@ -126,6 +126,25 @@ public final class P43ProbeActivity extends Activity {
           log("P52_LIVE_P37_JAVA_PROCESS_FROM_ISOLATED_BINDER=PASS");
           log("P52_PRODUCTION_ENGINEMANAGER_PROCESS_HANDOFF=NOT_WIRED");
           log("P52_BINDER_HELLO_IS_EXECVE_READY=NO");
+          if(getIntent()!=null && getIntent().getBooleanExtra("p74_bridge",false)){
+            try {
+              com.dsh.android.p74.P74OriginalEngineFixtureHandoff.stageFromAuthenticatedChild(
+                  (P37RemoteProcess)process,isolatedUid,session,
+                  android.os.Process::isIsolatedUid);
+              Class<?> originalBridge=Class.forName("com.dsh.android.p40.P40ProcessBridge");
+              java.lang.reflect.Method originalStart=originalBridge.getDeclaredMethod(
+                  "start",ProcessBuilder.class);
+              ProcessBuilder fixed=new ProcessBuilder("/system/bin/id","-u");
+              fixed.directory(new File("/"));
+              Object returned=originalStart.invoke(null,fixed);
+              if(returned!=process)
+                throw new IllegalStateException("P74_ORIGINAL_BRIDGE_WRONG_PROCESS_IDENTITY");
+              log("P74_REAL_ORIGINAL_P40_MAIN_DEX_RETURNED_AUTH_P37=PASS");
+              log("P74_ENGINE_FIXTURE_READY_NOT_PRODUCTION_READY=YES");
+            }catch(Exception | LinkageError invalid) {
+              throw new IllegalStateException("P74_ORIGINAL_MAIN_DEX_LEASE_HANDOFF_FAILED",invalid);
+            }
+          }
         },true); // P68 test-only Binder handoff, not production EngineManager.
         log(p50Enabled?
             "P50_EXACT_ORIGINAL_NODE_TEST_REQUESTED=YES":
