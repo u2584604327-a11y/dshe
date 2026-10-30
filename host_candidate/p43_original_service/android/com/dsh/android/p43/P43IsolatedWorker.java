@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Arrays;
+import com.dsh.android.p48.P48FixedIsolatedChild;
 /**
  * P43 separate isolated-Service test inside original DSH APK only.
  * No Node, files, networking, credentials or capabilities.
@@ -15,8 +16,35 @@ import java.util.Arrays;
 public final class P43IsolatedWorker extends Service {
   public static final int INIT=431, HELLO=432;
   private boolean used=false;
+  private int acceptedHostUid=-1;
+  private String acceptedSession;
+  private P48FixedIsolatedChild p48Child;
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()) {
     @Override public void handleMessage(Message message) {
+      // P48 is a second, separately sequenced one-shot session, allowed ONLY
+      // after P43/P44/P45/P46's verified original-host initiation.
+      if(message.what==P48FixedIsolatedChild.START) {
+        if(!used || p48Child!=null || !android.os.Process.isIsolated() ||
+           message.sendingUid!=acceptedHostUid || message.replyTo==null)
+          return;
+        String p48Session;
+        try{p48Session=message.getData().getString("session");}
+        catch(RuntimeException e){return;}
+        if(acceptedSession==null||!acceptedSession.equals(p48Session))return;
+        p48Child=new P48FixedIsolatedChild(message.replyTo,acceptedSession);
+        p48Child.start();
+        return;
+      }
+      if(message.what==P48FixedIsolatedChild.STOP ||
+         message.what==P48FixedIsolatedChild.KILL) {
+        if(message.sendingUid!=acceptedHostUid || p48Child==null)return;
+        String session;
+        try{session=message.getData().getString("session");}
+        catch(RuntimeException e){return;}
+        if(!acceptedSession.equals(session))return;
+        p48Child.stop(message.what==P48FixedIsolatedChild.KILL);
+        return;
+      }
       if(message.what!=INIT || used || !android.os.Process.isIsolated() ||
          message.replyTo==null ||
          message.sendingUid!=getApplicationInfo().uid) return;
@@ -67,6 +95,8 @@ public final class P43IsolatedWorker extends Service {
         assetHash=b.toString();
       }catch(Exception hashingFailure){return;}
       used=true;
+      acceptedHostUid=message.sendingUid;
+      acceptedSession=session;
       Bundle response=new Bundle();
       response.putString("session",session);
       response.putString("p44_profile_hash",profile.fingerprint());
@@ -84,6 +114,12 @@ public final class P43IsolatedWorker extends Service {
       try {message.replyTo.send(reply);} catch(RemoteException ignored){}
     }
   });
+  @Override public void onDestroy(){
+    if(p48Child!=null)p48Child.stop(true);
+    acceptedSession=null;
+    acceptedHostUid=-1;
+    super.onDestroy();
+  }
   @Override public IBinder onBind(Intent intent){
     if(!android.os.Process.isIsolated())throw new SecurityException("P43_ISOLATED_ONLY");
     return inbox.getBinder();
