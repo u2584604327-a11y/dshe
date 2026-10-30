@@ -190,7 +190,13 @@ public final class P43ProbeActivity extends Activity {
   }
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
-    label=new TextView(this);label.setTextSize(16);setContentView(label);
+    label=new TextView(this);label.setTextSize(16);
+    label.setTextIsSelectable(true);setContentView(label);
+    if("com.dsh.p51.isolatedprobe".equals(getPackageName())) {
+      log("P51_SIDE_BY_SIDE_TEST_NOT_ORIGINAL_DSH=YES");
+      log("P51_DOES_NOT_READ_OR_CHANGE_ORIGINAL_DSH_DATA=YES");
+      log("P51_LONG_PRESS_TO_COPY_STATUS=YES");
+    }
     if(!assertExactBridgeFailClosed()){
       fail("P47_NO_FALLBACK_BRIDGE_NOT_VERIFIED");
       return;
