@@ -273,6 +273,7 @@ jobs:
             -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
             timeout 12s node .p96private/agent-runtime/p98_original_agent_inbox_once.mjs \
             > .p96private/p98-inbox.log
+          cat .p96private/p98-inbox.log
           grep -Fxq 'P98_ORIGINAL_INBOX_REAL_AGENTLOOP_INBOX_MUTATION=PASS' \
             .p96private/p98-inbox.log
           grep -Fxq 'P98_ORIGINAL_INBOX_NO_MODEL_NETWORK_ATTEMPTS=0' \
