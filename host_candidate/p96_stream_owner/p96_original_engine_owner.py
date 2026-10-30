@@ -114,7 +114,7 @@ def inventory(original):
                 if name.startswith(("node_modules/@deepseek-ai/dsh-app-boot/", "node_modules/@deepseek-ai/dsh-http-proxy/")):
                     if len(original_boot_imports)<120:
                         imports=[]
-                        for hit in re.finditer(rb"(?:\\bfrom\\s+|\\bimport\\s*\\(|\\brequire\\s*\\()\\s*['\\\"]([^'\\\"\\r\\n]{1,128})['\\\"]",blob):
+                        for hit in re.finditer(rb"(?:\bfrom\s+|\bimport\s*\(|\brequire\s*\()\s*['\"]([^'\"\r\n]{1,128})['\"]",blob):
                             dep=hit.group(1).decode("ascii",errors="ignore")
                             if re.fullmatch(r"[A-Za-z0-9._@/+:-]{1,128}",dep) and not dep.startswith(("http:","https:")):
                                 imports.append(dep)
