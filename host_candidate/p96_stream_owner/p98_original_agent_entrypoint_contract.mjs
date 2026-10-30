@@ -73,7 +73,9 @@ function safeConstructorContract(klass){
   const params=(m?.[1]||'').split(',').map(x=>x.trim()).filter(safe).slice(0,10);
   const assigns=[...source.matchAll(/this\.([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*=\s*([A-Za-z_$][A-Za-z0-9_$]{0,64})/g)]
     .map(x=>({field:x[1],from:x[2]})).filter(x=>safe(x.field)&&safe(x.from)).slice(0,20);
-  return {params,assigns};
+  const newAssignments=[...source.matchAll(/this\.([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*=\s*new\s+([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*\(/g)]
+    .map(x=>({field:x[1],className:x[2]})).filter(x=>safe(x.field)&&safe(x.className)).slice(0,20);
+  return {params,assigns,newAssignments};
 }
 for(const [label,klass,focus] of selected){
   const methods=focus.map(x=>info(klass,x)).filter(Boolean);
