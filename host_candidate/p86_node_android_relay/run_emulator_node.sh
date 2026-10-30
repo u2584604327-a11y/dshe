@@ -21,14 +21,14 @@ adb logcat -c
 adb shell am start -n com.dsh.p51.isolatedprobe/com.dsh.android.p43.P43ProbeActivity \
  --ez p86_external true --es p86_cmd "$cmd" --es p86_res "$res" >/dev/null
 for i in $(seq 1 40);do
- lines="$(adb logcat -d -v brief -s P86_NATIVE_REPLY:I '*:S')"
+ lines="$(adb logcat -d -v tag -s P86_NATIVE_REPLY:I '*:S')"
  if grep -Fq 'P86_NATIVE_WEBVIEW_READY' <<< "$lines";then break;fi
  sleep 1
 done
 grep -Fq 'P86_NATIVE_WEBVIEW_READY' <<< "$lines"
 node host_candidate/p86_node_android_relay/test_p86_node_android.mjs \
  .p86_private/p70-browser.js "$cmd" "$res"
-lines="$(adb logcat -d -v brief -s P86_NATIVE_REPLY:I '*:S')"
+lines="$(adb logcat -d -v tag -s P86_NATIVE_REPLY:I '*:S')"
 test "$(grep -Ec 'P86_NATIVE_REPLY: p86[a-z0-9]+\|[01]\|[A-Z_]+' <<< "$lines")" -eq 6
 grep -Fq 'P86_NATIVE_REPLY: p86postcomment01|0|NATIVE_USER_CONFIRMATION_REQUIRED' <<< "$lines"
 echo 'P86_REAL_NODE_P6_TO_ANDROID35_WEBVIEW_WITH_TEST_RELAY=PASS'

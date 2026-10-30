@@ -23,9 +23,9 @@ const seen=new Set(),waiting=new Set();let stopping=false,failure=null,count=0;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function adb(args){return execFileSync("adb",args,{encoding:"utf8",timeout:15000,maxBuffer:256*1024});}
 function result(id){
- const log=adb(["logcat","-d","-v","brief","-s","P86_NATIVE_REPLY:I","*:S"]);
+ const log=adb(["logcat","-d","-v","tag","-s","P86_NATIVE_REPLY:I","*:S"]);
  for(const line of log.split("\n")){
-  const m=/P86_NATIVE_REPLY:\s+(p86[a-z0-9]{2,24})\|(0|1)\|([A-Z][A-Z0-9_]{1,63})/.exec(line);
+  const m=/P86_NATIVE_REPLY(?:\\([^)]*\\))?:\\s+(p86[a-z0-9]{2,24})\|(0|1)\|([A-Z][A-Z0-9_]{1,63})/.exec(line);
   if(m&&m[1]===id)return {id,ok:m[2]==="1",code:m[3],outcomeUnknown:false,retrySafe:false,
     result:m[2]==="1"?"synthetic_native_callback":null};
  }
@@ -58,7 +58,12 @@ try{
   if(failure)throw failure;
   const id="p86"+action.toLowerCase()+"01";
   const answer=await scope.send(home,id,{action,id:"forged-by-model"},14000);
-  assert.equal(answer.id,id,"Node-owned request ID must prevail");
+  if(answer.id!==id){
+   const safeCode=String(answer?.code||"MISSING_CODE").replace(/[^A-Z0-9_]/g,"").slice(0,80);
+   console.error("P86_TEST_REPLY_ID_MISMATCH_CATEGORY="+safeCode);
+   console.error("P86_TEST_ADB_RELAY_FAILURE="+(failure?"YES":"NO"));
+   throw new Error("P86_NODE_REPLY_ID_NOT_RETURNED");
+  }
   if(action==="postComment"){
     assert.equal(answer.ok,false);assert.equal(answer.code,"NATIVE_USER_CONFIRMATION_REQUIRED");
   }else{
