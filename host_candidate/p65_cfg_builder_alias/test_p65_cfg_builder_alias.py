@@ -42,13 +42,13 @@ root=[
  (16,I("move-result-object",regs=[reg(8)])),
  (18,I("return-object",regs=[reg(8)]))
 ]
-# Both branches add exactly one at distinct static sites; no site is universal.
+# One branch executes an optional add, then BOTH paths execute the final add.
 result=trace_paths(Method(root))
 check(result["path_enumeration_completed"],"complete_branches")
 check(result["path_endings_explored"]==2,"two_routes")
 check(result["static_add_calls"]==2,"static_add_sites")
-check(result["add_sites_conditional_across_explored_paths"]==2,"conditional_site_count")
-check(result["add_sites_present_on_each_explored_path"]==0,"no_unconditional")
+check(result["add_sites_conditional_across_explored_paths"]==1,"conditional_site_count")
+check(result["add_sites_present_on_each_explored_path"]==1,"one_common_add_site")
 check(result["all_paths_return_original_builder_build_result_proven"],"built_alias")
 check(result["no_opaque_builder_escape_on_every_path_proven"],"no_escape")
 check(result["complete_original_argv_values_and_order_proven"] is False,"no_argv_claim")
