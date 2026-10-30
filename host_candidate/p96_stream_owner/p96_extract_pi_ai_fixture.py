@@ -19,6 +19,7 @@ from p96_original_engine_owner import SOURCE_BYTES, SOURCE_SHA, file_hash, requi
 BASE_PACKAGES = ("@earendil-works/pi-ai",)
 MAX_FILES = 7000
 MAX_PACKAGE_GRAPH = 100
+INCLUDE_PRESENT_PEERS = False
 MAX_BYTES = 120 * 1024 * 1024
 MAX_MEMBER = 8 * 1024 * 1024
 EXTENSIONS = (".js", ".cjs", ".mjs", ".json")
@@ -72,7 +73,15 @@ def audit_extract(apk, out):
     while frontier:
         pkg=frontier.pop()
         manifest=packages.get(pkg,{})
-        for dep in manifest.get("dependencies",{}):
+        # First-party DSH's peer-declared Cordis services must also be
+        # present when probing the actual original AgentLoop/ToolRuntime.
+        dependencies=dict(manifest.get("dependencies",{}))
+        if INCLUDE_PRESENT_PEERS:
+            dependencies.update({
+                name: value for name, value in manifest.get("peerDependencies",{}).items()
+                if name in packages
+            })
+        for dep in dependencies:
             if dep not in needed:
                 needed.add(dep);frontier.append(dep)
         require(len(needed)<=MAX_PACKAGE_GRAPH,"DEPENDENCY_GRAPH_TOO_WIDE")
