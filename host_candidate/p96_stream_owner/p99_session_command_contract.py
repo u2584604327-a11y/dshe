@@ -258,6 +258,26 @@ def main():
     args = parser.parse_args()
     source = extract_source(pathlib.Path(args.original))
 
+    imports = []
+    for names, spec in re.findall(
+        r"import\s*\{([^}]{1,1200})\}\s*from\s*['\"](@deepseek-ai/[^'\"]{1,120})['\"]",
+        source,
+    ):
+        imported = []
+        for raw in names.split(","):
+            part = raw.strip()
+            if not part:
+                continue
+            local = part.split(" as ")[-1].strip()
+            original = part.split(" as ")[0].strip()
+            if safe_ident(local) and safe_ident(original):
+                imported.append({"imported": original, "local": local})
+        if imported:
+            imports.append({"package": spec, "names": imported[:30]})
+        if len(imports) >= 60:
+            break
+    print("P99_SESSION_CONTROLLER_IMPORTS=" + json.dumps(imports, sort_keys=True))
+
     class_body, occurrences = find_class_body(source, CLASS_NAME, "prompt")
 
     constructor = method_contract(class_body, "constructor")
