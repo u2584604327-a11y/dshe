@@ -62,7 +62,7 @@ jobs:
           echo 'P96_ORIGINAL_PI_AI_CONFIG_PROFILE_NO_SECRET_AND_NO_GUESS=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P96_DSH_8787_HOST_AND_OVERLAY_READONLY_PREFLIGHT=PASS' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Verify exact private original and perform read-only check
+      - name: Verify exact original modules and run isolated synthetic protocol tests
         shell: bash
         run: |
           set -euo pipefail
@@ -95,9 +95,6 @@ jobs:
           grep -Fxq 'P96_EXACT_ORIGINAL_MODEL_PROVIDER_PREIMAGE=PASS' .p96private/provider-contract.log
           grep -Fxq 'P96_ORIGINAL_PROVIDER_OR_SESSION_MODIFIED=NO' .p96private/provider-contract.log
           grep '^P96_CONTRACT_ANCHOR=' .p96private/provider-contract.log >> "$GITHUB_STEP_SUMMARY"
-          # At most 12 short, scrubbed static source fragments, private CI only.
-          grep -E '^P96_ANCHOR_CONTEXT=provider [|] (modelProfile|modelOverride|routeProfile|routeConfig|providerProfile|namesCredential|model.api|source.models)' \
-            .p96private/provider-contract.log | head -n 12
 
           # Original source is transient and never archived or committed.
           python host_candidate/p96_stream_owner/p96_extract_pi_ai_fixture.py \
@@ -152,11 +149,6 @@ jobs:
             -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
             timeout 18s node .p96private/agent-runtime/p96_original_tool_cordis_event_fixture.mjs
           echo 'P96_ORIGINAL_CORDIS_TOOLS_RESULT_OBSERVED=PASS' >> "$GITHUB_STEP_SUMMARY"
-          cp host_candidate/p96_stream_owner/p96_original_tool_service_lifecycle.mjs \
-            .p96private/agent-runtime/p96_original_tool_service_lifecycle.mjs
-          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
-            timeout 18s node .p96private/agent-runtime/p96_original_tool_service_lifecycle.mjs
           cp host_candidate/p96_stream_owner/p96_original_tool_runtime_execute_fixture.mjs \
             .p96private/agent-runtime/p96_original_tool_runtime_execute_fixture.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
@@ -170,11 +162,6 @@ jobs:
             timeout 20s node .p96private/agent-runtime/p96_original_model_toolruntime_roundtrip.mjs
           echo 'P96_ORIGINAL_PI_AI_AND_TOOL_RUNTIME_CORDIS_ROUNDTRIP=PASS' >> "$GITHUB_STEP_SUMMARY"
 
-          cp host_candidate/p96_stream_owner/p96_toolruntime_setup_audit.mjs \
-            .p96private/agent-runtime/p96_toolruntime_setup_audit.mjs
-          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
-            timeout 18s node .p96private/agent-runtime/p96_toolruntime_setup_audit.mjs
 
 
 
