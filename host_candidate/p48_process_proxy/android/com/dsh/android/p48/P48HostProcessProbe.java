@@ -3,6 +3,7 @@ package com.dsh.android.p48;
 import android.os.*;
 import com.dsh.p37.P37RemoteProcess;
 import com.dsh.android.p53.P53StartOrder;
+import com.dsh.android.p68.P68AndroidBinderIntake;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -40,10 +41,13 @@ public final class P48HostProcessProbe {
   private int workerUid=-1;
   private final P53StartOrder startOrder=new P53StartOrder();
   private P37RemoteProcess proxy;
+  private final boolean p68Mode;
+  private P68AndroidBinderIntake p68;
   private boolean complete,failed,started,childStartedAck;
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()) {
     @Override public void handleMessage(Message m) {
       if(failed||complete)return;
+      if(p68Mode){handleP68Message(m);return;}
       int sender=m.sendingUid;
       if(!android.os.Process.isIsolatedUid(sender) ||
          sender==android.os.Process.myUid() ||
@@ -130,15 +134,21 @@ public final class P48HostProcessProbe {
   });
 
   public P48HostProcessProbe(Messenger isolated,String session,Listener listener) {
-    this(isolated,session,listener,false,null);
+    this(isolated,session,listener,false,null,false);
   }
   public P48HostProcessProbe(Messenger isolated,String session,
                              Listener listener,boolean exactOriginalArm64Node) {
-    this(isolated,session,listener,exactOriginalArm64Node,null);
+    this(isolated,session,listener,exactOriginalArm64Node,null,false);
   }
   public P48HostProcessProbe(Messenger isolated,String session,
                              Listener listener,boolean exactOriginalArm64Node,
                              LiveProcessReceiver liveProcessReceiver) {
+    this(isolated,session,listener,exactOriginalArm64Node,liveProcessReceiver,false);
+  }
+  public P48HostProcessProbe(Messenger isolated,String session,
+                             Listener listener,boolean exactOriginalArm64Node,
+                             LiveProcessReceiver liveProcessReceiver,
+                             boolean enableP68ForFixtureOnly) {
     if(isolated==null||listener==null||session==null||
        !session.matches("[a-f0-9]{64}"))
       throw new IllegalArgumentException("P48_BAD_HOST_SESSION");
@@ -147,7 +157,71 @@ public final class P48HostProcessProbe {
     this.listener=listener;
     this.exactOriginalArm64Node=exactOriginalArm64Node;
     this.liveProcessReceiver=liveProcessReceiver;
+    this.p68Mode=enableP68ForFixtureOnly;
   }
+  /**
+   * P68 opt-in test path: Binder-supplied framework sendingUid is checked
+   * inside P68AndroidBinderIntake, then P67 owns all sequence and Process
+   * lifecycle transitions. The older P48 path remains unchanged.
+   */
+  private void handleP68Message(Message message) {
+    if(p68==null){
+      p68=new P68AndroidBinderIntake(session,
+          new P37RemoteProcess.RemoteControl(){
+            @Override public void requestGracefulStop(){
+              sendControl(P48FixedIsolatedChild.STOP);
+            }
+            @Override public void requestForceStop(){
+              sendControl(P48FixedIsolatedChild.KILL);
+            }
+          });
+    }
+    P68AndroidBinderIntake.Result result=p68.accept(message);
+    if(result==P68AndroidBinderIntake.Result.REJECTED){
+      failClosed("P68_UID_SESSION_FRAME_OR_SEQUENCE_REJECTED");return;
+    }
+    if(result==P68AndroidBinderIntake.Result.HELLO){
+      workerUid=p68.isolatedUid();
+      if(proxy!=null || childStartedAck ||
+         p68.processAfterAuthenticatedChildStart()!=null){
+        failClosed("P68_HELLO_NOT_UNSTARTED");return;
+      }
+      listener.report("P68_BINDER_HELLO_NO_PROCESS_ALLOCATED=PASS");
+      listener.report("P53_BINDER_HELLO_ALONE_NOT_CHILD_STARTED=PASS");
+      return;
+    }
+    if(result==P68AndroidBinderIntake.Result.CHILD_STARTED){
+      if(proxy!=null || childStartedAck ||
+         !(p68.processAfterAuthenticatedChildStart() instanceof P37RemoteProcess)){
+        failClosed("P68_VERIFIED_CHILD_PROXY_UNAVAILABLE");return;
+      }
+      proxy=(P37RemoteProcess)p68.processAfterAuthenticatedChildStart();
+      childStartedAck=true;
+      new Thread(()->collect(proxy.getInputStream(),stdout),
+                 "p68-host-stdout").start();
+      new Thread(()->collect(proxy.getErrorStream(),stderr),
+                 "p68-host-stderr").start();
+      listener.report("P48_ORIGINAL_APP_BOUND_P37_REMOTE_PROCESS=PASS");
+      if(liveProcessReceiver!=null){
+        try {liveProcessReceiver.onLiveProxy(proxy,workerUid);}
+        catch(RuntimeException rejection){
+          failClosed("P68_PROCESS_RECEIVER_REJECTED");return;
+        }
+      }
+      listener.report("P68_ANDROID_BINDER_P67_P37_CHILD_HANDOFF=PASS");
+      listener.report("P68_CHILD_STARTED_NOT_ENGINE_READY=PASS");
+      listener.report("P53_AUTHENTICATED_CHILD_STARTED_BEFORE_PROCESS_HANDOFF=PASS");
+      return;
+    }
+    if(result==P68AndroidBinderIntake.Result.FAIL){
+      failClosed("P68_WORKER_FAILURE");return;
+    }
+    if(result==P68AndroidBinderIntake.Result.EXIT) {
+      verifyAsync(message.getData().getInt("exitCode",125));return;
+    }
+    // STDOUT and STDERR have already been forwarded by P67 into P37.
+  }
+
   public void start() {
     if(started)throw new IllegalStateException("P48_ALREADY_STARTED");
     started=true;
@@ -222,10 +296,12 @@ public final class P48HostProcessProbe {
   private void failClosed(String code){
     if(failed||complete)return;
     failed=true;
+    if(p68!=null)p68.disconnected();
     if(proxy!=null)proxy.onTransportLost();
     listener.fail(code);
   }
   public void close(){
+    if(p68!=null)p68.disconnected();
     if(proxy!=null&&proxy.isAlive())proxy.destroyForcibly();
     if(!complete&&!failed)failClosed("P48_HOST_CLOSED");
   }
