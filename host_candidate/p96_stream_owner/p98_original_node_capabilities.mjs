@@ -5,6 +5,8 @@
  * Standalone CLI may be invoked ONLY through an already trusted original
  * DSH diagnostic channel. CI results describe the runner, not the phone.
  */
+import {pathToFileURL} from 'node:url';
+
 export function readOriginalNodeCapabilities(
   {nodeVersion=process.versions.node,
    platform=process.platform,
@@ -31,8 +33,7 @@ export function readOriginalNodeCapabilities(
     originalAgentLoopTurnTested:false
   });
 }
-if(process.argv[1] && import.meta.url ===
-    new URL('file://'+process.argv[1]).href){
+if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){
   try {
     const status=readOriginalNodeCapabilities();
     process.stdout.write('P98_ORIGINAL_NODE_CAPABILITIES='+JSON.stringify(status)+'\n');
