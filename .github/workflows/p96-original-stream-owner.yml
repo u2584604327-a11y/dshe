@@ -93,7 +93,7 @@ jobs:
           grep -Fxq 'P96_ORIGINAL_PROVIDER_OR_SESSION_MODIFIED=NO' .p96private/provider-contract.log
           grep '^P96_CONTRACT_ANCHOR=' .p96private/provider-contract.log >> "$GITHUB_STEP_SUMMARY"
           # At most 12 short, scrubbed static source fragments, private CI only.
-          grep -E '^P96_ANCHOR_CONTEXT=provider [|] (openai-completions|baseURL|baseUrl|streamSimple)' \
+          grep -E '^P96_ANCHOR_CONTEXT=provider [|] (routeAuth|defaultContextWindow|request.models|modelOverrides|request.provider|request.baseURL)' \
             .p96private/provider-contract.log | head -n 12
 
           echo 'P96_ORIGINAL_ENGINE_ARCHIVE_EXACT_SHA_AND_CATEGORIES=PASS' >> "$GITHUB_STEP_SUMMARY"
