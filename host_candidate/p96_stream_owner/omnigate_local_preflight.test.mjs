@@ -52,7 +52,7 @@ test('Verified original MainActivity: GET health and models only; no POST or sec
 test('Overlay original runtime can be verified without a main-activity takeover',async () => {
   await serve((req,res) => {
     if(req.url==='/health')json(res,owner('overlay'));
-    else json(res,{data:[]});
+    else json(res,{data:[{id:'private-model'}]});
   },async port=>{
     const report=await probe({port});
     assert.equal(report.verdict,'READONLY_LOCAL_API_READY_NOT_MODEL_TURN_PROOF');
@@ -94,4 +94,17 @@ test('Service or model-list errors do not trigger a POST or a retry',async () =>
   });
   assert.equal(requests,2);
   console.log('P96_MODELS_ERROR_NO_RETRY=PASS');
+});
+
+test('200 without a usable model catalog is not a ready provider',async () => {
+  await serve((req,res)=>{
+    if(req.url==='/health')json(res,owner());
+    else json(res,{data:[]});
+  },async port=>{
+    const report=await probe({port});
+    assert.equal(report.verdict,'MODEL_CATALOG_EMPTY_OR_INVALID');
+    assert.equal(report.model_count,0);
+    assert.equal(report.issued_post,false);
+  });
+  console.log('P96_NO_FALSE_READY_ON_EMPTY_MODEL_CATALOG=PASS');
 });
