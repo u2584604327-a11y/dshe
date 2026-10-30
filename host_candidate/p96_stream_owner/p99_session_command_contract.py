@@ -162,16 +162,28 @@ def main():
     args = parser.parse_args()
     source = extract_source(pathlib.Path(args.original))
 
-    match = re.search(r"\bclass\s+" + re.escape(CLASS_NAME) + r"\b", source)
-    require(match is not None, "P99_CLASS_NOT_FOUND")
-    brace = source.find("{", match.end())
-    require(brace >= 0, "P99_CLASS_BRACE_NOT_FOUND")
-    class_body = balanced_block(source, brace)
+    class_body = None
+    occurrences = list(re.finditer(r"\b" + re.escape(CLASS_NAME) + r"\b", source))
+    require(bool(occurrences), "P99_CLASS_TOKEN_NOT_FOUND")
+    for match in occurrences:
+        search_end = min(len(source), match.end() + 600)
+        brace = source.find("{", match.end(), search_end)
+        if brace < 0:
+            continue
+        try:
+            candidate = balanced_block(source, brace)
+        except Exception:
+            continue
+        if method_contract(candidate, "prompt") is not None:
+            class_body = candidate
+            break
+    require(class_body is not None, "P99_CLASS_BODY_NOT_FOUND")
 
     constructor = method_contract(class_body, "constructor")
     prompt = method_contract(class_body, "prompt")
     require(prompt is not None, "P99_PROMPT_NOT_FOUND")
 
+    print("P99_SESSION_COMMAND_CLASS_TOKEN_OCCURRENCES=" + str(len(occurrences)))
     print("P99_SESSION_COMMAND_CLASS_FOUND=PASS")
     print("P99_SESSION_COMMAND_CONSTRUCTOR=" + json.dumps(constructor, sort_keys=True))
     print("P99_SESSION_COMMAND_PROMPT=" + json.dumps(prompt, sort_keys=True))
