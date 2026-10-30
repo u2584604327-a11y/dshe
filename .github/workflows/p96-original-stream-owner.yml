@@ -1,0 +1,57 @@
+name: P96 original DSH Node/web stream owner (read-only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p96_stream_owner/**'
+      - '.github/workflows/p96-original-stream-owner.yml'
+permissions:
+  contents: read
+jobs:
+  one-source-locked-owner-check:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Verify exact private original and perform read-only check
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = "u2584604327-a11y/dshe"
+          test "$(gh api "repos/$GH_REPO" --jq .private)" = true
+          python host_candidate/p96_stream_owner/p96_original_engine_owner.py --selftest
+          mkdir -p .p96private
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo "$GH_REPO" \
+            --pattern 'DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk' \
+            --dir .p96private
+          f=.p96private/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          printf '%s  %s\n' \
+            3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 "$f" \
+            | sha256sum -c - >/dev/null
+          python host_candidate/p96_stream_owner/p96_original_engine_owner.py \
+            --original "$f" | tee .p96private/audit.log
+          grep -Fxq 'P96_EXACT_ORIGINAL_NODE_WEB_OWNER_AUDIT=PASS' .p96private/audit.log
+          grep -Fxq 'P96_REAL_ORIGINAL_WEB_CHAT_RESPONSE_READ_CALLBACK_WIRED=NO' .p96private/audit.log
+          grep '^P96_SOURCE_OWNER_CATEGORIES=' .p96private/audit.log >> "$GITHUB_STEP_SUMMARY"
+          echo 'P96_ORIGINAL_ENGINE_ARCHIVE_EXACT_SHA_AND_CATEGORIES=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Erase local original and mark release boundary
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p96private
+          {
+            echo 'P96_DSH_ORIGINAL_CHAT_NETWORK_AND_UI_NOT_MODIFIED=YES'
+            echo 'P96_STREAM_PRODUCTION_OWNER_CALLSITE=NOT_VERIFIED'
+            echo 'P96_NO_SIGNER_NO_RELEASE_NO_DEVICE_CHANGES=YES'
+          } >> "$GITHUB_STEP_SUMMARY"
