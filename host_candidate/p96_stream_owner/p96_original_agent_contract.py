@@ -80,6 +80,17 @@ def inspect(apk):
                     "imports":sorted(imp)[:35],"markers":hits})
  print("P96_AGENT_ORIGINAL_SOURCE_LOCK=PASS")
  print("P96_AGENT_EVENT_CONTRACT="+json.dumps(entries,ensure_ascii=True,sort_keys=True))
+ for e in entries:
+  if any("/"+name+"/" in e["path"] for name in
+         ("dsh-agent-loop","dsh-agent","dsh-llm-pi-ai",
+          "dsh-api-session-controller","dsh-tool","dsh-tools")):
+   if "exports" in e or "packageMain" in e:
+    print("P96_AGENT_HOOK="+json.dumps({
+     "path":e["path"],"exports":e.get("exports",[])[:18],
+     "imports":e.get("imports",[])[:18],
+     "packageMain":e.get("packageMain"),
+     "packageExports":e.get("packageExports",[]),
+     "markers":e.get("markers",{})},sort_keys=True))
  print("P96_AGENT_ORIGINAL_TOOL_DISPATCH_WIRED=NO")
  print("P96_AGENT_SOURCE_MUTATION=NO")
 if __name__=="__main__":
