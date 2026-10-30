@@ -145,7 +145,7 @@ public final class P48HostProcessProbe {
         if(failed||complete)return;
         if(!completeReaders || exit!=0 || proxy==null ||
            proxy.terminalReason()!=P37RemoteProcess.TerminalReason.REMOTE_EXIT||
-           proxy.isAlive() || !stderr.get().isEmpty() ||
+           proxy.isAlive() ||
            !stdout.get().equals(exactOriginalArm64Node?
                 "UID="+workerUid+"\nBOOT\nREADY\n":workerUid+"\n") ||
            !stderr.get().equals(exactOriginalArm64Node?"P50-STDERR\n":"")) {
