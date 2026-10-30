@@ -22,6 +22,7 @@ public final class P48HostProcessProbe {
   private final Messenger isolated;
   private final String session;
   private final Listener listener;
+  private final boolean exactOriginalArm64Node;
   private final CountDownLatch readers=new CountDownLatch(2);
   private final AtomicReference<String> stdout=new AtomicReference<>("");
   private final AtomicReference<String> stderr=new AtomicReference<>("");
@@ -91,18 +92,26 @@ public final class P48HostProcessProbe {
   });
 
   public P48HostProcessProbe(Messenger isolated,String session,Listener listener) {
+    this(isolated,session,listener,false);
+  }
+  public P48HostProcessProbe(Messenger isolated,String session,
+                             Listener listener,boolean exactOriginalArm64Node) {
     if(isolated==null||listener==null||session==null||
        !session.matches("[a-f0-9]{64}"))
       throw new IllegalArgumentException("P48_BAD_HOST_SESSION");
     this.isolated=isolated;
     this.session=session;
     this.listener=listener;
+    this.exactOriginalArm64Node=exactOriginalArm64Node;
   }
   public void start() {
     if(started)throw new IllegalStateException("P48_ALREADY_STARTED");
     started=true;
     Message m=Message.obtain(null,P48FixedIsolatedChild.START);
-    Bundle b=new Bundle();b.putString("session",session);m.setData(b);
+    Bundle b=new Bundle();b.putString("session",session);
+    b.putString("p50_mode",exactOriginalArm64Node?
+        "p50-exact-original-node":"p48-fixed-id");
+    m.setData(b);
     m.replyTo=inbox;
     try{isolated.send(m);}
     catch(Exception e){failClosed("P48_INIT_SEND_FAILED");return;}
@@ -137,7 +146,9 @@ public final class P48HostProcessProbe {
         if(!completeReaders || exit!=0 || proxy==null ||
            proxy.terminalReason()!=P37RemoteProcess.TerminalReason.REMOTE_EXIT||
            proxy.isAlive() || !stderr.get().isEmpty() ||
-           !stdout.get().equals(workerUid+"\n")) {
+           !stdout.get().equals(exactOriginalArm64Node?
+                "UID="+workerUid+"\nBOOT\nREADY\n":workerUid+"\n") ||
+           !stderr.get().equals(exactOriginalArm64Node?"P50-STDERR\n":"")) {
           failClosed("P48_P37_STREAM_UID_OR_EOF_MISMATCH");return;
         }
         try {
@@ -149,10 +160,17 @@ public final class P48HostProcessProbe {
           failClosed("P48_PROCESS_WAIT_INTERRUPTED");return;
         }
         complete=true;
-        listener.report("P48_ORIGINAL_APK_ISOLATED_CHILD_UID_MATCHES_BINDER=PASS");
-        listener.report("P48_P37_PROCESS_STDOUT_EOF_WAIT_EXIT=PASS");
-        listener.report("P48_HOST_DID_NOT_EXECUTE_CHILD=PASS_SCOPE_LIMITED");
-        listener.report("P48_REAL_PRODUCTION_DSH_NODE=NOT_STARTED");
+        if(exactOriginalArm64Node) {
+          listener.report("P50_REAL_ORIGINAL_DSH_PACKAGE_EXACT_NODE_IN_ISOLATED_UID=PASS");
+          listener.report("P50_PINNED_NODE_STREAM_STDERR_READY_EXIT=PASS");
+          listener.report("P50_ORIGINAL_NODE_PRODUCTION_SCRIPTS=NOT_EXECUTED");
+          listener.report("P50_REAL_DSH_ENGINEMANAGER_PROXY_HANDOFF=NO");
+        }else {
+          listener.report("P48_ORIGINAL_APK_ISOLATED_CHILD_UID_MATCHES_BINDER=PASS");
+          listener.report("P48_P37_PROCESS_STDOUT_EOF_WAIT_EXIT=PASS");
+          listener.report("P48_HOST_DID_NOT_EXECUTE_CHILD=PASS_SCOPE_LIMITED");
+          listener.report("P48_REAL_PRODUCTION_DSH_NODE=NOT_STARTED");
+        }
         listener.report("P48_FIXED_SIGNED_V139_APK=BLOCKED");
       });
     },"p48-host-process-verify").start();
