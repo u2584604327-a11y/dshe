@@ -6,7 +6,7 @@ import tarfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from p54_immutable_tar_audit import scan, safe_name
+from p54_immutable_tar_audit import scan, safe_name, addon_metadata
 
 checks = 0
 
@@ -80,5 +80,11 @@ reject((a, ("./engine/main.js", b"x", tarfile.REGTYPE)),
 reject((("shortcut", b"", tarfile.SYMTYPE),), "symlink")
 reject((("shortcut", b"", tarfile.LNKTYPE),), "hardlink")
 reject((("device", b"", tarfile.CHRTYPE),), "special node")
+ok(addon_metadata(b"not an ELF")["nonelf"] == "small_ascii",
+   "NON_ELF text placeholder is not executed")
+ok(addon_metadata(b"")["nonelf"] == "empty",
+   "zero-byte addon cannot become executable")
+ok(addon_metadata(b"\\x00\\xff")["nonelf"] == "small_non_ascii",
+   "small binary addon is not a proven ELF")
 print("P54_SAFE_TAR_HASH_NEGATIVE_TESTS=PASS assertions=" + str(checks))
 print("P54_NO_REAL_JS_OR_EXTRACTED_ORIGINAL_PACKAGE_TEST=PASS")
