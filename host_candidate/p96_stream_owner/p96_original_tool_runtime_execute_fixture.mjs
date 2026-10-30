@@ -53,6 +53,15 @@ try {
   if(result?.isError){
     process.stdout.write('P96_REAL_RUNTIME_TYPED_ERROR='+
       (result?.error?.name||result?.error?.code||'UNKNOWN')+'\n');
+    const err=String(result?.error?.message||'').slice(0,190)
+      .replace(/\/[A-Za-z0-9._/-]+/g,'<PATH>');
+    process.stdout.write('P96_REAL_RUNTIME_ERROR_MESSAGE='+err+'\n');
+    process.stdout.write('P96_REAL_RUNTIME_CONTENT_KINDS='+JSON.stringify(
+      (result?.content||[]).slice(0,4).map(x=>({
+        type:x.type, safeText:x.type==='text'
+          ? String(x.text).slice(0,160)
+             .replace(/\/[A-Za-z0-9._/-]+/g,'<PATH>') : null
+      })))+'\n');
   }
   assert.equal(executions,1,'only one registered tool body may run');
   assert.equal(logs.length,1,'real original tools/result event exactly once');
