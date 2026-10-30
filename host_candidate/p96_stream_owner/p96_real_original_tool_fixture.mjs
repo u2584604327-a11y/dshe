@@ -82,11 +82,18 @@ try {
     cost:{input:0,output:0,cacheRead:0,cacheWrite:0}
   };
   const api=await openAICompletionsApi();
-  const ctx={messages:[{role:'user',content:[{type:'text',text:'safe local tool request'}],
-                       timestamp:1}],
-    tools:[{name:'read_fixture_page',description:'Synthetic local read; no external I/O',
-      parameters:{type:'object',properties:{page:{type:'string'}},required:['page']}}]
-  };
+  // The exact original pi-ai calls resolveTranscriptTools(context.messages).
+  // Tool declarations therefore belong to the transcript's system message,
+  // not a separate, ignored context.tools property.
+  const toolDefinition={name:'read_fixture_page',
+    description:'Synthetic local read; no external I/O',
+    parameters:{type:'object',properties:{page:{type:'string'}},required:['page']}};
+  const ctx={messages:[
+    {role:'system',content:'Synthetic local test only',
+      tools:[toolDefinition],timestamp:0},
+    {role:'user',content:[{type:'text',text:'safe local tool request'}],
+      timestamp:1}
+  ]};
   const first=api.streamSimple(model,ctx,{apiKey:'test-placeholder',maxTokens:128});
   for await(const e of first)events.push(e.type);
   const assistant=await first.result();
