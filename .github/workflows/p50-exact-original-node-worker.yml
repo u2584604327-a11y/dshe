@@ -109,7 +109,7 @@ jobs:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p50-original-arm64-node-worker-integration-20261030' &&
-      github.event.pull_request.base.ref == 'dsh/p47-original-engine-no-host-fallback-20261030'
+      github.event.pull_request.base.ref == 'dsh/p49-exact-arm64-node-original-apk-stage-20261030'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
