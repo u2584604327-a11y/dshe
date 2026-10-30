@@ -50,7 +50,9 @@ check(x["mandatory_add_sites_on_all_modelled_terminating_paths"]==0,"optional_lo
 check(x["cyclic_scc_structures"][0]["has_exit_path_to_return"],"loop_exit")
 check(not x["iteration_count_and_actual_argv_order_proven"],"never_claim_argv")
 # An unconditional add after any loop exit dominates the return.
-with_common=loop[:7]+[(14,add)]+loop[7:]
+with_common=loop[:7]+[(14,add),(16,build),
+                         (18,I("move-result-object",registers=[R(8)])),
+                         (20,I("return-object",registers=[R(8)]))]
 y=analyze(M(with_common))
 check(y["static_add_call_sites"]==2,"two_add_sites")
 check(y["mandatory_add_sites_on_all_modelled_terminating_paths"]==1,"mandatory_post_loop")
