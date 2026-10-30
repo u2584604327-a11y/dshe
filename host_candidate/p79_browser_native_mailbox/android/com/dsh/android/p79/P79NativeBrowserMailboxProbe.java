@@ -3,6 +3,7 @@ import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Log;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -32,6 +33,9 @@ public final class P79NativeBrowserMailboxProbe {
   private WebView view;
   private final P85DurableReplyJournal journal;
   private final boolean p83Mode;
+  private boolean p86External;
+  private boolean p86Ready;
+  private static P79NativeBrowserMailboxProbe p86Instance;
   private P83HiddenBrowserPane p83;
   private P79NativeBrowserMailboxProbe(Activity a,String command,String reply,boolean withHide){
     p83Mode=withHide;
@@ -60,6 +64,30 @@ public final class P79NativeBrowserMailboxProbe {
   }
   public static void run(Activity a,String cmd,String res,boolean withHide){
     new P79NativeBrowserMailboxProbe(a,cmd,res,withHide).begin();
+  }
+  /** Sidecar-only ADB relay. Never add to original production manifest. */
+  public static void runP86(Activity a,String cmd,String resultName){
+    P79NativeBrowserMailboxProbe p=
+      new P79NativeBrowserMailboxProbe(a,cmd,resultName,true);
+    p.p86External=true;
+    p86Instance=p;
+    p.begin();
+  }
+  public static boolean p86Command(Activity a,String id,String action){
+    P79NativeBrowserMailboxProbe p=p86Instance;
+    if(p==null || p.owner!=a || !p.p86External || !p.p86Ready ||
+       p.stopped || Looper.myLooper()!=Looper.getMainLooper() ||
+       id==null || !id.matches("p86[a-z0-9]{2,24}") ||
+       action==null || !action.matches("[a-zA-Z]{2,20}"))return false;
+    p.dispatch(id,action);
+    return true;
+  }
+  private void p86Notify(String id,boolean ok,String code){
+    if(p86External){
+      // Synthetic identifiers + outcome category only; NEVER raw webpage
+      // bytes, authentication cookies, user chat or input values.
+      Log.i("P86_NATIVE_REPLY",id+"|"+(ok?"1":"0")+"|"+code);
+    }
   }
   private static String readSmall(File f)throws Exception{
     if(!f.isFile()||f.length()<1||f.length()>8192)return null;
@@ -92,8 +120,14 @@ public final class P79NativeBrowserMailboxProbe {
     view.setWebViewClient(new WebViewClient(){
       @Override public void onPageFinished(WebView v,String url){
         if(!ORIGIN.equals(url)){fail("ORIGIN");return;}
-        new Thread(()->poll(),"p79-command-reader").start();
-        new Thread(()->client(),"p79-command-producer").start();
+        if(p86External){
+          if(p83!=null)p83.hideBrowser();
+          p86Ready=true;
+          Log.i("P86_NATIVE_REPLY","P86_NATIVE_WEBVIEW_READY");
+        }else{
+          new Thread(()->poll(),"p79-command-reader").start();
+          new Thread(()->client(),"p79-command-producer").start();
+        }
       }
     });
     view.loadDataWithBaseURL(ORIGIN,
@@ -127,6 +161,7 @@ public final class P79NativeBrowserMailboxProbe {
       result.put("outcomeUnknown",false);result.put("retrySafe",false);
       journal.finish(id,result);
       atomic(res,result);
+      p86Notify(id,false,category);
     }catch(Exception e){fail("ERROR_REPLY_WRITE");}
   }
   private void dispatch(String id,String action){
@@ -169,6 +204,7 @@ public final class P79NativeBrowserMailboxProbe {
         result.put("retrySafe",t.retrySafe);
         journal.finish(id,result);
         atomic(res,result);
+        p86Notify(id,t.ok,t.code);
       }catch(Exception e){fail("TERMINAL_REPLY_WRITE");}
     });
     if(!outcome.markDispatched()){fail("DOUBLE_DISPATCH");return;}
