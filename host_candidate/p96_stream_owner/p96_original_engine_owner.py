@@ -93,9 +93,16 @@ def inventory(original):
                 if not found:continue
                 owner=category(name)
                 owner_categories[owner]+=1
-                ranked.append({"path_sha12":sha(name.encode())[:12],
+                entry={"path_sha12":sha(name.encode())[:12],
                    "file_sha12":sha(blob)[:12],"owner_family":owner,
-                   "bytes":len(blob),"categories":found,"score":score(found,owner)})
+                   "bytes":len(blob),"categories":found,"score":score(found,owner)}
+                # Private CI only: canonical archive member names are needed
+                # to find an actual original patch target. No source content,
+                # home paths, credentials or website/account data are emitted.
+                if entry["score"]>=20 and owner!="THIRD_PARTY_NODE_MODULE":
+                    if len(name)<=180 and re.fullmatch(r"[A-Za-z0-9._@/+-]+",name):
+                        entry["source_member"]=name
+                ranked.append(entry)
     require(members==EXPECTED_TAR_ENTRIES,"TAR_MEMBER_COUNT_CHANGED")
     require(add_ons==9,"ORIGINAL_NATIVE_ADDON_COUNT_CHANGED")
     ranked.sort(key=lambda x:(-x["score"],x["path_sha12"]))
