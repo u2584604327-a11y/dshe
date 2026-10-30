@@ -23,7 +23,13 @@ try{
  report('SERVICE_REGISTER_METHOD',typeof svc?.register);
  report('SERVICE_EXECUTE_METHOD',typeof svc?.execute);
  report('REGISTRY_KEYS',Object.keys(ctx.registry||{}).slice(0,12).join(','));
-}catch(e){report('ERROR_TYPE',e?.code||e?.name||'UNKNOWN');}
+}catch(e){
+ report('ERROR_TYPE',e?.code||e?.name||'UNKNOWN');
+ const message=String(e?.message||'').slice(0,180)
+   .replace(/(?:Bearer |sk-)[A-Za-z0-9._-]{8,}/g,'<REDACTED>')
+   .replace(/\/[A-Za-z0-9._/\-]+/g,'<PATH>');
+ report('SAFE_ERROR_DETAIL',message);
+}
 finally{
  if(typeof ctx.dispose==='function')await ctx.dispose();
 }
