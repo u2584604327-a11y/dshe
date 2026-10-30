@@ -70,9 +70,11 @@ public final class P77TarAuditTest {
     ByteArrayOutputStream link=new ByteArrayOutputStream();
     file(link,"target",new byte[0],'2');
     check(fails(gzip(link)),"symlink_denied");
-    byte[] corrupted=gzip(normal);
-    corrupted[corrupted.length/2]^=8;
-    check(fails(corrupted),"corrupt_archive_denied");
+    byte[] corruptedHeader=normal.toByteArray();
+    corruptedHeader[23]^=8;
+    ByteArrayOutputStream wrong=new ByteArrayOutputStream();
+    wrong.write(corruptedHeader);
+    check(fails(gzip(wrong)),"corrupt_tar_header_checksum_denied");
     ByteArrayOutputStream nativeFile=new ByteArrayOutputStream();
     file(nativeFile,"pkg/native.node",new byte[]{1,2,3,4},'0');
     P77TarAudit.Result addon=inspect(gzip(nativeFile));
