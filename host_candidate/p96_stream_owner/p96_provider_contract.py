@@ -14,7 +14,9 @@ SOURCES = {
 }
 TOKENS = {
   "provider": [b"openai-completions",b"baseUrl",b"baseURL",b"streamSimple",
-               b"apiKey",b"toolCall",b"tool_calls"],
+               b"apiKey",b"toolCall",b"tool_calls",
+               b"routeAuth", b"defaultContextWindow", b"request.models",
+               b"modelOverrides", b"request.provider", b"request.baseURL"],
   "settings": [b"baseURL",b"openai-completions"],
   "session": [b"session.update",b"onMessage"],
   "model_ui": [b"baseUrl",b"baseURL",b"apiKey",b"provider"],
