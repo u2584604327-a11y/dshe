@@ -104,7 +104,7 @@ def producer_from_move_result(ops,j,assets,targets):
     member=not call.get_name().startswith("invoke-static")
     range_form=call.get_name().endswith("/range")
     # Do not treat a start register as a full argument vector.
-    decoded=(not range_form and 0<len(args)<=MAX_ARGS)
+    decoded=(not range_form and len(args)<=MAX_ARGS and (bool(args) or not member))
     if decoded:
         sources=collections.Counter()
         for r in args[1 if member else 0:]:
