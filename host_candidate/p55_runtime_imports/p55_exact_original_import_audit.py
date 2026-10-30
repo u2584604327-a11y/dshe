@@ -71,6 +71,18 @@ def normalize_import(caller, spec):
         return None
 
 
+def normalize_entry(caller, raw):
+    """Metadata main/module/bin path hint (not an executable command)."""
+    if not isinstance(raw, str) or not 0 < len(raw) <= MAX_FIELD:
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9._/+\-]+", raw):
+        return None
+    if raw.startswith("/") or raw.startswith("-") or ":" in raw:
+        return None
+    return normalize_import(caller, raw if raw.startswith(("./", "../"))
+                            else "./" + raw)
+
+
 def parse_package(raw):
     """Safe JSON only; duplicate keys invalidate a root package definition."""
     def no_duplicates(pairs):
@@ -121,6 +133,7 @@ def audit_tar(stream):
     root_package_count = 0
     start_command_count = 0
     native_optional_dependency_count = 0
+    potential_root_packages = []
     counts = collections.Counter()
     total = 0
     for entry in stream:
@@ -155,19 +168,20 @@ def audit_tar(stream):
             if meta is None:
                 counts["invalid_package_json"] += 1
                 continue
-            # Rootish: package tree depth <=2, not dependency packages.
-            is_rootish = name.count("/") <= 2 and "node_modules" not in name.split("/")
-            if is_rootish:
-                root_package_count += 1
+            # Identify closest-to-root Node packages even with a deep
+            # original TAR prefix; NEVER expose original package paths.
+            if "node_modules" not in name.split("/"):
+                entrypoints = []
                 for kind, value in candidate_values(meta):
-                    resolved = normalize_import(name, value)
+                    resolved = normalize_entry(name, value)
                     if resolved:
-                        hinted_entries.append((kind, resolved))
+                        entrypoints.append((kind, resolved))
                 start = meta.get("scripts")
-                if isinstance(start, dict) and isinstance(start.get("start"), str):
-                    start_command_count += 1
-                if meta.get("type") == "module":
-                    counts["root_type_module"] += 1
+                has_start = (isinstance(start, dict) and
+                             isinstance(start.get("start"), str))
+                potential_root_packages.append((
+                    name.count("/"), entrypoints, has_start,
+                    meta.get("type") == "module"))
             opt = meta.get("optionalDependencies")
             if isinstance(opt, dict):
                 native_optional_dependency_count += len(opt)
@@ -199,6 +213,23 @@ def audit_tar(stream):
                     imports.append((relative, spec.endswith(".node")))
             else:
                 counts["package_or_builtin_import_hints"] += 1
+    counts["non_dependency_package_metadata"] = len(potential_root_packages)
+    counts["node_modules_package_metadata"] = (
+        package_count - len(potential_root_packages))
+    if potential_root_packages:
+        mindepth = min(p[0] for p in potential_root_packages)
+        counts["minimum_non_dependency_package_depth"] = mindepth
+        # Shallowest two levels are candidates, NOT proven startup argv.
+        for depth, entrypoints, has_start, module_type in potential_root_packages:
+            if depth <= mindepth + 2:
+                root_package_count += 1
+                hinted_entries.extend(entrypoints)
+                if has_start:
+                    start_command_count += 1
+                if module_type:
+                    counts["root_type_module"] += 1
+    else:
+        counts["minimum_non_dependency_package_depth"] = -1
     direct_native = 0
     direct_native_miss = 0
     relative_present = 0
@@ -262,6 +293,8 @@ def print_report(c):
         "archive_members_seen", "js_sources_scanned",
         "source_or_json_over_limit", "candidate_source_bytes_examined",
         "package_json_members", "rootish_package_metadata",
+        "non_dependency_package_metadata", "node_modules_package_metadata",
+        "minimum_non_dependency_package_depth",
         "root_metadata_entrypoint_hints",
         "root_metadata_entrypoint_literal_exists",
         "root_start_command_present", "root_type_module",
