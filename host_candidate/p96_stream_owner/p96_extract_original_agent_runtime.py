@@ -20,6 +20,11 @@ ext.BASE_PACKAGES=(
     "@deepseek-ai/dsh-session-query",
     "@deepseek-ai/dsh-typert-registry",
     "@deepseek-ai/dsh-workspace",
+    "@deepseek-ai/dsh-commands",
+    "@deepseek-ai/dsh-client-connection",
+    "@deepseek-ai/dsh-storage-domain",
+    "@deepseek-ai/dsh-session-persistence",
+    "@deepseek-ai/dsh-api-gateway",
 )
 ext.MAX_PACKAGE_GRAPH=400
 ext.INCLUDE_PRESENT_PEERS=True
