@@ -78,12 +78,25 @@ def kind_of(name):
 def addon_metadata(blob):
     """Read-only dynamic-symbol metadata, via Linux anonymous memfd."""
     if not blob.startswith(b"\x7fELF") or len(blob) < 64:
-        if len(blob) == 0: subtype = "empty"
+        # Inspect only header magic; do not parse/execute PE or Mach-O.
+        if len(blob) >= 2 and blob[:2] == b"MZ":
+            subtype = "PE_MZ"
+        elif len(blob) >= 4 and blob[:4] in (
+                bytes([0xfe,0xed,0xfa,0xce]),
+                bytes([0xce,0xfa,0xed,0xfe]),
+                bytes([0xfe,0xed,0xfa,0xcf]),
+                bytes([0xcf,0xfa,0xed,0xfe]),
+                bytes([0xca,0xfe,0xba,0xbe]),
+                bytes([0xbe,0xba,0xfe,0xca]),
+                bytes([0xca,0xfe,0xba,0xbf]),
+                bytes([0xbf,0xba,0xfe,0xca])):
+            subtype = "MACHO_OR_FAT_MAGIC"
+        elif len(blob) == 0: subtype = "empty"
         elif len(blob) <= 2048 and all(
                 b in (9, 10, 13) or 32 <= b <= 126 for b in blob):
             subtype = "small_ascii"
         elif len(blob) <= 2048: subtype = "small_non_ascii"
-        else: subtype = "binary_or_large"
+        else: subtype = "unknown_binary_or_large"
         return {"kind": "NON_ELF", "needed": (),
                 "machine": "unknown", "nonelf": subtype}
     require(blob[4] in (1, 2) and blob[5] == 1, "ADDON_ELF_CLASS_OR_ENDIAN")
