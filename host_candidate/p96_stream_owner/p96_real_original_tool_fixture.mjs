@@ -46,6 +46,14 @@ const srv=createServer(async(req,res)=>{
     observations.firstRoles=roles;
     observations.toolDefinition=Array.isArray(reqBody.tools) &&
       reqBody.tools.some(x=>x.function?.name==='read_fixture_page');
+    observations.firstToolCount=Array.isArray(reqBody.tools)?reqBody.tools.length:0;
+    observations.firstToolShapes=Array.isArray(reqBody.tools)
+      ? reqBody.tools.slice(0,2).map(x=>({
+          type:x.type??null,
+          fieldNames:Object.keys(x),
+          nestedFunctionFields:Object.keys(x.function||{})
+        })):[];
+
     send(res,[
       chunk({role:'assistant'}),
       chunk({tool_calls:[{index:0,id:callId,type:'function',
@@ -83,6 +91,8 @@ try {
   for await(const e of first)events.push(e.type);
   const assistant=await first.result();
   const tool=(assistant?.content||[]).find(x=>x.type==='toolCall');
+  process.stdout.write('P96_ORIGINAL_PROVIDER_SENT_TOOL_COUNT='+observations.firstToolCount+'\n');
+  process.stdout.write('P96_ORIGINAL_PROVIDER_TOOL_SHAPES='+JSON.stringify(observations.firstToolShapes)+'\n');
   process.stdout.write('P96_ORIGINAL_TOOL_STREAM_EVENT_TYPES='+JSON.stringify(events)+'\n');
   process.stdout.write('P96_ORIGINAL_TOOL_STREAM_CONTENT_KINDS='+JSON.stringify(
     assistant?.content?.map(x=>x.type)||[])+'\n');
