@@ -38,6 +38,11 @@ function info(klass,method){
     .map(x=>x[1]).filter(safe);
   const signalFields=[...body.matchAll(/signal\??\.([A-Za-z_$][A-Za-z0-9_$]{0,70})/g)]
     .map(x=>x[1]).filter(safe);
+  const commandPromptSegment=body.match(/this\.commands\.prompt\(([\s\S]{0,700}?)\);/)?.[1]||'';
+  const commandPromptRequestFields=[...commandPromptSegment.matchAll(/request\??\.([A-Za-z_$][A-Za-z0-9_$]{0,70})/g)]
+    .map(x=>x[1]).filter(safe);
+  const commandPromptIdentifiers=[...commandPromptSegment.matchAll(/\b([A-Za-z_$][A-Za-z0-9_$]{0,70})\b/g)]
+    .map(x=>x[1]).filter(x=>safe(x)&&!['this','true','false','null','undefined','await'].includes(x));
   return {
     method,arity:fn.length,params,
     propertyNames:[...new Set(propertyNames)].slice(0,40),
@@ -46,6 +51,8 @@ function info(klass,method){
     safeLiterals:[...new Set(safeLiterals)].slice(0,30),
     commandMethods:[...new Set(commandMethods)].slice(0,30),
     ctxMethods:[...new Set(ctxMethods)].slice(0,30),
+    commandPromptRequestFields:[...new Set(commandPromptRequestFields)].slice(0,30),
+    commandPromptIdentifiers:[...new Set(commandPromptIdentifiers)].slice(0,40),
     calledIdentifiers:[...new Set(calls)].slice(0,45),
     isAsync:fn.constructor?.name==='AsyncFunction',
     sourceSize:body.length
