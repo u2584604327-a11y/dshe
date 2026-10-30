@@ -107,5 +107,6 @@ try{
   if(typeof serviceCtx.dispose==='function')try{await serviceCtx.dispose();}catch{}
 }
 process.stdout.write('P99_CORDIS_SYNTHETIC_SERVICE_PLUGIN='+servicePluginResult+'\n');
+process.stdout.write('P99_CORDIS_CONTEXT_NO_SERVICE_STARTED=PASS\n');
 process.stdout.write('P99_CORDIS_CONTEXT_NO_DSH_SERVICE_STARTED=PASS\n');
 if(typeof ctx.dispose==='function')try{await ctx.dispose();}catch{}
