@@ -13,7 +13,7 @@ public final class P87HttpStreamingTest {
   out.write(b);out.write(text("\r\n"));out.flush();
  }
  public static void main(String[] ignored)throws Exception{
-  ServerSocket listener=new ServerSocket(0,1,InetAddress.getLoopbackAddress());
+  ServerSocket listener=new ServerSocket(0,1,InetAddress.getByName("127.0.0.1"));
   AtomicLong serverEnded=new AtomicLong(0);
   Thread server=new Thread(()->{
    try(Socket client=listener.accept()){
