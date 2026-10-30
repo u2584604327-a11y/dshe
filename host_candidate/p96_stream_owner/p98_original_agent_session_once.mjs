@@ -69,6 +69,21 @@ try{
      typeof value==='function'&&/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(key))
      .map(([key,value])=>({name:key,arity:value.length})).slice(0,45);
    log('ACTUAL_HANDLE_FUNCTIONS',JSON.stringify(ownFunctions));
+   // Do not invoke session command methods: inspect names and arities only.
+   function methods(object){
+     if(!object || (typeof object!=='object' && typeof object!=='function'))return [];
+     const prototype=Object.getPrototypeOf(object);
+     return Object.getOwnPropertyNames(prototype||{}).filter(key=>
+       key!=='constructor' && /^[a-zA-Z_$][a-zA-Z0-9_$]{0,64}$/.test(key)
+       && typeof Object.getOwnPropertyDescriptor(prototype,key)?.value==='function'
+     ).slice(0,35).map(name=>({
+       name,arity:Object.getOwnPropertyDescriptor(prototype,name).value.length
+     }));
+   }
+   log('HANDLE_PROTOTYPE_METHODS',JSON.stringify(methods(handle)));
+   log('INBOX_PROTOTYPE_METHODS',JSON.stringify(methods(handle.inbox)));
+   log('SESSION_PROTOTYPE_METHODS',JSON.stringify(methods(handle.session)));
+   log('DISPATCH_PROTOTYPE_METHODS',JSON.stringify(methods(handle.dispatch)));
    for(const field of ['session','inbox','dispatch','phase','ctx']){
      const obj=handle[field];
      log('ACTUAL_HANDLE_'+field.toUpperCase()+'_TYPE',typeof obj);
