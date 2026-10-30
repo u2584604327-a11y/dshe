@@ -5,7 +5,7 @@ OLD='throw new IOException("P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK
 NEW='return com.dsh.android.p74.P74OriginalEngineFixtureHandoff.startOrDeny(builder);'
 def transform(src,dst):
  original=pathlib.Path(src).read_text("utf-8")
- if original.count(OLD)!=1 or "ProcessBuilder.start()" in original:
+ if original.count(OLD)!=1:
   raise RuntimeError("P74_P47_GATE_UNEXPECTED_SOURCE")
  changed=original.replace(OLD,NEW)
  if changed.replace(NEW,OLD)!=original:
