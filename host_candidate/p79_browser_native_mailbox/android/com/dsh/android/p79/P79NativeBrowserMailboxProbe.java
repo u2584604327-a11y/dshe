@@ -15,6 +15,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Set;
 import org.json.JSONObject;
+import com.dsh.android.p83.P83HiddenBrowserPane;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /** Native command/result file producer; P51 independent test package ONLY. */
 public final class P79NativeBrowserMailboxProbe {
@@ -26,7 +29,10 @@ public final class P79NativeBrowserMailboxProbe {
   private volatile boolean stopped;
   private final Set<String> seen=new HashSet<>();
   private WebView view;
-  private P79NativeBrowserMailboxProbe(Activity a,String command,String reply){
+  private final boolean p83Mode;
+  private P83HiddenBrowserPane p83;
+  private P79NativeBrowserMailboxProbe(Activity a,String command,String reply,boolean withHide){
+    p83Mode=withHide;
     owner=a;
     if(!"com.dsh.p51.isolatedprobe".equals(a.getPackageName())||
        command==null||reply==null||
@@ -47,7 +53,10 @@ public final class P79NativeBrowserMailboxProbe {
     if(view!=null)main.post(()->view.destroy());
   }
   public static void run(Activity a,String cmd,String res){
-    new P79NativeBrowserMailboxProbe(a,cmd,res).begin();
+    run(a,cmd,res,false);
+  }
+  public static void run(Activity a,String cmd,String res,boolean withHide){
+    new P79NativeBrowserMailboxProbe(a,cmd,res,withHide).begin();
   }
   private static String readSmall(File f)throws Exception{
     if(!f.isFile()||f.length()<1||f.length()>8192)return null;
@@ -73,7 +82,10 @@ public final class P79NativeBrowserMailboxProbe {
     view=new WebView(owner);
     WebSettings settings=view.getSettings();
     settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(true);
-    owner.setContentView(view);
+    if(p83Mode){
+      p83=new P83HiddenBrowserPane(owner,view);
+      p83.attach();
+    }else owner.setContentView(view);
     view.setWebViewClient(new WebViewClient(){
       @Override public void onPageFinished(WebView v,String url){
         if(!ORIGIN.equals(url)){fail("ORIGIN");return;}
@@ -154,6 +166,19 @@ public final class P79NativeBrowserMailboxProbe {
   private void client(){
     String[] actions={"read","scroll","locate","draft","status","postComment"};
     try{
+      if(p83Mode){
+        CountDownLatch hidden=new CountDownLatch(1);
+        main.post(()->{
+          try{
+            p83.hideBrowser();
+            if(!p83.isHiddenAndAttached())fail("P83_WEBVIEW_WAS_DETACHED");
+            else log("P83_BROWSER_HIDDEN_WITH_SAME_ATTACHED_WEBVIEW=PASS");
+          }finally{hidden.countDown();}
+        });
+        if(!hidden.await(5,TimeUnit.SECONDS)||stopped){
+          fail("P83_HIDE_FAILED");return;
+        }
+      }
       for(int k=0;k<actions.length;k++){
         String id="p79call"+k;
         if(!res.delete()&&res.exists())throw new IOException("P79_STALE_REPLY");
@@ -179,12 +204,44 @@ public final class P79NativeBrowserMailboxProbe {
           fail("COMMENT_CONSENT_BYPASS");return;
         }
         log("P79_FILE_COMMAND_NATIVE_RESULT_STEP_"+k+"=PASS");
+        if(p83Mode) {
+          final int done=k+1;
+          main.post(()->p83.completedStep(done,actions.length));
+        }
+      }
+      if(p83Mode){
+        CountDownLatch restore=new CountDownLatch(1);
+        main.post(()->{
+          if(!p83.isHiddenAndAttached()){
+            fail("P83_HIDDEN_DURING_TOOL_REPLIES_NOT_PRESERVED");
+            restore.countDown();return;
+          }
+          p83.showBrowser();
+          if(!p83.isRestoredSameWebView()){
+            fail("P83_RESTORED_WRONG_WEBVIEW_INSTANCE");
+            restore.countDown();return;
+          }
+          view.evaluateJavascript(
+            "(function(){return document.querySelector('#comment').value==='synthetic draft'"+
+            "&&document.querySelector('#posted').textContent==='0'})()",
+            value->{
+              if(!"true".equals(value))fail("P83_DRAFT_CHANGED_WHILE_HIDDEN");
+              else {
+                log("P83_WEBVIEW_DRAFT_AND_NO_PUBLISH_SURVIVE_HIDE_REOPEN=PASS");
+                log("P83_HIDDEN_WEBVIEW_TOOL_REPLIES_STILL_COMPLETE=PASS");
+              }
+              restore.countDown();
+            });
+        });
+        if(!restore.await(6,TimeUnit.SECONDS)||stopped){
+          fail("P83_RESTORE_FAILED");return;
+        }
       }
       stopped=true;
       log("P79_REAL_ANDROID_FILE_MAILBOX_WEBVIEW_REPLY_CHAIN=PASS");
       log("P79_COMMENT_PUBLISHED=NO");
       log("P79_ORIGINAL_DSH_MODEL_CONTINUATION=NOT_WIRED");
-      main.post(()->view.destroy());
+      if(!p83Mode)main.post(()->view.destroy());
     }catch(Exception e){fail("SYNTHETIC_CLIENT");}
   }
 }
