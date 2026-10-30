@@ -12,6 +12,11 @@ const packages=[
   '@deepseek-ai/dsh-session-query',
   '@deepseek-ai/dsh-typert-registry',
   '@deepseek-ai/dsh-workspace',
+  '@deepseek-ai/dsh-commands',
+  '@deepseek-ai/dsh-client-connection',
+  '@deepseek-ai/dsh-storage-domain',
+  '@deepseek-ai/dsh-session-persistence',
+  '@deepseek-ai/dsh-api-gateway',
 ];
 const safe=(s)=>/^[A-Za-z_$][A-Za-z0-9_$]{0,90}$/.test(s);
 
