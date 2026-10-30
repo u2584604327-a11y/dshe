@@ -58,7 +58,7 @@ with_escape=root[:3]+[(5,opaque)]+root[3:]
 escaped=trace_paths(Method(with_escape))
 check(not escaped["all_paths_return_original_builder_build_result_proven"],"escape_deny")
 # Unknown goto target: do not silently assume fall-through.
-bad=root[:6]+[(10,I("goto",off=999))]+root[6:]
+bad=root[:5]+[(10,I("goto",off=999))]+root[6:]
 missing=trace_paths(Method(bad))
 check(not missing["path_enumeration_completed"],"bad_target_unmodelled")
 check(not missing["all_paths_return_original_builder_build_result_proven"],"bad_target_no_proof")
