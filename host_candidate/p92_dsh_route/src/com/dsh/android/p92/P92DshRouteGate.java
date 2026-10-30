@@ -10,7 +10,7 @@ public final class P92DshRouteGate {
     public static final String HEALTH = "http://127.0.0.1:8787/health";
 
     public enum Stage {
-        NEW, PREFLIGHT_OK, DISPATCH_UNCONFIRMED, CONFIRMED,
+        NEW, PREFLIGHT_OK, DISPATCH_UNCONFIRMED, ORIGINAL_TRANSPORT_ACCEPTED_REPLY_UNVERIFIED, CONFIRMED,
         PRECHECK_REJECTED, HTTP_REJECTED, UNKNOWN_AFTER_DISPATCH
     }
     public static final class Health {
@@ -129,7 +129,7 @@ public final class P92DshRouteGate {
     private void confirmOriginalProviderIfBothObserved() {
         if(origin==Origin.ORIGINAL_PROVIDER && state==Stage.DISPATCH_UNCONFIRMED &&
            httpAccepted && providerTurnObserved && originalTurnAccepted()){
-            state=Stage.CONFIRMED;
+            state=Stage.ORIGINAL_TRANSPORT_ACCEPTED_REPLY_UNVERIFIED;
             reason="ORIGINAL_TURN_AND_HTTP_ACCEPTED_MODEL_REPLY_UNPROVEN";
         }
     }
@@ -153,7 +153,8 @@ public final class P92DshRouteGate {
         }
     }
     public synchronized void onConnectionLost() {
-        if(state==Stage.DISPATCH_UNCONFIRMED){
+        if(state==Stage.DISPATCH_UNCONFIRMED ||
+           state==Stage.ORIGINAL_TRANSPORT_ACCEPTED_REPLY_UNVERIFIED){
             if(editorReceipt!=null) editorReceipt.connectionLost();
             state=Stage.UNKNOWN_AFTER_DISPATCH;
             reason="NO_RETRY_AMBIGUOUS_DISCONNECT";
@@ -162,5 +163,13 @@ public final class P92DshRouteGate {
     public synchronized Stage stage(){return state;}
     public synchronized String reason(){return reason;}
     public synchronized boolean canAutoRetry(){return false;}
+    /** Distinguish verified original request acceptance from an actual model reply.
+     * A provider request can never be CONFIRMED until a trusted original
+     * assistant message projection has been wired (not present in this candidate).
+     */
+    public synchronized boolean originalRequestAcceptedButReplyUnverified(){
+        return origin==Origin.ORIGINAL_PROVIDER &&
+            state==Stage.ORIGINAL_TRANSPORT_ACCEPTED_REPLY_UNVERIFIED;
+    }
     public synchronized boolean isConfirmed(){return state==Stage.CONFIRMED;}
 }
