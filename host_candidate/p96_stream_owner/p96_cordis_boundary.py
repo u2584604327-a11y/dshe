@@ -31,6 +31,16 @@ SIGNALS = {
 MAX_FILE = 8 * 1024 * 1024
 MAX_TOTAL = 200 * 1024 * 1024
 MAX_CANDIDATES = 24
+TARGET_PACKAGE_NAMES = frozenset(("dsh-agent-loop","dsh-llm","dsh-llm-pi-ai",
+ "dsh-api-session-controller","dsh-api-settings-controller",
+ "dsh-client-ui-chat","dsh-client-ui-conversation",
+ "dsh-session-projection","dsh-client-connection"))
+CONTRACT_LITERALS = (b"baseUrl", b"baseURL", b"apiKey", b"api_key",
+ b"customProvider", b"openai-completions", b"createOpenAI",
+ b"streamSimple", b"streamText", b"streamCompletion",
+ b"onChunk", b"onMessage", b"assistantMessage",
+ b"chat.completions", b"tool_calls", b"session.update",
+ b"ctx.on(", b"ctx.emit(", b"subscribe(")
 def package(path):
     pieces=path.split("/")
     if len(pieces) >= 4 and pieces[0]=="node_modules" and pieces[1]=="@deepseek-ai":
@@ -49,6 +59,7 @@ def scan(path):
     package_files=collections.Counter()
     package_hits=collections.defaultdict(collections.Counter)
     candidates=[]
+    model_contract=[]
     read_total=0
     with gzip.GzipFile(fileobj=io.BytesIO(raw)) as g:
         with tarfile.open(fileobj=g,mode="r|") as tar:
@@ -68,6 +79,11 @@ def scan(path):
                 blob=f.read(MAX_FILE+1)
                 require(len(blob)==item.size,"SHORT_FILE")
                 read_total+=len(blob)
+                if pkg in TARGET_PACKAGE_NAMES and len(model_contract)<90:
+                    names=[v.decode("ascii") for v in CONTRACT_LITERALS if v in blob]
+                    if names:
+                        model_contract.append({"path":name,"hash12":sha(blob)[:12],
+                                               "literal_indicators":names})
                 hit={key:sum(word in blob for word in pats) for key,pats in SIGNALS.items()}
                 hit={k:v for k,v in hit.items() if v}
                 for k in hit:package_hits[pkg][k]+=1
@@ -89,6 +105,7 @@ def scan(path):
         "firstparty_package_files":dict(package_files),
         "firstparty_signals":{k:dict(v) for k,v in package_hits.items()},
         "firstparty_source_candidates":candidates[:MAX_CANDIDATES],
+        "selected_original_model_provider_contract":model_contract,
         "firstparty_js_bytes_read":read_total,
         "original_event_callback_identity_proven":False,
         "original_runtime_tool_return_proven":False,
