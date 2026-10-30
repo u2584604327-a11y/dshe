@@ -31,6 +31,10 @@ python host_candidate/p40_exact_trampoline.py patch "$ORIGINAL" "$DIR/decoded" \
 if test "${P47_NO_HOST_FALLBACK:-0}" = 1; then
   python host_candidate/p47_no_fallback/p47_gate.py patch "$DIR/decoded"
 fi
+if test "${P72_ACCESSOR_FIXTURE_ONLY:-0}" = 1; then
+  test "${P51_SIDE_BY_SIDE:-0}" = 1 || { echo 'P72_BLOCKED_NOT_SIDECAR';exit 1; }
+  python host_candidate/p72_webview_access/patch_exact_webview_accessor.py patch "$DIR/decoded"
+fi
 python host_candidate/p43_original_service/inject_original_manifest.py inject \
   "$DIR/decoded/AndroidManifest.xml"
 if test "${P51_SIDE_BY_SIDE:-0}" = 1; then
@@ -130,6 +134,9 @@ if test "${P49_NODE_STAGE:-0}" = 1; then
 fi
 if test "${P47_NO_HOST_FALLBACK:-0}" = 1; then
   python host_candidate/p47_no_fallback/p47_gate.py verify "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
+fi
+if test "${P72_ACCESSOR_FIXTURE_ONLY:-0}" = 1; then
+  python host_candidate/p72_webview_access/patch_exact_webview_accessor.py verify "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
 fi
 python - "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" <<'PY'
 import sys,zipfile,hashlib,os
