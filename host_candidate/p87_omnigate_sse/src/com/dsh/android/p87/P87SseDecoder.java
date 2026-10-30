@@ -17,11 +17,17 @@ public final class P87SseDecoder {
  private int count;
  public P87SseDecoder(Listener l){if(l==null)throw new IllegalArgumentException();listener=l;}
  public void accept(byte[] bytes,int offset,int length){
-  if(closed||done)throw new IllegalStateException("P87_CLOSED_OR_DONE");
+  if(closed)throw new IllegalStateException("P87_CLOSED_OR_DONE");
   if(bytes==null||offset<0||length<0||offset>bytes.length-length)
    throw new IllegalArgumentException("P87_BOUNDS");
   for(int j=offset;j<offset+length;j++){
    int c=bytes[j]&255;
+   // CRLF/blank-line suffix may straddle reads AFTER the [DONE] event.
+   // Only framing whitespace is allowed, never a fresh event.
+   if(done){
+    if(c!=10&&c!=13)throw new IllegalStateException("P87_DATA_AFTER_DONE");
+    continue;
+   }
    if(afterCr){afterCr=false;if(c==10)continue;}
    if(c==10||c==13){endLine();if(c==13)afterCr=true;}
    else{if(line.size()>=MAX_LINE)throw new IllegalStateException("P87_LINE_LIMIT");line.write(c);}
