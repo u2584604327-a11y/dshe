@@ -69,7 +69,8 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java \
   host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java \
   host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48FixedIsolatedChild.java \
-  host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48HostProcessProbe.java
+  host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48HostProcessProbe.java \
+  host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java
 jar cf "$DIR/p43.jar" -C "$DIR/classes" .
 "$BT/d8" --min-api 26 --lib "$SDK/platforms/android-35/android.jar" \
   --output "$DIR/dex" "$DIR/p43.jar"
@@ -133,7 +134,8 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p47/P47LaunchGate;',
                   'Lcom/dsh/p37/P37RemoteProcess;',
                   'Lcom/dsh/android/p48/P48FixedIsolatedChild;',
-                  'Lcom/dsh/android/p48/P48HostProcessProbe;'):
+                  'Lcom/dsh/android/p48/P48HostProcessProbe;',
+                  'Lcom/dsh/android/p50/P50OriginalNodeFixedChild;'):
   if expected not in names:raise RuntimeError('P43_SERVICE_CLASS_MISSING')
 print("P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA")
 print("P43_ORIGINAL_P40_TRAMPOLINE_AND_P43_CLASSES3=PASS_STATIC")
