@@ -19,7 +19,8 @@ def kotlin_io_kind(output):
   return None
  match=re.search(r"->([A-Za-z][A-Za-z0-9_$]*)\(",output)
  if match is None:return "UNKNOWN_KOTLIN_IO"
- name=match.group(1).split('{"readText":"READ_TEXT","writeText":"WRITE_TEXT",
+ name=match.group(1).split('$',1)[0]
+ mapping={"readText":"READ_TEXT","writeText":"WRITE_TEXT",
           "readBytes":"READ_BYTES","writeBytes":"WRITE_BYTES",
           "appendText":"APPEND_TEXT","copyTo":"COPY_FILE",
           "readLines":"READ_LINES","forEachLine":"READ_LINES",
