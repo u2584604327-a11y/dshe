@@ -190,6 +190,10 @@ jobs:
             > .p96private/agent-boot.log
           grep -Fxq 'P96_REAL_ORIGINAL_BOOT_ORIGINAL_SERVICE_PROVIDERS_SOURCE_LOCKED=YES' \
             .p96private/agent-boot.log
+          grep -Fxq 'P96_REAL_ORIGINAL_BOOT_REAL_AGENTLOOP_SERVICE_READY=PASS' \
+            .p96private/agent-boot.log
+          grep -Fxq 'P96_REAL_ORIGINAL_BOOT_PROMISE_WITH_RESOLVERS=function' \
+            .p96private/agent-boot.log
           grep -Fxq 'P96_REAL_ORIGINAL_BOOT_ANDROID_ENGINE_MANAGER_CONNECTED=NO' \
             .p96private/agent-boot.log
           cat .p96private/agent-boot.log
