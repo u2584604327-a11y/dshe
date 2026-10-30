@@ -35,12 +35,10 @@ for(const [pkg,cls] of specs){
       const fn=value.prototype?.[method];
       if(typeof fn!=='function')continue;
       const text=Function.prototype.toString.call(fn);
-      const scrubbed=text.slice(0,650)
-        .replace(/https?:\\/\\/[^\\s"'\\`]+/g,'<URL>')
-        .replace(/(?:Bearer |sk-)[A-Za-z0-9._-]{8,}/g,'<CREDENTIAL>')
-        .replace(/[\\u0000-\\u001f\\u007f]+/g,' ');
+      // Only a bounded first-party method prefix, never user data.
+      const scrubbed=text.slice(0,420).replace(/[\r\n\t]+/g,' ');
       process.stdout.write('P96_ORIGINAL_METHOD_SIGNATURE='+cls+'.'+method+
-        ' ARITY='+fn.length+' SOURCE_PREFIX='+scrubbed+'\\n');
+        ' ARITY='+fn.length+' SOURCE_PREFIX='+scrubbed+'\n');
     }
 
   }catch(e) {
