@@ -7,7 +7,12 @@ import {ToolRuntime} from '@deepseek-ai/dsh-tools';
 const report=(k,v)=>process.stdout.write('P96_TOOL_ACTIVATION_'+k+'='+String(v)+'\n');
 const ctx=new Context();
 try{
- const owner=ctx.provide('systemPrompt',{fixture:'in-memory'});
+ const owner=ctx.provide('systemPrompt',{
+   tools(...args){
+     report('SYSTEM_PROMPT_TOOLS_HOOK_REGISTERED',args.length);
+     return () => {};
+   }
+ });
  report('PROVIDER_REGISTERED', typeof owner==='function');
  report('PROVIDED_SERVICE_READ', typeof ctx.get('systemPrompt'));
  report('PROVIDED_PROPERTY_READ', typeof ctx.systemPrompt);
