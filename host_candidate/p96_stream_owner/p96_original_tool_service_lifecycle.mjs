@@ -7,6 +7,10 @@ import {Context} from '@deepseek-ai/cordis';
 import {ToolRuntime} from '@deepseek-ai/dsh-tools';
 
 const ctx=new Context();
+const methods=['provide','set','get','plugin','inject','emit','on','effect','scope','registry','root','start','dispose'];
+process.stdout.write('P96_CORDIS_METHOD_TYPES='+JSON.stringify(
+  Object.fromEntries(methods.map(x=>[x,typeof ctx[x]])))+'\n');
+
 function report(name,value) {
  process.stdout.write('P96_REAL_TOOL_SERVICE_'+name+'='+String(value)+'\n');
 }
@@ -18,6 +22,15 @@ try {
  report('SERVICE_VIA_PROPERTY',typeof ctx.tools);
  report('CONTEXT_SCOPE',typeof ctx.scope);
  report('SCOPE_STATUS',typeof ctx.scope?.status);
+ if(typeof ctx.provide==='function'){
+   try{
+     const provided=ctx.provide('systemPrompt',{});
+     report('SYNTHETIC_DEPENDENCY_PROVIDE', 'CALLED');
+     report('SYNTHETIC_DEPENDENCY_RETURN_TYPE', typeof provided);
+   }catch(e){
+     report('SYNTHETIC_DEPENDENCY_PROVIDE', 'BLOCKED_'+(e?.code||e?.name||'UNKNOWN'));
+   }
+ }
  const service=ctx.get?.('tools')||ctx.tools;
  if(!service){
    report('REAL_REGISTRY', 'NO_SERVICE_WITHOUT_REQUIRED_INJECTIONS');
