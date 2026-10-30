@@ -126,7 +126,10 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p87_omnigate_sse/src/com/dsh/android/p87/P87SseDecoder.java \
   host_candidate/p87_omnigate_sse/android/com/dsh/android/p87/P87OpenAiDelta.java \
   host_candidate/p87_omnigate_sse/android/com/dsh/android/p87/P87ChatStreamView.java \
-  host_candidate/p87_omnigate_sse/android/com/dsh/android/p87/P87AndroidUiProbe.java
+  host_candidate/p87_omnigate_sse/android/com/dsh/android/p87/P87AndroidUiProbe.java \
+  host_candidate/p89_existing_stream/src/com/dsh/android/p89/P89ExistingStreamPump.java \
+  host_candidate/p89_existing_stream/android/com/dsh/android/p89/P89ToolCallAssembler.java \
+  host_candidate/p89_existing_stream/android/com/dsh/android/p89/P89AndroidPipeProbe.java
 jar cf "$DIR/p43.jar" -C "$DIR/classes" .
 "$BT/d8" --min-api 26 --lib "$SDK/platforms/android-35/android.jar" \
   --output "$DIR/dex" "$DIR/p43.jar"
