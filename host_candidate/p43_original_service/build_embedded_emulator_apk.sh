@@ -117,7 +117,8 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p74_engine_fixture/src/com/dsh/android/p74/P74OriginalEngineFixtureHandoff.java \
   host_candidate/p75_engine_rendezvous/src/com/dsh/android/p75/P75EngineStartRendezvous.java \
   host_candidate/p76_original_engine_fd/android/com/dsh/android/p76/P76EngineArchiveFdProbe.java \
-  host_candidate/p77_engine_tar_audit/src/com/dsh/android/p77/P77TarAudit.java
+  host_candidate/p77_engine_tar_audit/src/com/dsh/android/p77/P77TarAudit.java \
+  host_candidate/p78_module_slot/src/com/dsh/android/p78/P78ModuleSlot.java
 jar cf "$DIR/p43.jar" -C "$DIR/classes" .
 "$BT/d8" --min-api 26 --lib "$SDK/platforms/android-35/android.jar" \
   --output "$DIR/dex" "$DIR/p43.jar"
@@ -199,7 +200,8 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p74/P74OriginalEngineFixtureHandoff;',
                   'Lcom/dsh/android/p75/P75EngineStartRendezvous;',
                   'Lcom/dsh/android/p76/P76EngineArchiveFdProbe;',
-                  'Lcom/dsh/android/p77/P77TarAudit;'):
+                  'Lcom/dsh/android/p77/P77TarAudit;',
+                  'Lcom/dsh/android/p78/P78ModuleSlot;'):
   if expected not in names:raise RuntimeError('P43_SERVICE_CLASS_MISSING')
 print("P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA")
 print("P43_ORIGINAL_P40_TRAMPOLINE_AND_P43_CLASSES3=PASS_STATIC")

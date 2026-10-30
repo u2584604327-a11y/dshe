@@ -11,6 +11,8 @@ import android.os.RemoteException;
 import java.io.File;
 import java.io.FileInputStream;
 import com.dsh.android.p77.P77TarAudit;
+import com.dsh.android.p78.P78ModuleSlot;
+import java.util.Arrays;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,6 +65,7 @@ public final class P76EngineArchiveFdProbe {
            !session.equals(b.getString("session")) ||
            !b.getBoolean("verified",false) ||
            !b.getBoolean("p77_full_tree_verified",false) ||
+           !b.getBoolean("p78_bounded_module_read_verified",false) ||
            b.getLong("bytes",-1)!=expectedBytes[0] ||
            expectedSha[0]==null || !expectedSha[0].equals(b.getString("sha256"))) {
           terminal[0]=true;listener.fail("P76_REPLY_UID_SESSION_OR_HASH_MISMATCH");return;
@@ -70,6 +73,7 @@ public final class P76EngineArchiveFdProbe {
         terminal[0]=true;
         listener.report("P76_REAL_ORIGINAL_ENGINE_GZIP_READONLY_FD_ISOLATED_SHA=PASS");
         listener.report("P77_REAL_ORIGINAL_TAR_FULL_TREE_SHA_MATCH_IN_ISOLATED_UID=PASS");
+        listener.report("P78_BOUNDED_ORIGINAL_JS_BYTES_READ_ONCE_IN_ISOLATED_UID=PASS");
         listener.report("P76_ISOLATED_SOURCE_ARCHIVE_NOT_EXECUTED=YES");
         listener.report("P76_PRODUCTION_NODE_MODULE_LOADING_READY=NOT_WIRED");
       }
@@ -180,13 +184,25 @@ public final class P76EngineArchiveFdProbe {
         // The same O_RDONLY unlinked FD is seekable; no raw file path,
         // extraction, chmod or Node script execution is involved.
         in.getChannel().position(0);
-        P77TarAudit.Result original=P77TarAudit.inspectGzip(in);
-        if(!original.isExactOriginal())
-          throw new IOException("P77_ORIGINAL_FULL_TREE_HASH_MISMATCH");
+        P78ModuleSlot module=new P78ModuleSlot(session);
+        P77TarAudit.Result original=P77TarAudit.inspectGzip(in,module);
+        if(!original.isExactOriginal() || !module.isReady())
+          throw new IOException("P78_ORIGINAL_ROOT_OR_JS_CANDIDATE_MISMATCH");
+        byte[] js=module.takeOnce(session,module.opaqueId());
+        try {
+          if(js.length<1 || js.length>P78ModuleSlot.MAX_JS_BYTES ||
+             !module.moduleSha().equals(hex(sha().digest(js))))
+            throw new IOException("P78_MODULE_DIGEST_OR_SIZE_MISMATCH");
+        }finally{
+          Arrays.fill(js,(byte)0);
+        }
+        if(module.isReady())
+          throw new IOException("P78_MODULE_ONESHOT_REPLAY");
         Bundle b=new Bundle();b.putString("session",session);
         b.putLong("bytes",count);b.putString("sha256",expectedHash);
         b.putBoolean("verified",true);
         b.putBoolean("p77_full_tree_verified",true);
+        b.putBoolean("p78_bounded_module_read_verified",true);
         Message ack=Message.obtain(null,ACK);ack.setData(b);reply.send(ack);
       }catch(Exception failure){
         // Never send an unverified success; no private archive bytes or paths
