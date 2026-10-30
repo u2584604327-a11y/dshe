@@ -84,7 +84,24 @@ try{
        name,arity:Object.getOwnPropertyDescriptor(prototype,name).value.length
      }));
    }
+   function safeMethodContract(object,name){
+     const method=Object.getPrototypeOf(object)?.[name];
+     if(typeof method!=='function')return null;
+     const source=Function.prototype.toString.call(method);
+     const sig=source.match(/^[^(]*\(([^)]{0,360})\)/)?.[1]||'';
+     const parameters=sig.split(',').map(x=>x.trim())
+       .filter(x=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(x)).slice(0,10);
+     const fields=[...source.matchAll(/(?:this|message|request|options|input|signal|turn|session)\??\.([A-Za-z_$][A-Za-z0-9_$]{0,64})/g)]
+       .map(x=>x[1]);
+     return {name,arity:method.length,parameters,
+       referencedFields:[...new Set(fields)].slice(0,45),
+       isAsync:method.constructor.name==='AsyncFunction'};
+   }
    log('HANDLE_PROTOTYPE_METHODS',JSON.stringify(methods(handle)));
+   log('SEND_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'send')));
+   log('FOLLOWUP_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'followup')));
+   log('SESSION_APPEND_CONTRACT',JSON.stringify(safeMethodContract(handle.session,'append')));
+   log('SESSION_COMMIT_CONTRACT',JSON.stringify(safeMethodContract(handle.session,'commit')));
    log('INBOX_PROTOTYPE_METHODS',JSON.stringify(methods(handle.inbox)));
    log('SESSION_PROTOTYPE_METHODS',JSON.stringify(methods(handle.session)));
    log('DISPATCH_PROTOTYPE_METHODS',JSON.stringify(methods(handle.dispatch)));
