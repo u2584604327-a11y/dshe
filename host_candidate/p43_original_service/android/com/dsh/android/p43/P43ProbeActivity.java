@@ -121,6 +121,8 @@ public final class P43ProbeActivity extends Activity {
              process.getInputStream()==null ||
              process.getErrorStream()==null)
             throw new IllegalStateException("P52_AUTHENTICATED_PROXY_BAD_TYPE_OR_UID");
+          log("P53_P37_PROCESS_PROXY_AFTER_REAL_CHILD_START_ACK=PASS");
+          log("P53_CHILD_START_ACK_IS_NOT_ENGINE_READY=YES");
           log("P52_LIVE_P37_JAVA_PROCESS_FROM_ISOLATED_BINDER=PASS");
           log("P52_PRODUCTION_ENGINEMANAGER_PROCESS_HANDOFF=NOT_WIRED");
           log("P52_BINDER_HELLO_IS_EXECVE_READY=NO");
