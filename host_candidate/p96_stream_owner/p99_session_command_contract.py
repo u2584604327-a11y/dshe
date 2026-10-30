@@ -83,6 +83,64 @@ def balanced_block(text, brace_index):
     raise RuntimeError("P99_UNBALANCED_BLOCK")
 
 
+def balanced_parens(text, open_index):
+    require(0 <= open_index < len(text) and text[open_index] == "(", "P99_BAD_PAREN_START")
+    depth = 0
+    i = open_index
+    quote = None
+    escape = False
+    line_comment = False
+    block_comment = False
+    while i < len(text):
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < len(text) else ""
+        if line_comment:
+            if ch == "\n":
+                line_comment = False
+            i += 1
+            continue
+        if block_comment:
+            if ch == "*" and nxt == "/":
+                block_comment = False
+                i += 2
+                continue
+            i += 1
+            continue
+        if quote is not None:
+            if escape:
+                escape = False
+                i += 1
+                continue
+            if ch == "\\":
+                escape = True
+                i += 1
+                continue
+            if ch == quote:
+                quote = None
+            i += 1
+            continue
+        if ch == "/" and nxt == "/":
+            line_comment = True
+            i += 2
+            continue
+        if ch == "/" and nxt == "*":
+            block_comment = True
+            i += 2
+            continue
+        if ch in ("'", '"', "`"):
+            quote = ch
+            i += 1
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return text[open_index + 1:i]
+        i += 1
+    raise RuntimeError("P99_UNBALANCED_PARENS")
+
+
 def method_contract(class_body, method_name):
     pat = re.compile(r"(?:(?:async|static)\s+)?" + re.escape(method_name) + r"\s*\(([^)]{0,500})\)\s*\{")
     match = pat.search(class_body)
@@ -199,10 +257,17 @@ def method_contract(class_body, method_name):
             mode_branches.append(item)
 
     direct_call_shapes = []
-    for method, args in re.findall(
-        r"\b(createUserMessage|resolvePromptFileReceipts|hasPromptRequest|remoteErrorOf)\s*\(([^)]{0,1200})\)",
-        body,
-    ):
+    target_calls = ("createUserMessage", "resolvePromptFileReceipts", "hasPromptRequest", "remoteErrorOf")
+    call_pat = re.compile(r"\b(" + "|".join(map(re.escape, target_calls)) + r")\s*\(")
+    for match in call_pat.finditer(body):
+        method = match.group(1)
+        open_index = body.find("(", match.start(), match.end())
+        if open_index < 0:
+            continue
+        try:
+            args = balanced_parens(body, open_index)
+        except Exception:
+            continue
         ids = [
             x for x in re.findall(r"\b([A-Za-z_$][A-Za-z0-9_$]{0,80})\b", args)
             if safe_ident(x) and x not in {"true", "false", "null", "undefined", "await"}
@@ -216,8 +281,8 @@ def method_contract(class_body, method_name):
         ]
         item = {
             "method": method,
-            "argIdentifiers": list(dict.fromkeys(ids))[:50],
-            "argFields": list(dict.fromkeys(fields))[:50],
+            "argIdentifiers": list(dict.fromkeys(ids))[:60],
+            "argFields": list(dict.fromkeys(fields))[:60],
         }
         if item not in direct_call_shapes:
             direct_call_shapes.append(item)
