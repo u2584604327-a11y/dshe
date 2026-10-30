@@ -272,8 +272,25 @@ public final class P43ProbeActivity extends Activity {
     log("P47_PRODUCTION_NODE_ENGINE_RUNNING=NO");
     return true;
   }
+  @Override protected void onNewIntent(Intent intent){
+    super.onNewIntent(intent);
+    if(!"com.dsh.p51.isolatedprobe".equals(getPackageName()) ||
+       intent==null || !getIntent().getBooleanExtra("p86_external",false))return;
+    String id=intent.getStringExtra("p86_id");
+    String action=intent.getStringExtra("p86_action");
+    boolean accepted=com.dsh.android.p79.P79NativeBrowserMailboxProbe
+      .p86Command(this,id,action);
+    if(!accepted)android.util.Log.i("P86_NATIVE_REPLY","P86_DISPATCH_NOT_READY");
+  }
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
+    if("com.dsh.p51.isolatedprobe".equals(getPackageName()) &&
+       getIntent()!=null && getIntent().getBooleanExtra("p86_external",false)){
+      com.dsh.android.p79.P79NativeBrowserMailboxProbe.runP86(
+          this,getIntent().getStringExtra("p86_cmd"),
+          getIntent().getStringExtra("p86_res"));
+      return;
+    }
     if("com.dsh.p51.isolatedprobe".equals(getPackageName()) &&
        getIntent()!=null && getIntent().hasExtra("p85_restart_mode")){
       com.dsh.android.p85.P85RestartProbe.run(
