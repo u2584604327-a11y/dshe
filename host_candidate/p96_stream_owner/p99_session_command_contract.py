@@ -223,7 +223,7 @@ def method_contract(class_body, method_name):
         r"\b([A-Za-z_$][A-Za-z0-9_$]{0,80})\.([A-Za-z_$][A-Za-z0-9_$]{0,80})\s*\(([^)]{0,900})\)",
         body,
     ):
-        if method not in {"steer", "followup", "commit", "resolveAgent", "createUserMessage", "bindPrompt", "admitPromptContent"}:
+        if method not in {"steer", "followup", "commit", "resolveAgent", "createUserMessage", "bindPrompt", "admitPromptContent", "prompt"}:
             continue
         ids = [
             x for x in re.findall(r"\b([A-Za-z_$][A-Za-z0-9_$]{0,80})\b", args)
@@ -257,7 +257,7 @@ def method_contract(class_body, method_name):
             mode_branches.append(item)
 
     direct_call_shapes = []
-    target_calls = ("createUserMessage", "resolvePromptFileReceipts", "hasPromptRequest", "remoteErrorOf")
+    target_calls = ("createUserMessage", "resolvePromptFileReceipts", "hasPromptRequest", "remoteErrorOf", "principalOf", "canonicalClientTimeZone", "hasPromptContent")
     call_pat = re.compile(r"\b(" + "|".join(map(re.escape, target_calls)) + r")\s*\(")
     for match in call_pat.finditer(body):
         method = match.group(1)
@@ -370,6 +370,9 @@ def main():
             break
     print("P99_SESSION_CONTROLLER_IMPORTS=" + json.dumps(imports, sort_keys=True))
 
+    controller_body, controller_occurrences = find_class_body(source, "SessionController", "prompt")
+    controller_prompt = method_contract(controller_body, "prompt")
+
     class_body, occurrences = find_class_body(source, CLASS_NAME, "prompt")
 
     constructor = method_contract(class_body, "constructor")
@@ -393,6 +396,8 @@ def main():
         if len(resolve_bindings) >= 12:
             break
 
+    print("P99_SESSION_CONTROLLER_CLASS_TOKEN_OCCURRENCES=" + str(controller_occurrences))
+    print("P99_SESSION_CONTROLLER_PROMPT_FULL=" + json.dumps(controller_prompt, sort_keys=True))
     print("P99_SESSION_COMMAND_CLASS_TOKEN_OCCURRENCES=" + str(occurrences))
     print("P99_SESSION_COMMAND_CLASS_FOUND=PASS")
     print("P99_SESSION_COMMAND_CONSTRUCTOR=" + json.dumps(constructor, sort_keys=True))
