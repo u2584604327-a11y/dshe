@@ -28,3 +28,22 @@ for p in paths[:12]:
             text=re.sub(r"(?:Bearer |sk-)[a-zA-Z0-9._-]{8,}","<CREDENTIAL>",text)
             print("P96_TOOL_CODE_ANCHOR="+pattern.decode()+
                   " @"+str(m.start())+" | "+text[:430])
+
+# Inspect the exact transcript-tools resolver (one source file only).
+matches=0
+for p in sorted(folder.rglob("*.js")):
+    if not p.is_file() or p.stat().st_size>2000000:continue
+    b=p.read_bytes()
+    for marker in (b"function resolveTranscriptTools",b"const resolveTranscriptTools",
+                   b"function getDeclaredTools"):
+        m=b.find(marker)
+        if m<0:continue
+        matches+=1
+        start=max(0,m-100);end=min(len(b),m+1600)
+        frag=b[start:end].decode("utf-8","replace")
+        frag=re.sub(r"[\x00-\x1f\x7f]"," ",frag)
+        print("P96_RESOLVER_IMPLEMENTATION_FILE="+p.relative_to(folder).as_posix())
+        print("P96_RESOLVER_IMPLEMENTATION="+frag[:1600])
+        if matches>=4:break
+    if matches>=4:break
+print("P96_TOOL_TRANSCRIPT_RESOLVER_COUNT="+str(matches))
