@@ -62,8 +62,12 @@ jobs:
           set -euo pipefail
           bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh \
             > .p49-private-build.log 2>&1 || {
-              grep -E 'P49_|P47_BLOCKED|RuntimeError|ValueError|ERROR|Traceback' \
-                .p49-private-build.log | tail -n 24 || true
+              echo 'P49_PRIVATE_BUILD_FAILED=YES'
+              grep -E 'P49_|P47_BLOCKED|RuntimeError|ValueError|ERROR|Traceback|FileNotFoundError|CalledProcessError|not found|No such file|INVALID|DRIFT' \
+                .p49-private-build.log | tail -n 30 || true
+              echo 'P49_LAST_BUILD_LINES_FOR_PRIVATE_TRIAGE_START'
+              tail -n 28 .p49-private-build.log | sed -E 's/(SECRET|TOKEN|PASSWORD|KEY)=([^ ]+)/\1=[REDACTED]/Ig'
+              echo 'P49_LAST_BUILD_LINES_END'
               exit 1
             }
           grep -Fq 'P49_EXACT_ORIGINAL_NODE_ELF_SHA256=PASS' .p49-private-build.log
