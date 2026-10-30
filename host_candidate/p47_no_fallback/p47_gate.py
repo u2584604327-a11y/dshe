@@ -46,8 +46,11 @@ def verify(apk):
     need(m[bridge]["dex"]=="classes.dex","BRIDGE_MOVED")
     need(m[target]["calls"].count(("invoke-static",TRAMPOLINE))==1,
          "PRIMARY_CALLSITE_NOT_EXACT")
-    need(m[bridge]["calls"]==[("invoke-static",DENY)],
-         "BRIDGE_NOT_EXACTLY_NO_FALLBACK")
+    # P40's legacy find_methods() intentionally filters calls into only
+    # ProcessBuilder or P40 classes, so it cannot see the new P47 callee.
+    # Inspect exact bytecode in the main DEX instead of asserting a filtered
+    # call list contains an unrelated class.
+    need(m[bridge]["calls"]==[],"BRIDGE_STILL_CALLS_BUILDER_OR_P40")
     need(("invoke-virtual",ORIGINAL) not in m[target]["calls"],
          "PRIMARY_STILL_SPAWNS_HOST")
     for x in (probe,dump):
@@ -56,6 +59,24 @@ def verify(apk):
     need(sum(row["calls"].count(("invoke-virtual",ORIGINAL))
              for row in m.values())==2,"ORIGINAL_HOST_START_COUNT_DRIFT")
     with zipfile.ZipFile(apk) as z:
+        main_dex=DEX(z.read("classes.dex"))
+        exact_bridge_methods=[
+            method for cls in main_dex.get_classes()
+            if cls.get_name()==CLASS
+            for method in cls.get_methods()
+            if method.get_name()=="start"
+        ]
+        need(len(exact_bridge_methods)==1,"MAIN_DEX_BRIDGE_NOT_UNIQUE")
+        bridge_invokes=[
+            (inst.get_name(),inst.get_output())
+            for _,inst in exact_bridge_methods[0].get_instructions_idx()
+            if inst.get_name().startswith("invoke-")
+        ]
+        need(len(bridge_invokes)==1 and bridge_invokes[0][0]=="invoke-static"
+             and DENY in bridge_invokes[0][1],
+             "BRIDGE_NOT_EXACTLY_NO_FALLBACK")
+        need(not any("Ljava/lang/ProcessBuilder;->start(" in value
+                     for _,value in bridge_invokes),"BRIDGE_HOST_START_PRESENT")
         need("classes3.dex" in z.namelist(),"P47_GATE_DEX_MISSING")
         d=DEX(z.read("classes3.dex"))
         classes={c.get_name():c for c in d.get_classes()}
