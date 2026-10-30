@@ -96,7 +96,32 @@ public final class P95StreamToMessageTest {
             "callback failure must not misreport waiting");
         System.out.println("P95_TOOL_CALLBACK_FAILURE_NOT_AWAITING=PASS");
     }
+    private static void noFalseCompletion()throws Exception{
+        P93TurnMessageState empty=new P93TurnMessageState("turn_p95_empty01",5,f->{});
+        String zero=line(delta(new JSONObject().put("role","assistant"),"stop"))+done();
+        check(!run(zero,new P95StreamToMessage(empty,x->{})),"empty done is not a response");
+        check(empty.snapshot().phase==P93TurnMessageState.Phase.FAILED,
+            "empty native role/stop/DONE must fail, never display completed");
+        P93TurnMessageState length=new P93TurnMessageState("turn_p95_length",6,f->{});
+        String partial=line(delta(new JSONObject().put("content","已有回答"),"length"))+done();
+        check(!run(partial,new P95StreamToMessage(length,x->{})),"length finish incomplete");
+        check(length.snapshot().phase==P93TurnMessageState.Phase.TRUNCATED &&
+             "已有回答".equals(length.snapshot().content),
+             "length cap must retain partial text without false complete");
+        P93TurnMessageState noTool=new P93TurnMessageState("turn_p95_notool",7,f->{});
+        check(!run(line(delta(new JSONObject(),"tool_calls"))+done(),
+             new P95StreamToMessage(noTool,x->{})),"orphan tool finish cannot succeed");
+        check(noTool.snapshot().phase==P93TurnMessageState.Phase.FAILED,
+            "tool finish without tool payload is malformed");
+        P93TurnMessageState filtered=new P93TurnMessageState("turn_p95_filter",8,f->{});
+        check(!run(line(delta(new JSONObject(),"content_filter"))+done(),
+             new P95StreamToMessage(filtered,x->{})),"content filtered is not success");
+        check(filtered.snapshot().phase==P93TurnMessageState.Phase.FAILED,
+            "content-filter sentinel fails closed");
+        System.out.println("P95_EMPTY_STOP_AND_LENGTH_DO_NOT_COMPLETE=PASS");
+        System.out.println("P95_MALFORMED_TOOL_OR_FILTER_FINISH_FAIL_CLOSED=PASS");
+    }
     public static void main(String[] args)throws Exception{
-        plainText();toolCall();prematureEof();badToolHandoff();
+        plainText();toolCall();prematureEof();badToolHandoff();noFalseCompletion();
     }
 }
