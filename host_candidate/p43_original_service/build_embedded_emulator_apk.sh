@@ -4,6 +4,14 @@ set -euo pipefail
 # plus P43 isolated Service and exported test-only probe Activity.
 # Never distribute/install over owner's DSH.
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+if test "${P51_SIDE_BY_SIDE:-0}" = 1; then
+  test "${P47_NO_HOST_FALLBACK:-0}" = 1 || {
+    echo 'P51_BLOCKED_REQUIRED_P47_NO_HOST_FALLBACK';exit 1;
+  }
+  test "${P49_NODE_STAGE:-0}" = 1 || {
+    echo 'P51_BLOCKED_EXACT_ARM64_NODE_STAGE_REQUIRED';exit 1;
+  }
+fi
 BT="$SDK/build-tools/35.0.0"
 DIR=.p43tmp
 mkdir -p "$DIR/classes" "$DIR/dex"
@@ -23,6 +31,10 @@ if test "${P47_NO_HOST_FALLBACK:-0}" = 1; then
 fi
 python host_candidate/p43_original_service/inject_original_manifest.py inject \
   "$DIR/decoded/AndroidManifest.xml"
+if test "${P51_SIDE_BY_SIDE:-0}" = 1; then
+  python host_candidate/p51_side_by_side/p51_manifest.py inject \
+    "$DIR/decoded/AndroidManifest.xml"
+fi
 # Apktool 2.7 with --force-manifest and -r preserves resources.arsc byte-for-byte,
 # but its rebuilt APK contains a *plain-text* Manifest! Compile ONLY that XML
 # with aapt, then replace the invalid plaintext ZIP member with binary AXML.
@@ -54,8 +66,13 @@ test -s "$DIR/original-secondary/classes2.dex"
 if test "${P47_NO_HOST_FALLBACK:-0}" != 1; then
   python host_candidate/p40_exact_trampoline.py verify "$DIR/rebuilt-unsigned.apk"
 fi
-python host_candidate/p43_original_service/inject_original_manifest.py verify \
-  "$DIR/rebuilt-unsigned.apk"
+if test "${P51_SIDE_BY_SIDE:-0}" = 1; then
+  python host_candidate/p51_side_by_side/p51_manifest.py verify \
+    "$DIR/rebuilt-unsigned.apk"
+else
+  python host_candidate/p43_original_service/inject_original_manifest.py verify \
+    "$DIR/rebuilt-unsigned.apk"
+fi
 # A third dex guarantees no replacement of original classes.dex/classes2.dex.
 javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   -d "$DIR/classes" \
@@ -96,6 +113,10 @@ keytool -genkeypair -alias temporary -keyalg RSA -keysize 3072 -validity 1 \
   --out "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" "$DIR/aligned.apk"
 unset password
 "$BT/apksigner" verify "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
+if test "${P51_SIDE_BY_SIDE:-0}" = 1; then
+  python host_candidate/p51_side_by_side/p51_manifest.py verify \
+    "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
+fi
 if test "${P49_NODE_STAGE:-0}" = 1; then
   python host_candidate/p49_original_node_stage.py verify \
     "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
@@ -144,8 +165,30 @@ PY
   | grep -E '^uses-permission:' | sort > "$DIR/original-perms.txt" || true
 "$BT/aapt" dump permissions "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" \
   | grep -E '^uses-permission:' | sort > "$DIR/candidate-perms.txt" || true
-diff -u "$DIR/original-perms.txt" "$DIR/candidate-perms.txt"
-echo 'P43_APK_ORIGINAL_COMPONENTS_AND_APPLICATION_PRESERVED=PASS_STATIC'
+if test "${P51_SIDE_BY_SIDE:-0}" = 1; then
+  test ! -s "$DIR/candidate-perms.txt" || {
+    echo 'P51_BLOCKED_SIDE_BY_SIDE_HAS_PERMISSIONS';exit 1;
+  }
+  original_cert="$("$BT/apksigner" verify --print-certs "$ORIGINAL" \
+    | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+  test -n "$original_cert"
+  derived_cert="$("$BT/apksigner" verify --print-certs \
+    "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" \
+    | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+  test -n "$derived_cert" && test "$derived_cert" != "$original_cert" || {
+    echo 'P51_BLOCKED_TEST_SIGNATURE_NOT_DISTINCT';exit 1;
+  }
+  echo 'P51_NO_PERMISSIONS_AND_SEPARATE_SIGNER=PASS'
+  echo 'P51_ORIGINAL_DSH_PACKAGE_CANNOT_BE_UPDATED_BY_THIS_APK=PASS'
+else
+  diff -u "$DIR/original-perms.txt" "$DIR/candidate-perms.txt"
+fi
+if test "${P51_SIDE_BY_SIDE:-0}" = 1; then
+  echo 'P51_ORIGINAL_COMPONENTS_INTENTIONALLY_DISABLED=PASS'
+  echo 'P51_ORIGINAL_APPLICATION_INITIALIZATION_NOT_TESTED=YES'
+else
+  echo 'P43_APK_ORIGINAL_COMPONENTS_AND_APPLICATION_PRESERVED=PASS_STATIC'
+fi
 echo 'P43_ISOLATED_SERVICE_EMBEDDED_IN_REAL_ORIGINAL_PACKAGE=PASS_STATIC'
 echo 'P43_REAL_NODE_ENGINE_ISOLATED=NO'
 echo 'P43_V139_RELEASE=BLOCKED'
