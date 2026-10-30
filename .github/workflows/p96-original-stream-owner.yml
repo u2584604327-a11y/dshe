@@ -161,6 +161,19 @@ jobs:
             -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
             timeout 20s node .p96private/agent-runtime/p96_original_model_toolruntime_roundtrip.mjs
           echo 'P96_ORIGINAL_PI_AI_AND_TOOL_RUNTIME_CORDIS_ROUNDTRIP=PASS' >> "$GITHUB_STEP_SUMMARY"
+          cp host_candidate/p96_stream_owner/p96_original_agentloop_readiness.mjs \
+            .p96private/agent-runtime/p96_original_agentloop_readiness.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 18s node .p96private/agent-runtime/p96_original_agentloop_readiness.mjs \
+            > .p96private/agentloop-readiness.log
+          grep -Fxq 'P96_ORIGINAL_AGENTLOOP_ORIGINAL_TOOL_RUNTIME_READY=YES' \
+            .p96private/agentloop-readiness.log
+          grep -Fxq 'P96_ORIGINAL_AGENTLOOP_ANDROID_ENGINE_MANAGER_CONNECTED=NO' \
+            .p96private/agentloop-readiness.log
+          cat .p96private/agentloop-readiness.log
+          echo 'P96_REAL_AGENTLOOP_INJECTION_CONTRACT_OBSERVED=PASS' >> "$GITHUB_STEP_SUMMARY"
+
 
 
 
