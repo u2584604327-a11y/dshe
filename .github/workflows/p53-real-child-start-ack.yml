@@ -101,3 +101,42 @@ jobs:
           echo 'P53_ORIGINAL_USER_DSH_INSTALL_CHANGED=NO' >> "$GITHUB_STEP_SUMMARY"
           echo 'P53_ORIGINAL_PRODUCTION_ENGINE_MANAGER_RUNNING=NO' >> "$GITHUB_STEP_SUMMARY"
           echo 'P53_FIXED_SIGNED_V139=BLOCKED' >> "$GITHUB_STEP_SUMMARY"
+
+  exact-original-engine-asset-inventory:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p53-child-start-ack-and-runtime-intake-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p52-safe-actions-artifact-inventory-and-engine-contract-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Verify private exact original APK and report only engine container categories
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = "u2584604327-a11y/dshe"
+          test "$(gh api "repos/$GH_REPO" --jq .private)" = true
+          python -m py_compile host_candidate/p53_child_start/p53_exact_original_engine_asset_inventory.py
+          mkdir -p .p53_private_runtime
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo "$GH_REPO" --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --dir .p53_private_runtime
+          original=.p53_private_runtime/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          test -s "$original"
+          python host_candidate/p53_child_start/p53_exact_original_engine_asset_inventory.py "$original" \
+            | tee .p53_engine_categories.txt
+          grep -Fxq 'P53_EXACT_SIGNED_V138_ENGINE_ASSET=PASS' .p53_engine_categories.txt
+          grep -Fxq 'P53_ENGINE_SCRIPT_CONTENT_EXTRACTED_OR_UPLOADED=NO' .p53_engine_categories.txt
+          echo 'P53_ENGINE_ASSET_STATIC_INVENTORY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P53_REAL_NODE_PRODUCTION_STARTUP=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
+      - name: Always delete original APK and per-run runtime metadata
+        if: always()
+        shell: bash
+        run: rm -rf .p53_private_runtime .p53_engine_categories.txt
