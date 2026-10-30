@@ -23,6 +23,15 @@ jobs:
         with: {persist-credentials: false}
       - uses: actions/setup-python@v5
         with: {python-version: '3.11'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '20'}
+      - name: Test existing original Node to OmniGate read-only preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test host_candidate/p96_stream_owner/omnigate_local_preflight.test.mjs
+          echo 'P96_DSH_8787_HOST_AND_OVERLAY_READONLY_PREFLIGHT=PASS' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Verify exact private original and perform read-only check
         shell: bash
         run: |
