@@ -34,11 +34,8 @@ for(const [pkg,cls] of specs){
     for(const method of focus){
       const fn=value.prototype?.[method];
       if(typeof fn!=='function')continue;
-      const text=Function.prototype.toString.call(fn);
-      // Only a bounded first-party method prefix, never user data.
-      const scrubbed=text.slice(0,420).replace(/[\r\n\t]+/g,' ');
-      process.stdout.write('P96_ORIGINAL_METHOD_SIGNATURE='+cls+'.'+method+
-        ' ARITY='+fn.length+' SOURCE_PREFIX='+scrubbed+'\n');
+      process.stdout.write('P96_ORIGINAL_METHOD_ARITY='+cls+'.'+method+
+        ' ARITY='+fn.length+'\n');
     }
 
   }catch(e) {
