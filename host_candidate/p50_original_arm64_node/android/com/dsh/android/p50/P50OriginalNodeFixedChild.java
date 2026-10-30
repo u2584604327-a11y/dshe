@@ -182,6 +182,9 @@ public final class P50OriginalNodeFixedChild {
       env.put("LD_PRELOAD",preloadsEnv.toString());
       node=pb.start(); child=node;
       if(aborted){node.destroyForcibly();throw new IOException("P50_CANCELLED");}
+      // P53: send on Binder only after actual original ARM64 Node
+      // ProcessBuilder.start() returns successfully. This is not READY.
+      emit(P48FixedIsolatedChild.CHILD_STARTED,null,0);
 
       final java.lang.Process running=node;
       AtomicReference<String> failure=new AtomicReference<>();
