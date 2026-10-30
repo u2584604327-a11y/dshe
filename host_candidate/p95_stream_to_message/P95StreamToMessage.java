@@ -17,6 +17,7 @@ public final class P95StreamToMessage implements P89ExistingStreamPump.Observer 
     private final P89ToolCallAssembler tools = new P89ToolCallAssembler();
     private final ToolReady onTools;
     private boolean sawDone, failed;
+    private String finishReason = "";
 
     public P95StreamToMessage(P93TurnMessageState existingTurn, ToolReady callback) {
         if (existingTurn == null || callback == null)
@@ -31,6 +32,7 @@ public final class P95StreamToMessage implements P89ExistingStreamPump.Observer 
             tools.accept(event);
             P87OpenAiDelta delta = P87OpenAiDelta.parse(event);
             if (delta.error) throw new IllegalStateException("P95_SSE_EVENT_ERROR");
+            if (!delta.finishReason.isEmpty()) finishReason = delta.finishReason;
             if (!delta.reasoning.isEmpty()) turn.reasoning();
             if (!delta.content.isEmpty()) turn.content(delta.content);
             if (delta.toolFragments > 0) turn.tools(delta.toolFragments);
@@ -38,7 +40,19 @@ public final class P95StreamToMessage implements P89ExistingStreamPump.Observer 
                 sawDone = true;
                 List<P89ToolCallAssembler.Call> ready = tools.verifiedToolCalls();
                 if (ready.isEmpty()) {
-                    turn.done();
+                    // SSE [DONE] alone is not a valid nonempty model reply.
+                    // Context-length stops preserve partial text but do not
+                    // report natural model completion.
+                    if ("length".equals(finishReason)) {
+                        turn.closedWithoutDone();
+                    } else if ("tool_calls".equals(finishReason) ||
+                               "function_call".equals(finishReason) ||
+                               "content_filter".equals(finishReason) ||
+                               turn.snapshot().content.trim().isEmpty()) {
+                        turn.failure();
+                    } else {
+                        turn.done();
+                    }
                 } else {
                     // This assistant stream ended to request tools, but the
                     // original MODEL TASK is not complete until results return.
