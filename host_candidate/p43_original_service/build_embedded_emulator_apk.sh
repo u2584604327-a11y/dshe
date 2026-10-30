@@ -8,9 +8,11 @@ if test "${P51_SIDE_BY_SIDE:-0}" = 1; then
   test "${P47_NO_HOST_FALLBACK:-0}" = 1 || {
     echo 'P51_BLOCKED_REQUIRED_P47_NO_HOST_FALLBACK';exit 1;
   }
-  test "${P49_NODE_STAGE:-0}" = 1 || {
-    echo 'P51_BLOCKED_EXACT_ARM64_NODE_STAGE_REQUIRED';exit 1;
-  }
+  if test "${P49_NODE_STAGE:-0}" != 1; then
+    test "${P51_X86_SIMULATOR_ONLY:-0}" = 1 || {
+      echo 'P51_BLOCKED_EXACT_ARM64_NODE_STAGE_REQUIRED';exit 1;
+    }
+  fi
 fi
 BT="$SDK/build-tools/35.0.0"
 DIR=.p43tmp
