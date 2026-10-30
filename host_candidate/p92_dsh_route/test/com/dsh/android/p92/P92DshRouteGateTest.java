@@ -26,7 +26,8 @@ public final class P92DshRouteGateTest {
         api.onTrustedUserTurn("wrong_original_turn",true);
         ok(!api.isConfirmed(),"foreign session turn must not confirm");
         api.onTrustedUserTurn(id,true);
-        ok(api.isConfirmed(),"original turn + HTTP accepted");
+        ok(!api.isConfirmed() && api.originalRequestAcceptedButReplyUnverified(),
+           "original turn + HTTP is transport acceptance, NOT model reply");
         ok("ORIGINAL_TURN_AND_HTTP_ACCEPTED_MODEL_REPLY_UNPROVEN".equals(api.reason()),
            "must not claim model reply");
 
@@ -37,7 +38,15 @@ public final class P92DshRouteGateTest {
         reverse.onTrustedUserTurn(id,true);
         ok(!reverse.isConfirmed(),"trusted user turn alone insufficient");
         reverse.onHttpStatus(200);
-        ok(reverse.isConfirmed(),"either order succeeds only with both observations");
+        ok(!reverse.isConfirmed() && reverse.originalRequestAcceptedButReplyUnverified(),
+           "reverse event order does not claim assistant message complete");
+
+        // Even after a 200 and a real user turn, premature SSE loss must
+        // not be reported as a delivered model answer or cause a retry.
+        api.onConnectionLost();
+        ok(api.stage()==P92DshRouteGate.Stage.UNKNOWN_AFTER_DISPATCH &&
+           !api.isConfirmed() && !api.originalRequestAcceptedButReplyUnverified() &&
+           !api.canAutoRetry(),"post-200 model stream disconnect is not success");
 
         P92DshRouteGate notTrusted=P92DshRouteGate.forOriginalProviderTurn(id,t -> false);
         ok(!notTrusted.preflight(health(true,"main","main_socket_and_driver_match")),
@@ -80,6 +89,7 @@ public final class P92DshRouteGateTest {
         System.out.println("P92_ORIGINAL_PROVIDER_NO_WEB_BUBBLE_DEPENDENCY=PASS");
         System.out.println("P92_ORIGINAL_SESSION_RECHECK_AND_409_NO_RETRY=PASS");
         System.out.println("P92_HTTP200_AND_TURN_NOT_MODEL_REPLY=PASS");
+        System.out.println("P92_ORIGINAL_HTTP200_NEVER_FAKE_ASSISTANT_COMPLETION=PASS");
     }
 
     public static void main(String[] ignored) {
