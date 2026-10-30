@@ -79,6 +79,10 @@ mv "$DIR/dex/classes.dex" "$DIR/dex/classes3.dex"
 cp "$DIR/rebuilt-unsigned.apk" "$DIR/with-p43-dex.apk"
 (cd "$DIR/dex" && zip -q -0 ../with-p43-dex.apk classes3.dex)
 test "$(unzip -Z1 "$DIR/with-p43-dex.apk" | grep -Ec '^classes3.dex$')" -eq 1
+if test "${P49_NODE_STAGE:-0}" = 1; then
+  python host_candidate/p49_original_node_stage.py prepare "$ORIGINAL" "$DIR/p49"
+  python host_candidate/p49_original_node_stage.py embed "$DIR/with-p43-dex.apk" "$DIR/p49"
+fi
 "$BT/zipalign" -f -P 16 4 "$DIR/with-p43-dex.apk" "$DIR/aligned.apk"
 "$BT/zipalign" -c -P 16 4 "$DIR/aligned.apk"
 password="$(openssl rand -hex 20)"
@@ -91,17 +95,27 @@ keytool -genkeypair -alias temporary -keyalg RSA -keysize 3072 -validity 1 \
   --out "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" "$DIR/aligned.apk"
 unset password
 "$BT/apksigner" verify "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
+if test "${P49_NODE_STAGE:-0}" = 1; then
+  python host_candidate/p49_original_node_stage.py verify \
+    "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
+fi
 if test "${P47_NO_HOST_FALLBACK:-0}" = 1; then
   python host_candidate/p47_no_fallback/p47_gate.py verify "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
 fi
 python - "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" <<'PY'
-import sys,zipfile,hashlib
+import sys,zipfile,hashlib,os
 from androguard.core.dex import DEX
 with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as derived:
  def protected(z):
   return {n:hashlib.sha256(z.read(n)).hexdigest()
           for n in z.namelist() if n.startswith(('assets/','lib/')) and not n.endswith('/')}
- if protected(orig)!=protected(derived):raise RuntimeError("P43_ASSET_OR_NATIVE_LIB_DRIFT")
+ if os.environ.get("P49_NODE_STAGE")=="1":
+  original_protected=protected(orig)
+  rebuilt_protected=protected(derived)
+  if any(rebuilt_protected.get(name)!=sha for name,sha in original_protected.items()):
+   raise RuntimeError("P49_ORIGINAL_ASSET_OR_NATIVE_LIB_DRIFT")
+ else:
+  if protected(orig)!=protected(derived):raise RuntimeError("P43_ASSET_OR_NATIVE_LIB_DRIFT")
  def old_dex(z):
   return [n for n in z.namelist() if n in ('classes.dex','classes2.dex')]
  for dex_name in old_dex(orig):
