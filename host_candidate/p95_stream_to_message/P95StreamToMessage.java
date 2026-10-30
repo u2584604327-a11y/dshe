@@ -45,11 +45,12 @@ public final class P95StreamToMessage implements P89ExistingStreamPump.Observer 
                     // report natural model completion.
                     if ("length".equals(finishReason)) {
                         turn.closedWithoutDone();
+                        throw new IllegalStateException("P95_CONTEXT_LENGTH_INCOMPLETE");
                     } else if ("tool_calls".equals(finishReason) ||
                                "function_call".equals(finishReason) ||
                                "content_filter".equals(finishReason) ||
                                turn.snapshot().content.trim().isEmpty()) {
-                        turn.failure();
+                        throw new IllegalStateException("P95_NO_VERIFIED_ASSISTANT_REPLY");
                     } else {
                         turn.done();
                     }
