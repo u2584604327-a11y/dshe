@@ -122,7 +122,11 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p79_browser_native_mailbox/android/com/dsh/android/p79/P79NativeBrowserMailboxProbe.java \
   host_candidate/p83_hidden_browser/android/com/dsh/android/p83/P83HiddenBrowserPane.java \
   host_candidate/p85_durable_reply/android/com/dsh/android/p85/P85DurableReplyJournal.java \
-  host_candidate/p85_durable_reply/android/com/dsh/android/p85/P85RestartProbe.java
+  host_candidate/p85_durable_reply/android/com/dsh/android/p85/P85RestartProbe.java \
+  host_candidate/p87_omnigate_sse/src/com/dsh/android/p87/P87SseDecoder.java \
+  host_candidate/p87_omnigate_sse/android/com/dsh/android/p87/P87OpenAiDelta.java \
+  host_candidate/p87_omnigate_sse/android/com/dsh/android/p87/P87ChatStreamView.java \
+  host_candidate/p87_omnigate_sse/android/com/dsh/android/p87/P87AndroidUiProbe.java
 jar cf "$DIR/p43.jar" -C "$DIR/classes" .
 "$BT/d8" --min-api 26 --lib "$SDK/platforms/android-35/android.jar" \
   --output "$DIR/dex" "$DIR/p43.jar"
@@ -209,7 +213,11 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p79/P79NativeBrowserMailboxProbe;',
                   'Lcom/dsh/android/p83/P83HiddenBrowserPane;',
                   'Lcom/dsh/android/p85/P85DurableReplyJournal;',
-                  'Lcom/dsh/android/p85/P85RestartProbe;'):
+                  'Lcom/dsh/android/p85/P85RestartProbe;',
+                  'Lcom/dsh/android/p87/P87SseDecoder;',
+                  'Lcom/dsh/android/p87/P87OpenAiDelta;',
+                  'Lcom/dsh/android/p87/P87ChatStreamView;',
+                  'Lcom/dsh/android/p87/P87AndroidUiProbe;'):
   if expected not in names:raise RuntimeError('P43_SERVICE_CLASS_MISSING')
 print("P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA")
 print("P43_ORIGINAL_P40_TRAMPOLINE_AND_P43_CLASSES3=PASS_STATIC")
