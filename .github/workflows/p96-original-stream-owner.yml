@@ -190,6 +190,18 @@ jobs:
           grep -Fxq 'P99_SESSION_SERVICE_EXPORT_IMPORT_ONLY=PASS' .p96private/p99-service-exports.log
           cat .p96private/p99-service-exports.log
           echo 'P99_SESSION_SERVICE_EXPORT_IMPORT_ONLY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          cp host_candidate/p96_stream_owner/p99_original_session_services_boot.mjs \
+            .p96private/agent-runtime/p99_original_session_services_boot.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 18s node .p96private/agent-runtime/p99_original_session_services_boot.mjs \
+            > .p96private/p99-service-boot.log
+          grep -Fxq 'P99_ORIGINAL_SERVICE_NO_PROMPT_NO_MODEL_NO_TOOL=PASS' \
+            .p96private/p99-service-boot.log
+          grep -Fxq 'P99_ORIGINAL_SERVICE_NETWORK_ATTEMPTS=0' \
+            .p96private/p99-service-boot.log
+          cat .p96private/p99-service-boot.log
+          echo 'P99_ORIGINAL_SESSION_PERIPHERAL_SERVICE_BOOT_DIAGNOSTIC=PASS' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p96_original_agent_runtime_probe.mjs \
             .p96private/agent-runtime/p96_original_agent_runtime_probe.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
