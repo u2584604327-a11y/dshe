@@ -285,6 +285,11 @@ public final class P43ProbeActivity extends Activity {
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
     if("com.dsh.p51.isolatedprobe".equals(getPackageName()) &&
+       getIntent()!=null && getIntent().getBooleanExtra("p89_stream_pipe",false)){
+      com.dsh.android.p89.P89AndroidPipeProbe.run(this);
+      return;
+    }
+    if("com.dsh.p51.isolatedprobe".equals(getPackageName()) &&
        getIntent()!=null && getIntent().getBooleanExtra("p87_stream_ui",false)){
       com.dsh.android.p87.P87AndroidUiProbe.run(this);
       return;
