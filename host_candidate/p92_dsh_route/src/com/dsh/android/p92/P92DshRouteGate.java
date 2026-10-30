@@ -26,6 +26,7 @@ public final class P92DshRouteGate {
     private final P90SendReceiptGate editorReceipt;
     private Stage state=Stage.NEW;
     private String reason="NOT_CHECKED";
+    private boolean clickReceiptApplied;
 
     public P92DshRouteGate(P90SendReceiptGate receipt) {
         if (receipt==null)throw new IllegalArgumentException("MISSING_EDITOR_RECEIPT");
@@ -70,7 +71,10 @@ public final class P92DshRouteGate {
     /** Does not infer a turn from SSE [DONE], model content, or transport HTTP200. */
     public synchronized void onTrustedUserTurn(String turnId,boolean actuallyPresent) {
         if(state!=Stage.DISPATCH_UNCONFIRMED)return;
-        editorReceipt.clickReceipt("SENT");
+        if(!clickReceiptApplied) {
+            editorReceipt.clickReceipt("SENT");
+            clickReceiptApplied=true;
+        }
         editorReceipt.onTrustedUserTurn(turnId,actuallyPresent);
         if(editorReceipt.reportSent()){
             state=Stage.CONFIRMED;reason="TRUSTED_USER_TURN_OBSERVED";
