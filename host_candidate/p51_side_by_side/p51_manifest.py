@@ -145,7 +145,8 @@ def verify_apk(path):
     apk=APK(str(path))
     require(apk.get_package()==SIDECAR,"SIGNED_PACKAGE_NOT_SIDECAR")
     root=apk.get_android_manifest_xml()
-    verify_manifest_bytes(ET.tostring(root,encoding="utf-8"))
+    from lxml import etree as LET
+    verify_manifest_bytes(LET.tostring(root,encoding="utf-8"))
     require(not apk.get_permissions(),"SIGNED_APP_HAS_PERMISSIONS")
     require(int(apk.get_min_sdk_version() or 0)==26 and
             int(apk.get_target_sdk_version() or 0)==28,
