@@ -78,7 +78,12 @@ test "$(unzip -Z1 "$DIR/rebuilt-unsigned.apk" | grep -Ec '^classes[0-9]+\.dex$' 
 mv "$DIR/dex/classes.dex" "$DIR/dex/classes3.dex"
 cp "$DIR/rebuilt-unsigned.apk" "$DIR/with-p43-dex.apk"
 (cd "$DIR/dex" && zip -q -0 ../with-p43-dex.apk classes3.dex)
-test "$(unzip -Z1 "$DIR/with-p43-dex.apk" | grep -Ec '^classes3.dex -f -P 16 4 "$DIR/with-p43-dex.apk" "$DIR/aligned.apk"
+test "$(unzip -Z1 "$DIR/with-p43-dex.apk" | grep -Ec '^classes3.dex$')" -eq 1
+if test "${P49_NODE_STAGE:-0}" = 1; then
+  python host_candidate/p49_original_node_stage.py prepare "$ORIGINAL" "$DIR/p49"
+  python host_candidate/p49_original_node_stage.py embed "$DIR/with-p43-dex.apk" "$DIR/p49"
+fi
+"$BT/zipalign" -f -P 16 4 "$DIR/with-p43-dex.apk" "$DIR/aligned.apk"
 "$BT/zipalign" -c -P 16 4 "$DIR/aligned.apk"
 password="$(openssl rand -hex 20)"
 keytool -genkeypair -alias temporary -keyalg RSA -keysize 3072 -validity 1 \
@@ -105,71 +110,12 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
   return {n:hashlib.sha256(z.read(n)).hexdigest()
           for n in z.namelist() if n.startswith(('assets/','lib/')) and not n.endswith('/')}
  if os.environ.get("P49_NODE_STAGE")=="1":
-  orig_protected=protected(orig)
-  derived_protected=protected(derived)
-  if any(derived_protected.get(name)!=digest for name,digest in orig_protected.items()):
+  original_protected=protected(orig)
+  rebuilt_protected=protected(derived)
+  if any(rebuilt_protected.get(name)!=sha for name,sha in original_protected.items()):
    raise RuntimeError("P49_ORIGINAL_ASSET_OR_NATIVE_LIB_DRIFT")
  else:
   if protected(orig)!=protected(derived):raise RuntimeError("P43_ASSET_OR_NATIVE_LIB_DRIFT")
- def old_dex(z):
-  return [n for n in z.namelist() if n in ('classes.dex','classes2.dex')]
- for dex_name in old_dex(orig):
-  if dex_name=='classes2.dex' and orig.read(dex_name)!=derived.read(dex_name):
-   raise RuntimeError("P43_ORIGINAL_CLASSES2_DEX_DRIFT")
- classes=DEX(derived.read('classes3.dex'))
- names={c.get_name() for c in classes.get_classes()}
- for expected in ('Lcom/dsh/android/p43/P43IsolatedWorker;',
-                  'Lcom/dsh/android/p43/P43ProbeActivity;',
-                  'Lcom/dsh/android/p43/P44VirtualDeviceProfile;',
-                  'Lcom/dsh/android/p43/P46ResourceBundle;',
-                  'Lcom/dsh/android/p43/P46FixtureData;',
-                  'Lcom/dsh/android/p43/P46HostBroker;',
-                  'Lcom/dsh/android/p43/P46WorkerBundle;',
-                  'Lcom/dsh/android/p47/P47LaunchGate;',
-                  'Lcom/dsh/p37/P37RemoteProcess;',
-                  'Lcom/dsh/android/p48/P48FixedIsolatedChild;',
-                  'Lcom/dsh/android/p48/P48HostProcessProbe;'):
-  if expected not in names:raise RuntimeError('P43_SERVICE_CLASS_MISSING')
-print("P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA")
-print("P43_ORIGINAL_P40_TRAMPOLINE_AND_P43_CLASSES3=PASS_STATIC")
-PY
-"$BT/aapt" dump permissions "$ORIGINAL" \
-  | grep -E '^uses-permission:' | sort > "$DIR/original-perms.txt" || true
-"$BT/aapt" dump permissions "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" \
-  | grep -E '^uses-permission:' | sort > "$DIR/candidate-perms.txt" || true
-diff -u "$DIR/original-perms.txt" "$DIR/candidate-perms.txt"
-echo 'P43_APK_ORIGINAL_COMPONENTS_AND_APPLICATION_PRESERVED=PASS_STATIC'
-echo 'P43_ISOLATED_SERVICE_EMBEDDED_IN_REAL_ORIGINAL_PACKAGE=PASS_STATIC'
-echo 'P43_REAL_NODE_ENGINE_ISOLATED=NO'
-echo 'P43_V139_RELEASE=BLOCKED'
-)" -eq 1
-if test "${P49_NODE_STAGE:-0}" = 1; then
-  python host_candidate/p49_original_node_stage.py prepare "$ORIGINAL" "$DIR/p49"
-  python host_candidate/p49_original_node_stage.py embed "$DIR/with-p43-dex.apk" "$DIR/p49"
-fi
-"$BT/zipalign" -f -P 16 4 "$DIR/with-p43-dex.apk" "$DIR/aligned.apk"
-"$BT/zipalign" -c -P 16 4 "$DIR/aligned.apk"
-password="$(openssl rand -hex 20)"
-keytool -genkeypair -alias temporary -keyalg RSA -keysize 3072 -validity 1 \
-  -storetype PKCS12 -dname 'CN=P43 ORIGINAL DSH EMBEDDED WORKER EPHEMERAL ONLY' \
-  -keystore "$DIR/ephemeral.p12" -storepass "$password" \
-  -keypass "$password" -noprompt >/dev/null 2>&1
-"$BT/apksigner" sign --ks "$DIR/ephemeral.p12" --ks-key-alias temporary \
-  --ks-pass "pass:$password" --key-pass "pass:$password" \
-  --out "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" "$DIR/aligned.apk"
-unset password
-"$BT/apksigner" verify "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
-if test "${P47_NO_HOST_FALLBACK:-0}" = 1; then
-  python host_candidate/p47_no_fallback/p47_gate.py verify "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
-fi
-python - "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" <<'PY'
-import sys,zipfile,hashlib
-from androguard.core.dex import DEX
-with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as derived:
- def protected(z):
-  return {n:hashlib.sha256(z.read(n)).hexdigest()
-          for n in z.namelist() if n.startswith(('assets/','lib/')) and not n.endswith('/')}
- if protected(orig)!=protected(derived):raise RuntimeError("P43_ASSET_OR_NATIVE_LIB_DRIFT")
  def old_dex(z):
   return [n for n in z.namelist() if n in ('classes.dex','classes2.dex')]
  for dex_name in old_dex(orig):
