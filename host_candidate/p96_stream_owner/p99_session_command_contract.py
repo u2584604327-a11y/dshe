@@ -173,6 +173,32 @@ def method_contract(class_body, method_name):
         if item not in mode_branches:
             mode_branches.append(item)
 
+    direct_call_shapes = []
+    for method, args in re.findall(
+        r"\b(createUserMessage|resolvePromptFileReceipts|hasPromptRequest|remoteErrorOf)\s*\(([^)]{0,1200})\)",
+        body,
+    ):
+        ids = [
+            x for x in re.findall(r"\b([A-Za-z_$][A-Za-z0-9_$]{0,80})\b", args)
+            if safe_ident(x) and x not in {"true", "false", "null", "undefined", "await"}
+        ]
+        fields = [
+            f"{r}.{m}" for r, m in re.findall(
+                r"\b([A-Za-z_$][A-Za-z0-9_$]{0,80})\??\.([A-Za-z_$][A-Za-z0-9_$]{0,80})",
+                args,
+            )
+            if safe_ident(r) and safe_ident(m)
+        ]
+        item = {
+            "method": method,
+            "argIdentifiers": list(dict.fromkeys(ids))[:50],
+            "argFields": list(dict.fromkeys(fields))[:50],
+        }
+        if item not in direct_call_shapes:
+            direct_call_shapes.append(item)
+        if len(direct_call_shapes) >= 30:
+            break
+
     return {
         "name": method_name,
         "params": params,
@@ -182,6 +208,7 @@ def method_contract(class_body, method_name):
         "directCalls": direct_calls,
         "objectCalls": object_calls,
         "modeBranches": mode_branches,
+        "directCallShapes": direct_call_shapes,
         "safeLiterals": safe_literals,
         "assignments": assignments,
         "sourceSize": len(body),
