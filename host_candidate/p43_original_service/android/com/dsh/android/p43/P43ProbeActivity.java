@@ -126,7 +126,7 @@ public final class P43ProbeActivity extends Activity {
           log("P52_LIVE_P37_JAVA_PROCESS_FROM_ISOLATED_BINDER=PASS");
           log("P52_PRODUCTION_ENGINEMANAGER_PROCESS_HANDOFF=NOT_WIRED");
           log("P52_BINDER_HELLO_IS_EXECVE_READY=NO");
-        });
+        },true); // P68 test-only Binder handoff, not production EngineManager.
         log(p50Enabled?
             "P50_EXACT_ORIGINAL_NODE_TEST_REQUESTED=YES":
             "P50_X86_OR_MISSING_LOCK_ORIGINAL_NODE_NOT_REQUESTED=YES");
