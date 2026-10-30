@@ -136,6 +136,7 @@ def audit_tar(stream):
     potential_root_packages = []
     counts = collections.Counter()
     total = 0
+    non_dependency_min_js_depth = None
     for entry in stream:
         name = safe_name(entry.name)
         require(name not in present, "DUPLICATE_MEMBER")
@@ -147,6 +148,18 @@ def audit_tar(stream):
             addon_members.add(name)
         is_js = name.endswith((".js", ".mjs", ".cjs"))
         is_pkg = name.endswith("/package.json") or name == "package.json"
+        if is_js and "node_modules" not in name.split("/"):
+            counts["non_dependency_js_members"] += 1
+            depth = name.count("/")
+            if non_dependency_min_js_depth is None or depth < non_dependency_min_js_depth:
+                non_dependency_min_js_depth = depth
+            # Only fixed conventional basename categories; never emit a name.
+            basename = posixpath.basename(name).lower()
+            if basename in ("index.js","main.js","server.js","app.js",
+                            "bootstrap.js","boot.js","start.js","cli.js"):
+                counts["non_dependency_conventional_name_" + basename[:-3]] += 1
+        if is_js and "node_modules" in name.split("/"):
+            counts["node_modules_js_members"] += 1
         if not (is_js or is_pkg):
             continue
         if is_pkg:
@@ -213,6 +226,8 @@ def audit_tar(stream):
                     imports.append((relative, spec.endswith(".node")))
             else:
                 counts["package_or_builtin_import_hints"] += 1
+    counts["minimum_non_dependency_js_depth"] = (
+        non_dependency_min_js_depth if non_dependency_min_js_depth is not None else -1)
     counts["non_dependency_package_metadata"] = len(potential_root_packages)
     counts["node_modules_package_metadata"] = (
         package_count - len(potential_root_packages))
@@ -276,6 +291,20 @@ def run_exact_original(apk):
     require(immutable["tree_sha256"] == EXPECTED_TREE_SHA, "IMMUTABLE_TREE_DRIFT")
     require(immutable["members"] == 30411, "ARCHIVE_COUNT_DRIFT")
     with zipfile.ZipFile(apk) as z:
+        all_assets = [i for i in z.infolist()
+                      if i.filename.startswith("assets/") and not i.is_dir()
+                      and i.filename != ENGINE_ENTRY]
+        asset_counts = collections.Counter()
+        for item in all_assets:
+            name = item.filename.lower()
+            if name.endswith((".js",".mjs",".cjs")):
+                asset_counts["apk_asset_js_members"] += 1
+            elif name.endswith(".json"):
+                asset_counts["apk_asset_json_members"] += 1
+            elif name.endswith(".sh"):
+                asset_counts["apk_asset_shell_members"] += 1
+            elif name.endswith(".zip"):
+                asset_counts["apk_asset_zip_members"] += 1
         encoded = z.read(ENGINE_ENTRY)
     with gzip.GzipFile(fileobj=io.BytesIO(encoded), mode="rb") as g:
         with tarfile.open(fileobj=g, mode="r|") as t:
@@ -283,6 +312,7 @@ def run_exact_original(apk):
     require(summary["archive_members_seen"] == 30411,
             "SECOND_PASS_MEMBER_COUNT_CHANGED")
     require(summary["native_addon_members"] == 9, "ADDON_MEMBER_COUNT_CHANGED")
+    summary.update(asset_counts)
     return summary
 
 
@@ -291,6 +321,18 @@ def print_report(c):
     print("P55_STATIC_JS_IMPORT_SCAN=PASS_BOUNDED_HEURISTIC")
     keys = (
         "archive_members_seen", "js_sources_scanned",
+        "non_dependency_js_members", "node_modules_js_members",
+        "minimum_non_dependency_js_depth",
+        "non_dependency_conventional_name_index",
+        "non_dependency_conventional_name_main",
+        "non_dependency_conventional_name_server",
+        "non_dependency_conventional_name_app",
+        "non_dependency_conventional_name_bootstrap",
+        "non_dependency_conventional_name_boot",
+        "non_dependency_conventional_name_start",
+        "non_dependency_conventional_name_cli",
+        "apk_asset_js_members", "apk_asset_json_members",
+        "apk_asset_shell_members", "apk_asset_zip_members",
         "source_or_json_over_limit", "candidate_source_bytes_examined",
         "package_json_members", "rootish_package_metadata",
         "non_dependency_package_metadata", "node_modules_package_metadata",
