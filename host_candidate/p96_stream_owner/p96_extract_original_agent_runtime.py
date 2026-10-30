@@ -12,6 +12,14 @@ ext.BASE_PACKAGES=(
     "@deepseek-ai/dsh-agent-loop",
     "@deepseek-ai/dsh-tools",
     "@deepseek-ai/dsh-api-session-controller",
+    "@deepseek-ai/dsh-agent-default-model",
+    "@deepseek-ai/dsh-attachment",
+    "@deepseek-ai/dsh-client-file-upload",
+    "@deepseek-ai/dsh-fs",
+    "@deepseek-ai/dsh-api-remote-access",
+    "@deepseek-ai/dsh-session-query",
+    "@deepseek-ai/dsh-typert-registry",
+    "@deepseek-ai/dsh-workspace",
 )
 ext.MAX_PACKAGE_GRAPH=400
 ext.INCLUDE_PRESENT_PEERS=True
