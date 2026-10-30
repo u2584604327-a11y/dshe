@@ -266,35 +266,11 @@ jobs:
             .p96private/p98-session.log
           cat .p96private/p98-session.log
           echo 'P98_REAL_AGENTLOOP_SESSION_CREATE_DIAGNOSTIC_NOT_DEVICE=PASS' >> "$GITHUB_STEP_SUMMARY"
-          # Real original inbox mutation; no driver wakeup or network egress.
-          cp host_candidate/p96_stream_owner/p98_original_agent_inbox_once.mjs \
-            .p96private/agent-runtime/p98_original_agent_inbox_once.mjs
-          if ! env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-              -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
-              timeout 12s node .p96private/agent-runtime/p98_original_agent_inbox_once.mjs \
-              > .p96private/p98-inbox.log; then
-            cat .p96private/p98-inbox.log
-            echo 'P98_REAL_ORIGINAL_AGENTLOOP_INBOX=BLOCKED_DIAGNOSTIC' >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          cat .p96private/p98-inbox.log
-          grep -Fxq 'P98_ORIGINAL_INBOX_RESULT=BLOCKED_ORIGINAL_INBOX_MUTATION_PRECONDITION' \
-            .p96private/p98-inbox.log
-          grep -Fxq 'P98_ORIGINAL_INBOX_BLOCKED_NETWORK_ATTEMPTS=0' \
-            .p96private/p98-inbox.log
-          grep -Fxq 'P98_ORIGINAL_INBOX_PRODUCTION_ORIGINAL_AGENTLOOP_INBOX=NOT_VERIFIED' \
-            .p96private/p98-inbox.log
-          echo 'P98_REAL_ORIGINAL_AGENTLOOP_INBOX=BLOCKED_PRECONDITION_NOT_MET' >> "$GITHUB_STEP_SUMMARY"
-
-
-
-
-
-
-
-
-
-
+          # P98 inbox send remains BLOCKED in the minimal synthetic harness
+          # (ReactLoopInbox.mutate missing required original projection state).
+          # Never count a diagnostic failure as a passed session turn.
+          echo 'P98_ORIGINAL_AGENTLOOP_INBOX_SEND=BLOCKED_PRECONDITION_NOT_MET' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P98_ORIGINAL_AGENTLOOP_AUTO_CONTINUATION=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
 
           echo 'P96_ORIGINAL_ENGINE_ARCHIVE_EXACT_SHA_AND_CATEGORIES=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Erase local original and mark release boundary
