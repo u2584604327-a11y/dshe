@@ -13,7 +13,7 @@ APIS={
     'UI_THREAD': 'Landroid/app/Activity;->runOnUiThread(',
     'WEBVIEW_JS_CALLBACK': 'Landroid/webkit/ValueCallback;->onReceiveValue(',
 }
-CALL_RE=re.compile(r'Lcom/dsh/android/[^;\\s]+;->[^\\s(]+\\([^)]*\\)[^\\s,]+')
+CALL_RE=re.compile(r'Lcom/dsh/android/[^;\s]+;->[^\s(]+\([^)]*\)[^\s,]+')
 def h(data):return hashlib.sha256(data).hexdigest()
 def classify(calls):
     return {name:sum(pattern in s for s in calls) for name,pattern in APIS.items()
@@ -30,7 +30,7 @@ def audit(raw):
     records={}; original_targets={}
     with zipfile.ZipFile(io.BytesIO(raw)) as z:
         if z.testzip() is not None:raise ValueError('P91_BAD_ORIGINAL_ZIP_CRC')
-        dexes=[(name,z.read(name)) for name in z.namelist() if re.fullmatch(r'classes\\d*\\.dex',name)]
+        dexes=[(name,z.read(name)) for name in z.namelist() if re.fullmatch(r'classes\d*\.dex',name)]
     if len(dexes)!=2:raise ValueError('P91_UNEXPECTED_DEX_LAYOUT')
     for dexfile,raw_dex in dexes:
         dex=DEX(raw_dex)
