@@ -1,47 +1,29 @@
 /**
- * Real Cordis + original ToolRuntime service lifecycle probe.
- * Never calls execute, performs network, accesses device or reads user data.
- * No substitute ToolRuntime is created.
+ * Verify exact original Cordis service activation with in-memory,
+ * no-I/O systemPrompt test dependency. No tools executed.
  */
 import {Context} from '@deepseek-ai/cordis';
 import {ToolRuntime} from '@deepseek-ai/dsh-tools';
-
+const report=(k,v)=>process.stdout.write('P96_TOOL_ACTIVATION_'+k+'='+String(v)+'\n');
 const ctx=new Context();
-const methods=['provide','set','get','plugin','inject','emit','on','effect','scope','registry','root','start','dispose'];
-process.stdout.write('P96_CORDIS_METHOD_TYPES='+JSON.stringify(
-  Object.fromEntries(methods.map(x=>[x,typeof ctx[x]])))+'\n');
-
-function report(name,value) {
- process.stdout.write('P96_REAL_TOOL_SERVICE_'+name+'='+String(value)+'\n');
-}
-try {
- const state=ctx.plugin(ToolRuntime,{mode:'native',maxParallelSubCalls:1});
- report('PLUGIN_ATTACHED',true);
- report('PLUGIN_RETURN_TYPE',typeof state);
- report('SERVICE_VIA_CONTEXT',typeof ctx.get?.('tools'));
- report('SERVICE_VIA_PROPERTY',typeof ctx.tools);
- report('CONTEXT_SCOPE',typeof ctx.scope);
- report('SCOPE_STATUS',typeof ctx.scope?.status);
- if(typeof ctx.provide==='function'){
-   try{
-     const provided=ctx.provide('systemPrompt',{});
-     report('SYNTHETIC_DEPENDENCY_PROVIDE', 'CALLED');
-     report('SYNTHETIC_DEPENDENCY_RETURN_TYPE', typeof provided);
-   }catch(e){
-     report('SYNTHETIC_DEPENDENCY_PROVIDE', 'BLOCKED_'+(e?.code||e?.name||'UNKNOWN'));
-   }
- }
- const service=ctx.get?.('tools')||ctx.tools;
- if(!service){
-   report('REAL_REGISTRY', 'NO_SERVICE_WITHOUT_REQUIRED_INJECTIONS');
- }else{
-   report('REAL_REGISTRY',typeof service.register);
- }
-}catch(e){
- report('PLUGIN_ATTACHED',false);
- report('ERROR_TYPE',e?.code||e?.name||'UNKNOWN');
- // Do not print original stack, source path, or secrets.
-}
+try{
+ const owner=ctx.provide('systemPrompt',{fixture:'in-memory'});
+ report('PROVIDER_REGISTERED', typeof owner==='function');
+ report('PROVIDED_SERVICE_READ', typeof ctx.get('systemPrompt'));
+ report('PROVIDED_PROPERTY_READ', typeof ctx.systemPrompt);
+ const fork=ctx.plugin(ToolRuntime,{mode:'native',maxParallelSubCalls:1});
+ report('FORK_TYPE',typeof fork);
+ report('FORK_KEYS',Object.keys(fork||{}).slice(0,18).join(','));
+ report('FORK_STATUS_INITIAL',fork?.status);
+ // Let Cordis asynchronous dependency and service lifecycles settle.
+ await new Promise(resolve=>setTimeout(resolve,30));
+ const svc=ctx.get('tools')??ctx.tools;
+ report('FORK_STATUS_AFTER_TICK',fork?.status);
+ report('CTX_SERVICE_AFTER_TICK',typeof svc);
+ report('SERVICE_REGISTER_METHOD',typeof svc?.register);
+ report('SERVICE_EXECUTE_METHOD',typeof svc?.execute);
+ report('REGISTRY_KEYS',Object.keys(ctx.registry||{}).slice(0,12).join(','));
+}catch(e){report('ERROR_TYPE',e?.code||e?.name||'UNKNOWN');}
 finally{
- if(typeof ctx.dispose==='function') await ctx.dispose();
+ if(typeof ctx.dispose==='function')await ctx.dispose();
 }
