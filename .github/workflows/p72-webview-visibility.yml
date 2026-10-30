@@ -1,0 +1,51 @@
+name: P72 original browser WebView accessor visibility audit
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p72_webview_access/**'
+      - 'host_candidate/P72_BROWSERBRIDGE_ACCESS_ROOTCAUSE.md'
+      - '.github/workflows/p72-webview-visibility.yml'
+permissions:
+  contents: read
+jobs:
+  signed-original-browser-access:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p72-browserbridge-webview-access-rootcause-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p71-browser-reply-once-webview-session-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Private exact original and synthetic access classifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = "u2584604327-a11y/dshe"
+          test "$(gh api "repos/$GH_REPO" --jq .private)" = true
+          python -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          python host_candidate/p72_webview_access/test_access_flags.py
+          mkdir -p .p72_private
+          gh release download dsh-baseline-v135dsh-baseline-v135 --repo "$GH_REPO" \
+            --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk --dir .p72_private
+          original=.p72_private/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          printf '%s  %s\n' 3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 "$original" | sha256sum -c - >/dev/null
+          python host_candidate/p72_webview_access/audit_original_webview_access.py "$original" \
+            > .p72_private/access.log
+          grep -Fxq 'P72_SIGNED_V138_BROWSERBRIDGE_ACCESS_AUDIT=PASS' .p72_private/access.log
+          grep '^P72_WEBVIEW_METHOD_FLAGS_AND_CALLS=' .p72_private/access.log | tee -a "$GITHUB_STEP_SUMMARY"
+          echo 'P72_ONLY_STATIC_ACCESS_PROOF=YES' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P72_INSTALLED_NATIVE_BRIDGE_NOT_PATCHED=YES' >> "$GITHUB_STEP_SUMMARY"
+      - name: Always remove original DEX and private reports
+        if: always()
+        run: |
+          rm -rf .p72_private
+          echo 'P72_FIXED_SIGNER_NOT_USED=YES' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P72_USER_LOGIN_DATA_UNCHANGED=YES' >> "$GITHUB_STEP_SUMMARY"
