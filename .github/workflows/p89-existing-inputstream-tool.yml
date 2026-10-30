@@ -77,6 +77,35 @@ jobs:
           grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p89_private/build.log
           grep -Fxq 'P51_SIGNED_APK_SEPARATE_PACKAGE_NO_PERMISSIONS=PASS' .p89_private/build.log
           echo 'P89_DISPOSABLE_NO_PERMISSION_ANDROID_SOURCE_BUILD=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Preinstall SDK emulator with bounded corrupt-ZIP recovery (runner only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="$ANDROID_HOME"
+          manager="$(command -v sdkmanager || true)"
+          if test -z "$manager"; then
+            manager="$(find "$SDK/cmdline-tools" -name sdkmanager -type f -perm /111 | head -n1 || true)"
+          fi
+          test -n "$manager"
+          installed=0
+          for attempt in 1 2 3; do
+            if "$manager" --sdk_root="$SDK" --install emulator --channel=0 > .p89_private/emulator-install.log 2>&1 &&
+               test -x "$SDK/emulator/emulator" &&
+               "$SDK/emulator/emulator" -version >/dev/null 2>&1; then
+              installed=1
+              break
+            fi
+            echo "P89_ANDROID_EMULATOR_DOWNLOAD_ATTEMPT_${attempt}=FAILED_TRANSIENT"
+            # Bounded deletion affects only the new ephemeral CI runner's SDK installation.
+            rm -rf "$SDK/emulator"
+            sleep $((attempt * 3))
+          done
+          if test "$installed" != 1; then
+            echo "P89_EMULATOR_INSTALLATION=INFRA_BLOCKED" >> "$GITHUB_STEP_SUMMARY"
+            tail -n 20 .p89_private/emulator-install.log | sed -E 's#https?://[^ ]+#URL_REDACTED#g'
+            exit 1
+          fi
+          echo "P89_ANDROID_EMULATOR_PREINSTALLED_AND_VERSION_VERIFIED=PASS" >> "$GITHUB_STEP_SUMMARY"
       - name: Grant KVM access when present
         run: if test -c /dev/kvm;then sudo chmod 666 /dev/kvm;fi
       - name: Android35 live pipe to incremental TextView and tool assembler
