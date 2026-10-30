@@ -83,5 +83,29 @@ try{
   try{ctx.registry.delete('p99Synthetic');}catch{}
 }
 process.stdout.write('P99_CORDIS_SYNTHETIC_REGISTRY_INJECT='+injectResult+'\n');
-process.stdout.write('P99_CORDIS_CONTEXT_NO_SERVICE_STARTED=PASS\n');
+
+let servicePluginResult='NOT_ATTEMPTED';
+const serviceCtx=new Context();
+try{
+  class P99SyntheticService extends Cordis.Service {
+    constructor(innerCtx){
+      super(innerCtx,'p99Synthetic');
+      this.kind='p99-synthetic-service';
+    }
+  }
+  await serviceCtx.plugin(P99SyntheticService);
+  const resolved=serviceCtx.get('p99Synthetic');
+  servicePluginResult=resolved && resolved.kind==='p99-synthetic-service'
+    ?'PASS':'RESOLVED_UNEXPECTED_SHAPE';
+}catch(e){
+  servicePluginResult='BLOCKED_'+String(e?.code||e?.name||'UNKNOWN')
+    .replace(/[^A-Za-z0-9_]/g,'').slice(0,80);
+  const reason=String(e?.message||'').replace(/\/[A-Za-z0-9._/-]+/g,'<PATH>')
+    .replace(/(?:Bearer |sk-)[A-Za-z0-9._-]{8,}/g,'<REDACTED>').slice(0,180);
+  process.stdout.write('P99_CORDIS_SYNTHETIC_SERVICE_PLUGIN_REASON='+reason+'\n');
+}finally{
+  if(typeof serviceCtx.dispose==='function')try{await serviceCtx.dispose();}catch{}
+}
+process.stdout.write('P99_CORDIS_SYNTHETIC_SERVICE_PLUGIN='+servicePluginResult+'\n');
+process.stdout.write('P99_CORDIS_CONTEXT_NO_DSH_SERVICE_STARTED=PASS\n');
 if(typeof ctx.dispose==='function')try{await ctx.dispose();}catch{}
