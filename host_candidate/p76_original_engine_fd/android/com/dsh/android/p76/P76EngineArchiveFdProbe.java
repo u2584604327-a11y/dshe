@@ -122,10 +122,13 @@ public final class P76EngineArchiveFdProbe {
         // Post the actual send to the SAME main handler after expected bytes,
         // so a quick Binder ACK cannot overtake expectation registration.
         final Message outbound=msg;
+        final ParcelFileDescriptor outboundFd=input;
         main.post(()->{
           try{isolated.send(outbound);}
           catch(RemoteException unavailable){
             if(!terminal[0]){terminal[0]=true;listener.fail("P76_ISOLATED_BINDER_SEND_FAILED");}
+          }finally{
+            try{outboundFd.close();}catch(IOException ignored){}
           }
         });
         posted=true;
