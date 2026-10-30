@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Set;
 import org.json.JSONObject;
+import com.dsh.android.p85.P85DurableReplyJournal;
 import com.dsh.android.p83.P83HiddenBrowserPane;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -29,11 +30,13 @@ public final class P79NativeBrowserMailboxProbe {
   private volatile boolean stopped;
   private final Set<String> seen=new HashSet<>();
   private WebView view;
+  private final P85DurableReplyJournal journal;
   private final boolean p83Mode;
   private P83HiddenBrowserPane p83;
   private P79NativeBrowserMailboxProbe(Activity a,String command,String reply,boolean withHide){
     p83Mode=withHide;
     owner=a;
+    journal=new P85DurableReplyJournal(a);
     if(!"com.dsh.p51.isolatedprobe".equals(a.getPackageName())||
        command==null||reply==null||
        !command.matches("[A-Za-z0-9._-]{1,80}")||
@@ -122,11 +125,22 @@ public final class P79NativeBrowserMailboxProbe {
       JSONObject result=new JSONObject();
       result.put("id",id);result.put("ok",false);result.put("code",category);
       result.put("outcomeUnknown",false);result.put("retrySafe",false);
+      journal.finish(id,result);
       atomic(res,result);
     }catch(Exception e){fail("ERROR_REPLY_WRITE");}
   }
   private void dispatch(String id,String action){
     if(stopped)return;
+    try {
+      JSONObject cached=journal.replayOrUnknown(id);
+      if(cached!=null) {
+        atomic(res,cached);
+        return;
+      }
+      if(!journal.begin(id)){
+        fail("P85_UNEXPECTED_DUPLICATE_BEGIN");return;
+      }
+    }catch(Exception e){fail("P85_JOURNAL_OPEN");return;}
     if(P71ToolReplyOnce.requiresNativeConfirmation(action)){
       terminalError(id,"NATIVE_USER_CONFIRMATION_REQUIRED");return;
     }
@@ -153,6 +167,7 @@ public final class P79NativeBrowserMailboxProbe {
         result.put("result",t.ok?"synthetic_native_callback":JSONObject.NULL);
         result.put("outcomeUnknown",t.outcomeUnknown);
         result.put("retrySafe",t.retrySafe);
+        journal.finish(id,result);
         atomic(res,result);
       }catch(Exception e){fail("TERMINAL_REPLY_WRITE");}
     });
