@@ -4,6 +4,7 @@ on:
     types: [opened, synchronize]
     paths:
       - 'host_candidate/p96_stream_owner/**'
+      - 'host_candidate/p92_dsh_route/**'
       - '.github/workflows/p96-original-stream-owner.yml'
 permissions:
   contents: read
@@ -25,6 +26,32 @@ jobs:
         with: {python-version: '3.11'}
       - uses: actions/setup-node@v4
         with: {node-version: '20'}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - name: Verify unchanged bubble behavior and corrected original-provider gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .p96-jvm
+          javac --release 8 -d .p96-jvm \
+            host_candidate/p90_send_evidence/src/com/dsh/android/p90/P90SendReceiptGate.java \
+            host_candidate/p92_dsh_route/src/com/dsh/android/p92/P92DshRouteGate.java \
+            host_candidate/p92_dsh_route/test/com/dsh/android/p92/P92DshRouteGateTest.java
+          java -cp .p96-jvm com.dsh.android.p92.P92DshRouteGateTest > .p96-jvm/result.log
+          for gate in \
+            P92_DSH_EDITOR_FAIL_CLOSED_BEFORE_OMNIGATE=PASS \
+            P92_8787_VERIFIED_OWNER_PREFLIGHT_AND_409_FAIL_CLOSED=PASS \
+            P92_ONE_SHOT_NO_AUTO_RETRY_AND_HTTP200_NOT_DELIVERY=PASS \
+            P92_MAIN_AND_OVERLAY_OWNER_EXCLUSIVE=PASS \
+            P92_ORIGINAL_PROVIDER_NO_WEB_BUBBLE_DEPENDENCY=PASS \
+            P92_ORIGINAL_SESSION_RECHECK_AND_409_NO_RETRY=PASS \
+            P92_HTTP200_AND_TURN_NOT_MODEL_REPLY=PASS; do
+            grep -Fxq "$gate" .p96-jvm/result.log
+          done
+          cat .p96-jvm/result.log
+          rm -rf .p96-jvm
+          echo 'P96_P92_EXISTING_BUBBLE_AND_ORIGINAL_PROVIDER_ROUTE_REGRESSION=PASS' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Test existing original Node to OmniGate read-only preflight
         shell: bash
         run: |
