@@ -18,6 +18,7 @@ from p96_original_engine_owner import SOURCE_BYTES, SOURCE_SHA, file_hash, requi
 
 BASE_PACKAGES = ("@earendil-works/pi-ai",)
 MAX_FILES = 7000
+MAX_PACKAGE_GRAPH = 100
 MAX_BYTES = 120 * 1024 * 1024
 MAX_MEMBER = 8 * 1024 * 1024
 EXTENSIONS = (".js", ".cjs", ".mjs", ".json")
@@ -74,7 +75,7 @@ def audit_extract(apk, out):
         for dep in manifest.get("dependencies",{}):
             if dep not in needed:
                 needed.add(dep);frontier.append(dep)
-        require(len(needed)<=100,"DEPENDENCY_GRAPH_TOO_WIDE")
+        require(len(needed)<=MAX_PACKAGE_GRAPH,"DEPENDENCY_GRAPH_TOO_WIDE")
     missing=sorted(x for x in needed if x not in packages)
     # Presence check rather than reaching the internet to npm install.
     require(not missing, "ORIGINAL_DEPENDENCY_PACKAGE_MISSING")
