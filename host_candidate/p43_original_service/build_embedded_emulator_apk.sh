@@ -18,6 +18,9 @@ printf '%s  %s\n' "$expected" "$ORIGINAL" | sha256sum -c -
 apktool d -f -r --force-manifest "$ORIGINAL" -o "$DIR/decoded"
 python host_candidate/p40_exact_trampoline.py patch "$ORIGINAL" "$DIR/decoded" \
   --report "$DIR/p40-offline.json"
+if test "${P47_NO_HOST_FALLBACK:-0}" = 1; then
+  python host_candidate/p47_no_fallback/p47_gate.py patch "$DIR/decoded"
+fi
 python host_candidate/p43_original_service/inject_original_manifest.py inject \
   "$DIR/decoded/AndroidManifest.xml"
 # Apktool 2.7 with --force-manifest and -r preserves resources.arsc byte-for-byte,
@@ -48,7 +51,9 @@ unzip -p "$ORIGINAL" classes2.dex > "$DIR/original-secondary/classes2.dex"
 test -s "$DIR/original-secondary/classes2.dex"
 (cd "$DIR" && zip -q -d rebuilt-unsigned.apk classes2.dex)
 (cd "$DIR/original-secondary" && zip -q -0 ../rebuilt-unsigned.apk classes2.dex)
-python host_candidate/p40_exact_trampoline.py verify "$DIR/rebuilt-unsigned.apk"
+if test "${P47_NO_HOST_FALLBACK:-0}" != 1; then
+  python host_candidate/p40_exact_trampoline.py verify "$DIR/rebuilt-unsigned.apk"
+fi
 python host_candidate/p43_original_service/inject_original_manifest.py verify \
   "$DIR/rebuilt-unsigned.apk"
 # A third dex guarantees no replacement of original classes.dex/classes2.dex.
@@ -60,7 +65,8 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p43_original_service/android/com/dsh/android/p43/P46ResourceBundle.java \
   host_candidate/p43_original_service/android/com/dsh/android/p43/P46FixtureData.java \
   host_candidate/p43_original_service/android/com/dsh/android/p43/P46HostBroker.java \
-  host_candidate/p43_original_service/android/com/dsh/android/p43/P46WorkerBundle.java
+  host_candidate/p43_original_service/android/com/dsh/android/p43/P46WorkerBundle.java \
+  host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java
 jar cf "$DIR/p43.jar" -C "$DIR/classes" .
 "$BT/d8" --min-api 26 --lib "$SDK/platforms/android-35/android.jar" \
   --output "$DIR/dex" "$DIR/p43.jar"
@@ -82,6 +88,9 @@ keytool -genkeypair -alias temporary -keyalg RSA -keysize 3072 -validity 1 \
   --out "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" "$DIR/aligned.apk"
 unset password
 "$BT/apksigner" verify "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
+if test "${P47_NO_HOST_FALLBACK:-0}" = 1; then
+  python host_candidate/p47_no_fallback/p47_gate.py verify "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
+fi
 python - "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" <<'PY'
 import sys,zipfile,hashlib
 from androguard.core.dex import DEX
@@ -103,7 +112,8 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p43/P46ResourceBundle;',
                   'Lcom/dsh/android/p43/P46FixtureData;',
                   'Lcom/dsh/android/p43/P46HostBroker;',
-                  'Lcom/dsh/android/p43/P46WorkerBundle;'):
+                  'Lcom/dsh/android/p43/P46WorkerBundle;',
+                  'Lcom/dsh/android/p47/P47LaunchGate;'):
   if expected not in names:raise RuntimeError('P43_SERVICE_CLASS_MISSING')
 print("P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA")
 print("P43_ORIGINAL_P40_TRAMPOLINE_AND_P43_CLASSES3=PASS_STATIC")

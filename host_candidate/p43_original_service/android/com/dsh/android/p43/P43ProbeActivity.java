@@ -10,6 +10,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Locale;
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
 
 /**
  * P43 temporary exported test entry exists ONLY in the throwaway emulator APK.
@@ -128,9 +130,45 @@ public final class P43ProbeActivity extends Activity {
     @Override public void onBindingDied(ComponentName n){fail("BINDING_DIED");}
     @Override public void onNullBinding(ComponentName n){fail("NULL_BINDING");}
   };
+  /**
+   * P47: invoke the SAME P40 bridge class in the patched main DEX that the
+   * real EngineManager main coroutine references. This test-only Activity
+   * cannot prove the full production coroutine path or Node functionality.
+   */
+  private boolean assertExactBridgeFailClosed() {
+    File canary=new File(getCacheDir(),"p47-no-host-fallback-canary");
+    if(canary.exists() && !canary.delete())return false;
+    ProcessBuilder candidate=new ProcessBuilder(
+        "/system/bin/sh","-c","echo P47_UNAUTHORIZED > "+canary.getAbsolutePath());
+    candidate.directory(getCacheDir());
+    candidate.redirectErrorStream(true);
+    try {
+      Class<?> klass=Class.forName("com.dsh.android.p40.P40ProcessBridge");
+      Method method=klass.getDeclaredMethod("start",ProcessBuilder.class);
+      // Under no circumstance should this return a host Process.
+      Object unexpectedlyStarted=method.invoke(null,candidate);
+      if(unexpectedlyStarted instanceof java.lang.Process)
+        ((java.lang.Process)unexpectedlyStarted).destroyForcibly();
+      return false;
+    }catch(InvocationTargetException result) {
+      Throwable cause=result.getCause();
+      if(!(cause instanceof IOException) ||
+         !"P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK".equals(cause.getMessage()))
+        return false;
+    }catch(Exception invalid){return false;}
+    if(canary.exists()){canary.delete();return false;}
+    log("P47_REAL_ORIGINAL_MAIN_DEX_ENGINE_BRIDGE_DENIES_HOST_START=PASS");
+    log("P47_NO_HOST_PROCESSBUILDER_FALLBACK=PASS");
+    log("P47_PRODUCTION_NODE_ENGINE_RUNNING=NO");
+    return true;
+  }
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
     label=new TextView(this);label.setTextSize(16);setContentView(label);
+    if(!assertExactBridgeFailClosed()){
+      fail("P47_NO_FALLBACK_BRIDGE_NOT_VERIFIED");
+      return;
+    }
     byte[] b=new byte[32];new SecureRandom().nextBytes(b);
     StringBuilder s=new StringBuilder(64);
     for(byte c:b)s.append(String.format(Locale.ROOT,"%02x",c&255));
