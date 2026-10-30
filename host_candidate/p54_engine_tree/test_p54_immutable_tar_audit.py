@@ -86,5 +86,9 @@ ok(addon_metadata(b"")["nonelf"] == "empty",
    "zero-byte addon cannot become executable")
 ok(addon_metadata(bytes([0,255]))["nonelf"] == "small_non_ascii",
    "small binary addon is not a proven ELF")
+ok(addon_metadata(b"MZ" + bytes(512))["nonelf"] == "PE_MZ",
+   "Windows PE native addon is not Android ELF")
+ok(addon_metadata(bytes([0xcf,0xfa,0xed,0xfe]) + bytes(128))["nonelf"]
+   == "MACHO_OR_FAT_MAGIC", "Mach-O addon not Android ELF")
 print("P54_SAFE_TAR_HASH_NEGATIVE_TESTS=PASS assertions=" + str(checks))
 print("P54_NO_REAL_JS_OR_EXTRACTED_ORIGINAL_PACKAGE_TEST=PASS")
