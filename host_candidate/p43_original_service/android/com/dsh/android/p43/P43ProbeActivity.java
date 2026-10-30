@@ -203,6 +203,11 @@ public final class P43ProbeActivity extends Activity {
   }
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
+    if("com.dsh.p51.isolatedprobe".equals(getPackageName()) &&
+        getIntent()!=null && getIntent().getBooleanExtra("p71_profile",false)) {
+      com.dsh.android.p71.P71WebViewProfileProbe.run(this);
+      return;
+    }
     label=new TextView(this);label.setTextSize(16);
     label.setTextIsSelectable(true);setContentView(label);
     if("com.dsh.p51.isolatedprobe".equals(getPackageName())) {
