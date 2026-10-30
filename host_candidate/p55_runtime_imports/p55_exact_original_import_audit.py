@@ -18,6 +18,9 @@ import sys
 import tarfile
 import zipfile
 
+# The P54 trusted scanner lives in its own sibling directory.
+# Fixed local source import only; never network/module search from the archive.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "p54_engine_tree"))
 from p54_immutable_tar_audit import exact_engine, safe_name
 
 EXPECTED_TREE_SHA = "b2c7e52890351c4d1a3200c67ccb9be6154389a20da0b0b590d16676ce47b1e1"
