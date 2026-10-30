@@ -58,6 +58,18 @@ jobs:
           python host_candidate/p90_send_evidence/p90_original_bubble_owner.py --original "$file" > .p90_private/owner.log
           grep -Fxq 'P90_ORIGINAL_BUBBLE_SEND_SUCCESS_INTEGRATION=NOT_PROVEN' .p90_private/owner.log
           grep '^P90_PINNED_ORIGINAL_LOG_OWNER_CATEGORIES=' .p90_private/owner.log >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PY'
+          import json,pathlib
+          lines=pathlib.Path('.p90_private/owner.log').read_text().splitlines()
+          results=[line.removeprefix('P90_PINNED_ORIGINAL_LOG_OWNER_CATEGORIES=')
+                   for line in lines if line.startswith('P90_PINNED_ORIGINAL_LOG_OWNER_CATEGORIES=')]
+          if len(results)!=1:raise RuntimeError('P90_NO_UNIQUE_OWNER_REPORT')
+          data=json.loads(results[0])
+          print('P90_CATEGORICAL_ORIGINAL_METHOD_COUNT='+str(data['matching_method_count']))
+          print('P90_CATEGORICAL_LOG_COUNTS='+json.dumps(
+             data['matched_log_family_counts'],sort_keys=True))
+          print('P90_ORIGINAL_METHOD_ID_NOT_EXPOSED_TO_LOG=YES')
+          PY
           echo 'P90_ORIGINAL_OWNER_READONLY_SHA_PINNED_SCAN=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Clean exact original and publish accurate blockers
         if: always()
