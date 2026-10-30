@@ -266,6 +266,12 @@ jobs:
           grep -Fxq 'P99_SESSION_COMMAND_RUNTIME_EXECUTED=NO' .p96private/p99-command.log
           cat .p96private/p99-command.log
           echo 'P99_ORIGINAL_SESSION_COMMAND_PROMPT_SOURCE_CONTRACT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          python host_candidate/p96_stream_owner/p99_session_service_package_inventory.py \
+            --original "$f" > .p96private/p99-service-packages.log
+          grep -Fxq 'P99_SESSION_SERVICE_PACKAGE_METADATA_ONLY=PASS' \
+            .p96private/p99-service-packages.log
+          cat .p96private/p99-service-packages.log
+          echo 'P99_SESSION_SERVICE_PACKAGE_INVENTORY=PASS' >> "$GITHUB_STEP_SUMMARY"
           # One-shot real AgentLoop.create; no user prompt, agent or network.
           cp host_candidate/p96_stream_owner/p98_original_agent_session_once.mjs \
             .p96private/agent-runtime/p98_original_agent_session_once.mjs
