@@ -14,6 +14,7 @@ import java.util.Locale;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
 import com.dsh.android.p48.P48HostProcessProbe;
+import com.dsh.p37.P37RemoteProcess;
 
 /**
  * P43 temporary exported test entry exists ONLY in the throwaway emulator APK.
@@ -113,7 +114,17 @@ public final class P43ProbeActivity extends Activity {
           @Override public void fail(String code){
             log("P48_REAL_ORIGINAL_PROCESS_PROXY=BLOCKED_"+code);
           }
-        },p50Enabled);
+        },p50Enabled,(process,isolatedUid)->{
+          if(!(process instanceof P37RemoteProcess) ||
+             !android.os.Process.isIsolatedUid(isolatedUid) ||
+             !process.isAlive() ||
+             process.getInputStream()==null ||
+             process.getErrorStream()==null)
+            throw new IllegalStateException("P52_AUTHENTICATED_PROXY_BAD_TYPE_OR_UID");
+          log("P52_LIVE_P37_JAVA_PROCESS_FROM_ISOLATED_BINDER=PASS");
+          log("P52_PRODUCTION_ENGINEMANAGER_PROCESS_HANDOFF=NOT_WIRED");
+          log("P52_BINDER_HELLO_IS_EXECVE_READY=NO");
+        });
         log(p50Enabled?
             "P50_EXACT_ORIGINAL_NODE_TEST_REQUESTED=YES":
             "P50_X86_OR_MISSING_LOCK_ORIGINAL_NODE_NOT_REQUESTED=YES");

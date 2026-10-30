@@ -18,11 +18,20 @@ public final class P48HostProcessProbe {
     void report(String status);
     void fail(String code);
   }
+  /**
+   * P52: deliver a live java.lang.Process facade at authenticated Binder
+   * HELLO. HELLO is NOT a proven Node execve nor a production READY signal.
+   * Only trusted same-app code may receive the facade; no global registry.
+   */
+  public interface LiveProcessReceiver {
+    void onLiveProxy(java.lang.Process proxy,int isolatedUid);
+  }
   private final Handler main=new Handler(Looper.getMainLooper());
   private final Messenger isolated;
   private final String session;
   private final Listener listener;
   private final boolean exactOriginalArm64Node;
+  private final LiveProcessReceiver liveProcessReceiver;
   private final CountDownLatch readers=new CountDownLatch(2);
   private final AtomicReference<String> stdout=new AtomicReference<>("");
   private final AtomicReference<String> stderr=new AtomicReference<>("");
@@ -63,6 +72,12 @@ public final class P48HostProcessProbe {
                    "p48-host-stdout").start();
         new Thread(()->collect(proxy.getErrorStream(),stderr),
                    "p48-host-stderr").start();
+        if(liveProcessReceiver!=null){
+          try {liveProcessReceiver.onLiveProxy(proxy,workerUid);}
+          catch(RuntimeException rejected){
+            failClosed("P52_LIVE_PROCESS_RECEIVER_REJECTED");return;
+          }
+        }
         listener.report("P48_ORIGINAL_APP_BOUND_P37_REMOTE_PROCESS=PASS");
         return;
       }
@@ -92,10 +107,15 @@ public final class P48HostProcessProbe {
   });
 
   public P48HostProcessProbe(Messenger isolated,String session,Listener listener) {
-    this(isolated,session,listener,false);
+    this(isolated,session,listener,false,null);
   }
   public P48HostProcessProbe(Messenger isolated,String session,
                              Listener listener,boolean exactOriginalArm64Node) {
+    this(isolated,session,listener,exactOriginalArm64Node,null);
+  }
+  public P48HostProcessProbe(Messenger isolated,String session,
+                             Listener listener,boolean exactOriginalArm64Node,
+                             LiveProcessReceiver liveProcessReceiver) {
     if(isolated==null||listener==null||session==null||
        !session.matches("[a-f0-9]{64}"))
       throw new IllegalArgumentException("P48_BAD_HOST_SESSION");
@@ -103,6 +123,7 @@ public final class P48HostProcessProbe {
     this.session=session;
     this.listener=listener;
     this.exactOriginalArm64Node=exactOriginalArm64Node;
+    this.liveProcessReceiver=liveProcessReceiver;
   }
   public void start() {
     if(started)throw new IllegalStateException("P48_ALREADY_STARTED");
