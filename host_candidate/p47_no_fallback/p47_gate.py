@@ -8,6 +8,8 @@ import pathlib
 import re
 import zipfile
 from androguard.core.dex import DEX
+import sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from p40_exact_trampoline import find_methods, TARGET, CLASS, ORIGINAL, TRAMPOLINE
 
 BRIDGE_SOURCE = "invoke-virtual {p0}, Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;"
