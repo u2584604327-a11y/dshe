@@ -18,8 +18,9 @@ for p in paths[:12]:
     b=p.read_bytes()
     if len(b)>2000000:continue
     print("P96_ORIGINAL_PI_AI_TOOL_CODE_FILE="+p.relative_to(folder).as_posix())
-    for pattern in (b"context.tools",b"options.tools",b"toolChoice",
-                    b"params.tools",b"parameters:",b"tool_calls",b"tools:"):
+    for pattern in (b"transcriptTools",b"requestTools",b"collectTranscript",
+                    b"toolsAdded",b"toolsRemoved",b"context.tools",
+                    b"options.tools",b"params.tools",b"toolChoice"):
         for m in list(re.finditer(re.escape(pattern),b))[:2]:
             start=max(0,m.start()-180);end=min(len(b),m.end()+250)
             text=b[start:end].decode("utf-8","replace")
