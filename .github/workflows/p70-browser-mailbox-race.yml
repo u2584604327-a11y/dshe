@@ -40,6 +40,9 @@ jobs:
           printf '%s  %s\n' 3af586c2c83d1aea67d119357672559eb09371c77ef4e06900bb697c06d11fd5 "$p6" | sha256sum -c - >/dev/null
           python host_candidate/p69_browser_reply/audit_browser_reply.py --selftest
           echo 'P70_ACTUAL_P6_INPUT_HASH=PASS' >> "$GITHUB_STEP_SUMMARY"
+          gh release download dsh-baseline-v135dsh-baseline-v135 --repo "$GH_REPO"             --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk             --dir .p70_private
+          printf '%s  %s\n' 3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5             .p70_private/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk | sha256sum -c - >/dev/null
+          python -m pip install --no-cache-dir -r host_candidate/requirements.txt
       - name: Patch exactly one browser JS entry in ephemeral nested asset
         shell: bash
         run: |
@@ -65,6 +68,17 @@ jobs:
           grep -Fxq 'P70_AUTOMATIC_COMMENT_RETRY=NO' .p70_private/node-tests.log
           echo 'P70_REAL_PATCHED_P6_MAILBOX_JAVASCRIPT_TESTS=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P70_ANDROID_TOOL_RESULT_AND_LOGIN_PERSISTENCE=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
+      - name: Original v138 native WebView and mailbox static responder evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python host_candidate/p70_browser_mailbox/audit_native_browser_mailbox.py             .p70_private/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk             .p70_private/DSH_V139_P6_NODE_CREDENTIAL_LOG_REDACTION_AND_ASSET_STAGING.zip             > .p70_private/native-browser-report.log
+          grep -Fxq 'P70_SIGNED_ORIGINAL_V138_NATIVE_BROWSER_AUDIT=PASS' .p70_private/native-browser-report.log
+          grep -Fxq 'P70_ORIGINAL_COOKIE_VALUES_OR_BROWSER_HISTORY_ACCESSED=NO' .p70_private/native-browser-report.log
+          grep '^P70_NATIVE_BROWSER_' .p70_private/native-browser-report.log
+          grep '^P70_MAILBOX_NAMES_' .p70_private/native-browser-report.log
+          grep '^P70_WEBVIEW_COOKIE_' .p70_private/native-browser-report.log
+          echo 'P70_NATIVE_BROWSER_READONLY_CHECK=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Always remove original P6 patched JS and temporary output
         if: always()
         shell: bash
