@@ -86,6 +86,12 @@ jobs:
           grep -Fxq 'P96_FIRSTPARTY_ORIGINAL_PACKAGE_BOUNDARY=PASS' .p96private/cordis.log
           grep -Fxq 'P96_ORIGINAL_LIVE_REPLY_BRIDGE=NOT_WIRED' .p96private/cordis.log
           grep '^P96_FIRSTPARTY_CORDIS_CATEGORIES=' .p96private/cordis.log >> "$GITHUB_STEP_SUMMARY"
+          # Read exact original provider/session signatures without editing the engine.
+          python host_candidate/p96_stream_owner/p96_provider_contract.py --original "$f" \
+            > .p96private/provider-contract.log
+          grep -Fxq 'P96_EXACT_ORIGINAL_MODEL_PROVIDER_PREIMAGE=PASS' .p96private/provider-contract.log
+          grep -Fxq 'P96_ORIGINAL_PROVIDER_OR_SESSION_MODIFIED=NO' .p96private/provider-contract.log
+          grep '^P96_CONTRACT_ANCHOR=' .p96private/provider-contract.log >> "$GITHUB_STEP_SUMMARY"
           echo 'P96_ORIGINAL_ENGINE_ARCHIVE_EXACT_SHA_AND_CATEGORIES=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Erase local original and mark release boundary
         if: always()
