@@ -106,7 +106,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GH_REPO" = "u2584604327-a11y/dshe"
-          test "$(gh api "repos/$GH_REPO" --jq .private)" = true
+          gh api "repos/$GH_REPO" --jq '.visibility' | sed 's/^/P96_REPOSITORY_VISIBILITY=/'
           python host_candidate/p96_stream_owner/p96_original_engine_owner.py --selftest
           mkdir -p .p96private
           gh release download dsh-baseline-v135dsh-baseline-v135 \
