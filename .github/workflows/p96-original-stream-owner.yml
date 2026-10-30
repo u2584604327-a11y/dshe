@@ -61,6 +61,12 @@ jobs:
           set -euo pipefail
           node --test host_candidate/p96_stream_owner/omnigate_local_preflight.test.mjs
           node --test host_candidate/p96_stream_owner/original_dsh_omnigate_profile.test.mjs
+          node --test host_candidate/p96_stream_owner/p98_original_node_capabilities.test.mjs
+          node host_candidate/p96_stream_owner/p98_original_node_capabilities.mjs \
+            | tee .p98-ci-runner-node-capabilities.log
+          grep -q '"realAndroidEngineManagerVerified":false' .p98-ci-runner-node-capabilities.log
+          echo 'P98_READONLY_RUNTIME_CAPABILITY_PROBE_RUNNER_ONLY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P98_PHONE_BUNDLED_NODE_CAPABILITIES=NOT_OBSERVED' >> "$GITHUB_STEP_SUMMARY"
           echo 'P96_ORIGINAL_PI_AI_CONFIG_PROFILE_NO_SECRET_AND_NO_GUESS=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P96_DSH_8787_HOST_AND_OVERLAY_READONLY_PREFLIGHT=PASS' >> "$GITHUB_STEP_SUMMARY"
 
