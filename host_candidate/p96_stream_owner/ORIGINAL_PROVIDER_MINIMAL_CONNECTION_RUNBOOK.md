@@ -104,3 +104,12 @@ node original_dsh_omnigate_profile.mjs \
 门禁精确为 `P96_ORIGINAL_TOOL_RUNTIME_REGISTER_EXECUTE_NOTIFY=PASS`、`P96_ORIGINAL_PI_AI_TOOLRUNTIME_TWO_TURN_ROUNDTRIP=PASS`、`P96_ORIGINAL_TOOL_RUNTIME_EXECUTIONS=1` 和 `P96_ORIGINAL_TOOL_RESULT_NOTIFICATIONS=1`。临时原版方法体源码调试脚本已删除，不作为项目代码或 Action 输出保留。
 
 **发布阻断依然存在**：这不是 `dsh-agent-loop.AgentLoop` 的真实驱动。测试用已经验明的 Pi-AI 格式构造模型上下文与调用，与 Android DSH EngineManager、实际 ToolRuntime 注册表、授权 native Broker、WebView 浏览器实际操作及 409 runtime owner 校验均未连接。严禁将该原版模块合成闭环声称为手机端 B站读取/评论、自动上限续接或后台浏览器隐藏功能完成。下一步只能在原版 EngineManager 的真实启动环境中注册可信受限浏览器工具，再验证模型产生调用、Native Terminal、会话持久化和 AgentLoop 自己的自动续接；不得额外注入重复 `role=tool`。
+## 原版 AgentLoop：Node22 真实服务就绪，非手机自动续接（2026-10-30）
+
+锁定原版 v138 APK SHA256，隔离 CI 中加载真正原版 `@deepseek-ai/dsh-agent-loop` 与六个插件服务：`@deepseek-ai/dsh-agent.AgentRegistry`、`@deepseek-ai/dsh-session.SessionStore`、`@deepseek-ai/dsh-llm.LlmRuntime`、`@deepseek-ai/dsh-tools.ToolRuntime`、`@deepseek-ai/dsh-system-prompt.SystemPrompt`、`@deepseek-ai/dsh-session-projection.SessionProjectionRegistry`。无伪造这些核心服务的注册。
+
+原先 Node20 CI 下模块能 import，但 `AgentLoop` 激活抛出 `Promise.withResolvers is not a function`。Node22 CI 中所有六个原版服务均激活，`ctx.get('agentLoop')` 返回真实对象，`create()` 接口存在。现在 `p96_agentloop_original_services_boot.mjs` 会强制检查缺失依赖集合为空、真正 `AgentLoop.create` 函数存在以及 `Promise.withResolvers` 可用，失败必须终止 CI，不再以 `ctx.plugin` 返回句柄冒充 READY。保留既有原版 pi-ai 流式消息、ToolRuntime 一次执行 / 一次通知和两轮工具结果往返测试。
+
+**注意**：此处测试运行时是 GitHub runner Node22，不证明用户手机原版 `assets/node-runtime.bin` 中实际 Node 版本，原版 Android `EngineManager` 启动路径未接到该测试。可直接判断的是此测试所经原版 AgentLoop 代码执行路径需要 `Promise.withResolvers`；手机运行时缺失此接口则不能直接运行相同路径。原版包 `engines.node` 声明与设备真机 `node --version` 必须分别确认，不能从 GitHub runner 推断。
+
+**下一节点仅对真实原版执行器生效**：在受信的原版 `EngineManager` 中证明 Node 版本/特性、六服务依赖真实启动、实际 session 创建、`AgentLoop` 对 `tools/result` 的自动消费、Android Browser Broker 安全回传与原版聊天 UI 增量刷新；同时保留 409 所有者安全门禁和隔离 UID 拒绝回环直连。此前 `pi-ai ↔ ToolRuntime` 的显式二次调用是合成测试编排，不是 AgentLoop 自己的续接证明。没有此证据，PR 只能 Draft，不能合并或发布正式 APK。
