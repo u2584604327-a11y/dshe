@@ -83,14 +83,14 @@ try {
   };
   const api=await openAICompletionsApi();
   // The exact original pi-ai calls resolveTranscriptTools(context.messages).
-  // Tool declarations therefore belong to the transcript's system message,
+  // Tool declarations use system-message toolsAdded (not tools) in the transcript,
   // not a separate, ignored context.tools property.
   const toolDefinition={name:'read_fixture_page',
     description:'Synthetic local read; no external I/O',
     parameters:{type:'object',properties:{page:{type:'string'}},required:['page']}};
   const ctx={messages:[
     {role:'system',content:'Synthetic local test only',
-      tools:[toolDefinition],timestamp:0},
+      toolsAdded:[toolDefinition],timestamp:0},
     {role:'user',content:[{type:'text',text:'safe local tool request'}],
       timestamp:1}
   ]};
