@@ -93,18 +93,13 @@ try{
        .filter(x=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(x)).slice(0,10);
      const fields=[...source.matchAll(/(?:this|message|request|options|input|signal|turn|session)\??\.([A-Za-z_$][A-Za-z0-9_$]{0,64})/g)]
        .map(x=>x[1]);
+     const safeLiterals=[...source.matchAll(/['"]([A-Za-z_$][A-Za-z0-9_$-]{0,31})['"]/g)]
+       .map(x=>x[1]).filter(x=>/^(?:nextTurn|nextStep|followup|steer|inject|user|assistant|tool|idle|running|aborted)$/.test(x));
      return {name,arity:method.length,parameters,
        referencedFields:[...new Set(fields)].slice(0,45),
+       safeLiterals:[...new Set(safeLiterals)],
        isAsync:method.constructor.name==='AsyncFunction'};
    }
-   log('HANDLE_PROTOTYPE_METHODS',JSON.stringify(methods(handle)));
-   log('SEND_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'send')));
-   log('FOLLOWUP_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'followup')));
-   log('SESSION_APPEND_CONTRACT',JSON.stringify(safeMethodContract(handle.session,'append')));
-   log('SESSION_COMMIT_CONTRACT',JSON.stringify(safeMethodContract(handle.session,'commit')));
-   log('INBOX_PROTOTYPE_METHODS',JSON.stringify(methods(handle.inbox)));
-   log('SESSION_PROTOTYPE_METHODS',JSON.stringify(methods(handle.session)));
-   log('DISPATCH_PROTOTYPE_METHODS',JSON.stringify(methods(handle.dispatch)));
    function safeOwnShape(object){
      if(!object || typeof object!=='object')return [];
      return Object.keys(object)
@@ -119,6 +114,20 @@ try{
          };
        });
    }
+   log('HANDLE_PROTOTYPE_METHODS',JSON.stringify(methods(handle)));
+   log('SEND_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'send')));
+   log('FOLLOWUP_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'followup')));
+   log('STEER_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'steer')));
+   log('INJECT_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'inject')));
+   const currentInbox=handle.inbox.current();
+   log('INBOX_CURRENT_RETURN_TYPE',Array.isArray(currentInbox)?'array':typeof currentInbox);
+   log('INBOX_CURRENT_RETURN_SHAPE',JSON.stringify(
+     currentInbox && typeof currentInbox==='object' ? safeOwnShape(currentInbox) : []));
+   log('SESSION_APPEND_CONTRACT',JSON.stringify(safeMethodContract(handle.session,'append')));
+   log('SESSION_COMMIT_CONTRACT',JSON.stringify(safeMethodContract(handle.session,'commit')));
+   log('INBOX_PROTOTYPE_METHODS',JSON.stringify(methods(handle.inbox)));
+   log('SESSION_PROTOTYPE_METHODS',JSON.stringify(methods(handle.session)));
+   log('DISPATCH_PROTOTYPE_METHODS',JSON.stringify(methods(handle.dispatch)));
    for(const name of ['current','mutate','splice','append','push','shift','clear']){
      const contract=safeMethodContract(handle.inbox,name);
      if(contract)log('INBOX_'+name.toUpperCase()+'_CONTRACT',JSON.stringify(contract));
