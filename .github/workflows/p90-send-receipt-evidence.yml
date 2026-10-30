@@ -68,6 +68,12 @@ jobs:
           print('P90_CATEGORICAL_ORIGINAL_METHOD_COUNT='+str(data['matching_method_count']))
           print('P90_CATEGORICAL_LOG_COUNTS='+json.dumps(
              data['matched_log_family_counts'],sort_keys=True))
+          owners=[{'surface':item['surface'],'dex':item['dex'],
+                   'labels':item['labels'],'api_categories':item['api_categories']}
+                  for item in data['method_categories']
+                  if 'BUBBLE_INSERT_RESULT' in item['labels']
+                  or 'BUBBLE_CLICK_RESULT' in item['labels']]
+          print('P90_BUBBLE_OWNER_CALL_CATEGORIES='+json.dumps(owners,sort_keys=True))
           print('P90_ORIGINAL_METHOD_ID_NOT_EXPOSED_TO_LOG=YES')
           PY
           echo 'P90_ORIGINAL_OWNER_READONLY_SHA_PINNED_SCAN=PASS' >> "$GITHUB_STEP_SUMMARY"
