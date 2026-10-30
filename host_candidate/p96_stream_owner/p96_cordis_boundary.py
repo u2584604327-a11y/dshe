@@ -60,6 +60,7 @@ def scan(path):
     package_hits=collections.defaultdict(collections.Counter)
     candidates=[]
     model_contract=[]
+    route_contract=[]
     read_total=0
     with gzip.GzipFile(fileobj=io.BytesIO(raw)) as g:
         with tarfile.open(fileobj=g,mode="r|") as tar:
@@ -79,6 +80,18 @@ def scan(path):
                 blob=f.read(MAX_FILE+1)
                 require(len(blob)==item.size,"SHORT_FILE")
                 read_total+=len(blob)
+                if name in (
+                    "node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js",
+                    "node_modules/@deepseek-ai/dsh-llm/lib/index.js",
+                    "node_modules/@deepseek-ai/dsh-api-session-controller/lib/client.js",
+                    "node_modules/@deepseek-ai/dsh-client-ui-chat/lib/client.js",
+                ):
+                    labels=(b"baseUrl",b"baseURL",b"apiKey",b"openai-completions",
+                            b"streamSimple",b"session.update",b"subscribe(",
+                            b"onMessage",b"tool_calls")
+                    hits={q.decode("ascii"):blob.find(q) for q in labels if q in blob}
+                    route_contract.append({"path":name,"size":len(blob),
+                                           "sha12":sha(blob)[:12],"first_offsets":hits})
                 if pkg in TARGET_PACKAGE_NAMES and len(model_contract)<90:
                     names=[v.decode("ascii") for v in CONTRACT_LITERALS if v in blob]
                     if names:
@@ -106,6 +119,7 @@ def scan(path):
         "firstparty_signals":{k:dict(v) for k,v in package_hits.items()},
         "firstparty_source_candidates":candidates[:MAX_CANDIDATES],
         "selected_original_model_provider_contract":model_contract,
+        "original_model_to_session_literal_anchors":route_contract,
         "firstparty_js_bytes_read":read_total,
         "original_event_callback_identity_proven":False,
         "original_runtime_tool_return_proven":False,
