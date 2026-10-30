@@ -60,3 +60,16 @@ node original_dsh_omnigate_profile.mjs \
 生成器只声明 `input:["text"]`；原版图片/文件发送和工具结果能力均需独立确认，不可用“支持 OpenAI 兼容协议”推断已经打通。
 
 源码校验与生成器回归记录：P96 现有 CI；未在用户手机运行，未连接当前 DSH Node 实际会话，未自动改变模型、OmniGate、沙箱、B站浏览器或登录信息。
+
+## 真实原版 pi-ai 模型适配器的合成 SSE 与工具结果验证
+
+2026-10-30：在私有 GitHub Actions 中，校验签名 v138 APK 的精确 SHA256，并临时从 engine.bin 提取原版 @earendil-works/pi-ai 及声明依赖。执行测试前清除 GH_TOKEN、GITHUB_TOKEN 与 Actions OIDC 环境变量；仅启动本机 127.0.0.1 端口的合成 SSE 服务。执行后清理临时包，不发布提取后的原版代码。未安装或改动原版 DSH APK。
+
+- p96_original_pi_ai_probe.mjs：真实加载原版 openai-completions.lazy，并调用 openAICompletionsApi() 工厂；其结果包含 stream 与 streamSimple。pi-ai 包根入口本身没有直接导出 streamSimple。
+- p96_real_original_stream_fixture.mjs：原版 streamSimple 对临时本地模型接口恰好发送一次 streaming POST，真实接收 start、text_delta、done 等事件，重组合成文本与预期完全一致。
+- p96_real_original_tool_fixture.mjs：通过原版上下文系统消息的 toolsAdded 声明无副作用工具，原版 SDK 真实发送 OpenAI function 工具定义；接受工具调用分片并生成 toolCall；把合成工具结果加入同一模型会话后，原版 SDK 第二次发送的请求包含 role=tool，并收到继续生成的回复。
+- 先前把定义放在 context.tools 和 system.tools 的测试均失败。已通过阅读原版 pi-ai/dist/utils/transcript.js 的 resolveTranscriptTools/getDeclaredTools 确认：有效的内部工具注册字段是系统消息 toolsAdded。该字段不是用户公开授权接口，不得让模型或网页自行宣称获得权限。
+
+以上证明原版 pi-ai 协议层真实文本流消费及无副作用工具结果往返；**不证明** DSH Cordis/agent-loop 已接入、真实 Android Native ApiServer 路由和 409 门禁通过、隔离 UID 可访问 8787、原版 WebView 登录保持、B站评论授权发布或 OmniGate 上限续接已在手机完成。
+
+后续只有原版 DSH agent/session 与模型调用之间的现有事件接线、隔离进程的可信本机通信、真实设备逐步验收可解除正式 APK 发布阻断。禁止重新建立第二套聊天引擎、盲目放开隔离网络或触碰实际用户凭证。
