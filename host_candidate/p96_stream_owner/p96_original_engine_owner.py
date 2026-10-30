@@ -71,6 +71,8 @@ def inventory(original):
     require(raw[:2]==b"\x1f\x8b","NOT_GZIP")
     seen=set(); members=0; add_ons=0; scanned=0; skipped=0; total=0
     owner_categories=collections.Counter()
+    original_app_files=0
+    original_app_entrypaths=[]
     ranked=[]
     with gzip.GzipFile(fileobj=io.BytesIO(raw)) as gzip_stream:
         with tarfile.open(fileobj=gzip_stream,mode="r|") as tar:
@@ -84,6 +86,10 @@ def inventory(original):
                 if not member.isfile():continue
                 require(0<=member.size<=128*1024*1024,"MEMBER_OVERFLOW")
                 if name.endswith(".node"):add_ons+=1
+                if name.startswith("node_modules/@deepseek-ai/dsh/"):
+                    original_app_files+=1
+                    if name.endswith((".js",".mjs",".cjs")) and len(original_app_entrypaths)<120:
+                        original_app_entrypaths.append(name)
                 if not name.endswith((".js",".mjs",".cjs",".html")):continue
                 if member.size>MAX_ANALYZED_FILE:
                     skipped+=1;continue
@@ -114,6 +120,8 @@ def inventory(original):
     return {"exact_original_sha":True,"tar_members":members,"js_html_scanned":scanned,
       "js_html_skipped_bounded":skipped,"scanned_bytes":total,
       "owner_family_matches":dict(owner_categories),
+      "exact_logged_original_dsh_npm_package_file_count":original_app_files,
+      "original_dsh_npm_js_paths_sample":original_app_entrypaths[:32],
       "top_opaque_candidate_modules":ranked[:MAX_RESULT_ROWS],
       "chat_response_owner_proven":False,
       "original_engine_or_ui_modified":False,
