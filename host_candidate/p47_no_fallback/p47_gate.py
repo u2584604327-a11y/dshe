@@ -46,11 +46,11 @@ def verify(apk):
     need(m[bridge]["dex"]=="classes.dex","BRIDGE_MOVED")
     need(m[target]["calls"].count(("invoke-static",TRAMPOLINE))==1,
          "PRIMARY_CALLSITE_NOT_EXACT")
-    # P40's legacy find_methods() intentionally filters calls into only
-    # ProcessBuilder or P40 classes, so it cannot see the new P47 callee.
-    # Inspect exact bytecode in the main DEX instead of asserting a filtered
-    # call list contains an unrelated class.
-    need(m[bridge]["calls"]==[],"BRIDGE_STILL_CALLS_BUILDER_OR_P40")
+    # P40's legacy scanner includes this invocation because the new static
+    # signature contains ProcessBuilder as a *parameter*, even though the
+    # callee is P47LaunchGate. Require the exact expected single call here.
+    need(m[bridge]["calls"]==[("invoke-static",DENY)],
+         "BRIDGE_CALLSITE_NOT_EXACT_NO_FALLBACK")
     need(("invoke-virtual",ORIGINAL) not in m[target]["calls"],
          "PRIMARY_STILL_SPAWNS_HOST")
     for x in (probe,dump):
