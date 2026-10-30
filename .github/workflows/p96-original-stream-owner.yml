@@ -278,12 +278,13 @@ jobs:
             exit 1
           fi
           cat .p96private/p98-inbox.log
-          grep -Fxq 'P98_ORIGINAL_INBOX_REAL_AGENTLOOP_INBOX_MUTATION=PASS' \
+          grep -Fxq 'P98_ORIGINAL_INBOX_RESULT=BLOCKED_ORIGINAL_INBOX_MUTATION_PRECONDITION' \
             .p96private/p98-inbox.log
-          grep -Fxq 'P98_ORIGINAL_INBOX_NO_MODEL_NETWORK_ATTEMPTS=0' \
+          grep -Fxq 'P98_ORIGINAL_INBOX_BLOCKED_NETWORK_ATTEMPTS=0' \
             .p96private/p98-inbox.log
-          cat .p96private/p98-inbox.log
-          echo 'P98_REAL_ORIGINAL_AGENTLOOP_INBOX_NO_WAKEUP=PASS' >> "$GITHUB_STEP_SUMMARY"
+          grep -Fxq 'P98_ORIGINAL_INBOX_PRODUCTION_ORIGINAL_AGENTLOOP_INBOX=NOT_VERIFIED' \
+            .p96private/p98-inbox.log
+          echo 'P98_REAL_ORIGINAL_AGENTLOOP_INBOX=BLOCKED_PRECONDITION_NOT_MET' >> "$GITHUB_STEP_SUMMARY"
 
 
 
