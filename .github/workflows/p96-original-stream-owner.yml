@@ -44,6 +44,12 @@ jobs:
           grep -Fxq 'P96_EXACT_ORIGINAL_NODE_WEB_OWNER_AUDIT=PASS' .p96private/audit.log
           grep -Fxq 'P96_REAL_ORIGINAL_WEB_CHAT_RESPONSE_READ_CALLBACK_WIRED=NO' .p96private/audit.log
           grep '^P96_SOURCE_OWNER_CATEGORIES=' .p96private/audit.log >> "$GITHUB_STEP_SUMMARY"
+          python host_candidate/p96_stream_owner/p96_cordis_boundary.py --selftest
+          python host_candidate/p96_stream_owner/p96_cordis_boundary.py \
+            --original "$f" | tee .p96private/cordis.log
+          grep -Fxq 'P96_FIRSTPARTY_ORIGINAL_PACKAGE_BOUNDARY=PASS' .p96private/cordis.log
+          grep -Fxq 'P96_ORIGINAL_LIVE_REPLY_BRIDGE=NOT_WIRED' .p96private/cordis.log
+          grep '^P96_FIRSTPARTY_CORDIS_CATEGORIES=' .p96private/cordis.log >> "$GITHUB_STEP_SUMMARY"
           echo 'P96_ORIGINAL_ENGINE_ARCHIVE_EXACT_SHA_AND_CATEGORIES=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Erase local original and mark release boundary
         if: always()
