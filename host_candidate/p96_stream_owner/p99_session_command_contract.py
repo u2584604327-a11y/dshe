@@ -124,6 +124,17 @@ def method_contract(class_body, method_name):
         if len(safe_literals) >= 50:
             break
 
+    assignments = []
+    for field, rhs in re.findall(
+        r"this\.([A-Za-z_$][A-Za-z0-9_$]{0,80})\s*=\s*([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*){0,5})",
+        body,
+    ):
+        item = {"field": field, "rhs": rhs}
+        if item not in assignments:
+            assignments.append(item)
+        if len(assignments) >= 40:
+            break
+
     return {
         "name": method_name,
         "params": params,
@@ -132,6 +143,7 @@ def method_contract(class_body, method_name):
         "memberCalls": member_calls,
         "directCalls": direct_calls,
         "safeLiterals": safe_literals,
+        "assignments": assignments,
         "sourceSize": len(body),
     }
 
