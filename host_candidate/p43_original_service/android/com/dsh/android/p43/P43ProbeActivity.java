@@ -39,6 +39,7 @@ public final class P43ProbeActivity extends Activity {
   private boolean bound,received,failed;
   private Messenger remote;
   private P48HostProcessProbe p48;
+  private volatile java.lang.Process p75AuthenticatedProxy;
   private void log(String msg) {
     android.util.Log.i("P43_HOST_BINDER",msg);
     if(label!=null)label.setText(status.append(msg).append('\n').toString());
@@ -126,6 +127,15 @@ public final class P43ProbeActivity extends Activity {
           log("P52_LIVE_P37_JAVA_PROCESS_FROM_ISOLATED_BINDER=PASS");
           log("P52_PRODUCTION_ENGINEMANAGER_PROCESS_HANDOFF=NOT_WIRED");
           log("P52_BINDER_HELLO_IS_EXECVE_READY=NO");
+          if(getIntent()!=null && getIntent().getBooleanExtra("p75_rendezvous",false)){
+            p75AuthenticatedProxy=process;
+            if(!com.dsh.android.p75.P75EngineStartRendezvous.authenticatedChildStarted(
+                session,(P37RemoteProcess)process,isolatedUid,
+                android.os.Process::isIsolatedUid)) {
+              throw new IllegalStateException("P75_AUTHENTICATED_P37_DELIVERY_DENIED");
+            }
+            log("P75_REAL_BINDER_CHILD_STARTED_DELIVERED_ACROSS_THREADS=PASS");
+          }
           if(getIntent()!=null && getIntent().getBooleanExtra("p74_bridge",false)){
             try {
               com.dsh.android.p74.P74OriginalEngineFixtureHandoff.stageFromAuthenticatedChild(
@@ -149,6 +159,37 @@ public final class P43ProbeActivity extends Activity {
         log(p50Enabled?
             "P50_EXACT_ORIGINAL_NODE_TEST_REQUESTED=YES":
             "P50_X86_OR_MISSING_LOCK_ORIGINAL_NODE_NOT_REQUESTED=YES");
+        if(getIntent()!=null && getIntent().getBooleanExtra("p75_rendezvous",false)){
+          com.dsh.android.p75.P75EngineStartRendezvous.armFromTrustedHost(session);
+          new Thread(()->{
+            try {
+              com.dsh.android.p75.P75EngineStartRendezvous.claimOnEngineThread(session);
+              Class<?> originalBridge=Class.forName(
+                  "com.dsh.android.p40.P40ProcessBridge");
+              Method bridge=originalBridge.getDeclaredMethod("start",ProcessBuilder.class);
+              ProcessBuilder fixed=new ProcessBuilder("/system/bin/id","-u");
+              fixed.directory(new File("/"));
+              Object returned=bridge.invoke(null,fixed);
+              final boolean correct=returned==p75AuthenticatedProxy &&
+                  returned instanceof P37RemoteProcess;
+              main.post(()->{
+                if(correct)log("P75_REAL_ORIGINAL_P40_ASYNC_THREAD_RETURNED_IDENTICAL_P37=PASS");
+                else fail("P75_ORIGINAL_BRIDGE_RETURNED_WRONG_PROXY");
+              });
+            }catch(Exception | LinkageError broken) {
+              main.post(()->fail("P75_ENGINE_THREAD_ORIGINAL_BRIDGE_FAILED"));
+            }
+          },"p75-engine-call-async").start();
+          try {
+            if(!com.dsh.android.p75.P75EngineStartRendezvous.awaitOriginalBridgeEntered(3000)){
+              fail("P75_ORIGINAL_BRIDGE_DID_NOT_WAIT");return;
+            }
+          }catch(InterruptedException stopped){
+            Thread.currentThread().interrupt();
+            fail("P75_ENGINE_READY_TO_WAIT_INTERRUPTED");return;
+          }
+          log("P75_ORIGINAL_P40_BRIDGE_WAITING_ON_OTHER_THREAD=PASS");
+        }
         p48.start();
       }
     }
@@ -269,6 +310,8 @@ public final class P43ProbeActivity extends Activity {
     main.postDelayed(()->{if(!received&&!failed)fail("BINDER_ACK_TIMEOUT");},12000);
   }
   @Override protected void onDestroy(){
+    if(getIntent()!=null && getIntent().getBooleanExtra("p75_rendezvous",false))
+      com.dsh.android.p75.P75EngineStartRendezvous.cancelSession("ACTIVITY_GONE");
     if(p48!=null)p48.close();
     if(bound)unbindService(connection);
     super.onDestroy();
