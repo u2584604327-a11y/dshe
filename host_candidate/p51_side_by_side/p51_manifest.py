@@ -101,7 +101,12 @@ def verify_manifest_bytes(raw):
     require(len(children)==2 and
             sorted(n.tag for n in children)==["activity","service"],
             "UNEXPECTED_APPLICATION_COMPONENTS")
-    require(len(root)==1,"UNEXPECTED_MANIFEST_TOP_LEVEL")
+    # aapt may add a platform uses-sdk node from explicit min/target flags.
+    children=[n.tag for n in root]
+    require(children.count("application")==1 and
+            children.count("uses-sdk")<=1 and
+            set(children).issubset({"application","uses-sdk"}),
+            "UNEXPECTED_MANIFEST_TOP_LEVEL")
     service=app.find("service")
     require(service is not None and service.get(A+"name")==SERVICE and
             service.get(A+"exported")=="false" and
