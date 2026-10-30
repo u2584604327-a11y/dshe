@@ -7,7 +7,7 @@
 候选连接：
 `DSH 原版消息 → pi-ai 模型适配器 → http://127.0.0.1:8787/v1 → OmniGate → 原版 Native API`。
 
-重要：P90 只适用于 OmniGate **网页气泡插入/发送**，不能作为 DSH 原版模型适配器是否准许发起 HTTP 请求的前置条件。P92 当前将二者耦合，是未接入生产的候选代码，**禁止按原样接入原版 DSH**。保留 P90 的网页虚假 SENT 防护，但 DSH 原版用户消息以原版会话控制器实际接受的消息为依据。
+重要：P90 只适用于 OmniGate **网页气泡插入/发送**，不能作为 DSH 原版模型适配器是否准许发起 HTTP 请求的前置条件。**已在 P92 原候选类中纠正此混用**：网页气泡路径保留原 P90 输入框核验；原版模型路径使用 `P92DshRouteGate.forOriginalProviderTurn(turnId, trustedOriginalSessionCallback)`，要求来自原版会话控制器的当前有效用户 turn、在实际尝试发送前再次核验、以及现有原版 8787/Native owner 验证。原版 API 路径不做网页气泡点击，不因网页 `len=0` 被阻断。HTTP200 与已接受的用户 turn **仅证明请求初步接受，不证明模型已经回复**。`OriginalSessionTurn` 为待接入原版运行时的接口，当前仍只是在隔离源码里编译和测试，**未上线**；禁止把外部任意 boolean、JS 消息或模型输出伪装成可信会话回执。保留 P90 的网页虚假 SENT 防护。
 
 ## 使用当前可执行只读检查
 
