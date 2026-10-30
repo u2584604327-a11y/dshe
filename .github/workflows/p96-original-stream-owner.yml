@@ -181,6 +181,15 @@ jobs:
           grep -Fxq 'P99_CORDIS_CONTEXT_NO_SERVICE_STARTED=PASS' .p96private/p99-context.log
           cat .p96private/p99-context.log
           echo 'P99_CORDIS_CONTEXT_API_SOURCE_LOCKED=PASS' >> "$GITHUB_STEP_SUMMARY"
+          cp host_candidate/p96_stream_owner/p99_session_service_exports.mjs \
+            .p96private/agent-runtime/p99_session_service_exports.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 15s node .p96private/agent-runtime/p99_session_service_exports.mjs \
+            > .p96private/p99-service-exports.log
+          grep -Fxq 'P99_SESSION_SERVICE_EXPORT_IMPORT_ONLY=PASS' .p96private/p99-service-exports.log
+          cat .p96private/p99-service-exports.log
+          echo 'P99_SESSION_SERVICE_EXPORT_IMPORT_ONLY=PASS' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p96_original_agent_runtime_probe.mjs \
             .p96private/agent-runtime/p96_original_agent_runtime_probe.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
