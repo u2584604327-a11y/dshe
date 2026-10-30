@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.util.Locale;
 import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
+import com.dsh.android.p48.P48HostProcessProbe;
 
 /**
  * P43 temporary exported test entry exists ONLY in the throwaway emulator APK.
@@ -35,6 +36,7 @@ public final class P43ProbeActivity extends Activity {
   private TextView label;
   private boolean bound,received,failed;
   private Messenger remote;
+  private P48HostProcessProbe p48;
   private void log(String msg) {
     android.util.Log.i("P43_HOST_BINDER",msg);
     if(label!=null)label.setText(status.append(msg).append('\n').toString());
@@ -93,6 +95,15 @@ public final class P43ProbeActivity extends Activity {
       log("P43_ORIGINAL_DSH_APPLICATION_AND_ISOLATED_SERVICE_BOUND=PASS");
       log("P43_REAL_NODE_IN_ORIGINAL_ENGINE=NO");
       log("P43_V139_RELEASE=BLOCKED");
+      if(remote!=null && p48==null) {
+        p48=new P48HostProcessProbe(remote,session,new P48HostProcessProbe.Listener(){
+          @Override public void report(String line){log(line);}
+          @Override public void fail(String code){
+            log("P48_REAL_ORIGINAL_PROCESS_PROXY=BLOCKED_"+code);
+          }
+        });
+        p48.start();
+      }
     }
   });
   private final ServiceConnection connection=new ServiceConnection(){
@@ -180,6 +191,7 @@ public final class P43ProbeActivity extends Activity {
     main.postDelayed(()->{if(!received&&!failed)fail("BINDER_ACK_TIMEOUT");},12000);
   }
   @Override protected void onDestroy(){
+    if(p48!=null)p48.close();
     if(bound)unbindService(connection);
     super.onDestroy();
   }
