@@ -91,3 +91,16 @@ node original_dsh_omnigate_profile.mjs \
 接下来的实机验收必须使用原版 DSH 发起一条**无副作用的浏览器读取**，观察原版 ToolRuntime 是否调用真实浏览器执行器、P85 是否得到单次可信终态、原版 `tools/result` 是否触发、AgentLoop 是否在同一会话发起下一次模型请求，以及原版 WebView 聊天 UI 是否更新。只可在用户明确确认后执行评论发布、输入提交等外部副作用。原版模型所有者 409、隔离 UID 的 TCP EACCES、登录持久化和隐藏 WebView 保活均仍独立阻断。
 
 现阶段没有原版 Android EngineManager 可写原生源码，也没有手机实际调用验证，因此该 PR 保留 Draft，**不得生成或宣布正式升级 APK**。无需再写第二套 SSE 消费器、Model Tool Dispatcher 或 Session Store。
+## 原版真实 ToolRuntime 执行和 Pi-AI 双轮往返（2026-10-30）
+
+使用 SHA-locked v138 APK 的原版 `@deepseek-ai/cordis`、`@deepseek-ai/dsh-tools`、`@earendil-works/pi-ai` 模块，在私有 GitHub Actions 临时 Node20 环境中完成。唯一测试替代项是无副作用的本机 HTTP SSE 服务器与最小 `systemPrompt.tools()` 内存注册服务。未安装 Android APK、未使用实际 DSH 用户配置或执行网页、命令、文件、外部网络。
+
+首先按原版 Cordis 生命周期 `ctx.provide('systemPrompt',{tools(){...}})` → `await ctx.plugin(ToolRuntime,{mode:'native'})`，由真实 Cordis 提供 ToolRuntime 服务。直接 `new ToolRuntime(...)` 不成立；缺少 systemPrompt、缺少 `systemPrompt.tools()`、未等待插件初始化都曾产生真实阻断。**不得用这些简化试验替代 Android 宿主的可信注册与授权。**
+
+原版 `ToolRuntime.register` 注册固定数据工具，调用真实 `ToolRuntime.execute` 后工具体恰好运行一次；原版 `tools/result` 事件恰好发出一次，结果 `isError=false`。输出 `output.render` 需返回 JSON 无损可序列化内容；最初返回包含 `undefined` 的字段时原版返回错误，已严格修正并保留回归。
+
+进一步通过 `p96_original_model_toolruntime_roundtrip.mjs` 直接串联：原版 Pi-AI `streamSimple` 从本机模拟模型 SSE 中收到一次 `toolCall` → 原版 ToolRuntime 对应 callId 执行一次固定内存工具 → 原版 Cordis 触发一次 `tools/result` → 将该原版执行产生的 `result.content` 作为同一 callId 的 `toolResult` 交给原版 Pi-AI → 第二轮实际 OpenAI Completions POST 含 `role=tool` 并生成终止回复。**CI 中双轮原版模块真实运行通过，调用与通知均为一次，没有在 test 侧手工伪造 ToolRuntime 的执行回执。**
+
+门禁精确为 `P96_ORIGINAL_TOOL_RUNTIME_REGISTER_EXECUTE_NOTIFY=PASS`、`P96_ORIGINAL_PI_AI_TOOLRUNTIME_TWO_TURN_ROUNDTRIP=PASS`、`P96_ORIGINAL_TOOL_RUNTIME_EXECUTIONS=1` 和 `P96_ORIGINAL_TOOL_RESULT_NOTIFICATIONS=1`。临时原版方法体源码调试脚本已删除，不作为项目代码或 Action 输出保留。
+
+**发布阻断依然存在**：这不是 `dsh-agent-loop.AgentLoop` 的真实驱动。测试用已经验明的 Pi-AI 格式构造模型上下文与调用，与 Android DSH EngineManager、实际 ToolRuntime 注册表、授权 native Broker、WebView 浏览器实际操作及 409 runtime owner 校验均未连接。严禁将该原版模块合成闭环声称为手机端 B站读取/评论、自动上限续接或后台浏览器隐藏功能完成。下一步只能在原版 EngineManager 的真实启动环境中注册可信受限浏览器工具，再验证模型产生调用、Native Terminal、会话持久化和 AgentLoop 自己的自动续接；不得额外注入重复 `role=tool`。
