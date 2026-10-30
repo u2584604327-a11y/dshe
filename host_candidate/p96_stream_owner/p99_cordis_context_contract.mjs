@@ -19,8 +19,24 @@ const own=Object.keys(ctx).filter(safe).slice(0,80).map(key=>{
   return {key,type:Array.isArray(value)?'array':typeof value,nullValue:value===null};
 });
 
+function protoChain(value){
+  const out=[];
+  let p=value;
+  for(let depth=0;depth<5&&p;depth++,p=Object.getPrototypeOf(p)){
+    const names=Object.getOwnPropertyNames(p).filter(safe).slice(0,80);
+    const methods=names.map(name=>{
+      const d=Object.getOwnPropertyDescriptor(p,name);
+      return typeof d?.value==='function'?{name,arity:d.value.length}:null;
+    }).filter(Boolean);
+    out.push({depth,methods});
+  }
+  return out;
+}
 process.stdout.write('P99_CORDIS_CONTEXT_METHODS='+JSON.stringify(methods)+'\n');
 process.stdout.write('P99_CORDIS_CONTEXT_OWN_SHAPE='+JSON.stringify(own)+'\n');
+process.stdout.write('P99_CORDIS_CONTEXT_PROTO_CHAIN='+JSON.stringify(protoChain(ctx))+'\n');
+process.stdout.write('P99_CORDIS_ROOT_PROTO_CHAIN='+JSON.stringify(protoChain(ctx.root))+'\n');
+process.stdout.write('P99_CORDIS_REGISTRY_PROTO_CHAIN='+JSON.stringify(protoChain(ctx.registry))+'\n');
 process.stdout.write('P99_CORDIS_CONTEXT_GET_TYPE='+typeof ctx.get+'\n');
 process.stdout.write('P99_CORDIS_CONTEXT_PLUGIN_TYPE='+typeof ctx.plugin+'\n');
 process.stdout.write('P99_CORDIS_CONTEXT_NO_SERVICE_STARTED=PASS\n');
