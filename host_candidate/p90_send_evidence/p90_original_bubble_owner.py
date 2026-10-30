@@ -30,7 +30,8 @@ def categories(s):
 def api_categories(ins):
     result=collections.Counter()
     for name,prefixes in APIS.items():
-        if any(prefix in ins for prefix in prefixes):result[name]+=1
+        result[name]=sum(1 for invoke in ins if any(prefix in invoke for prefix in prefixes))
+    return +result
     return result
 def audit(apk):
     from androguard.core.dex import DEX
