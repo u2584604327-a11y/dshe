@@ -18,7 +18,11 @@ import net from 'node:net';
 import http from 'node:http';
 import https from 'node:https';
 
-const deny=()=>{throw new Error('P98_NO_NETWORK_ALLOWED');};
+let networkAttempts=0;
+const deny=()=>{
+  networkAttempts++;
+  throw new Error('P98_NO_NETWORK_ALLOWED');
+};
 globalThis.fetch=deny;
 net.Socket.prototype.connect=deny;
 net.connect=deny;
@@ -116,7 +120,12 @@ try{
  }
 }
 log('CREATE_OUTCOME',outcome);
-log('MODEL_POST_COUNT','0_EXPECTED');
+log('BLOCKED_NETWORK_ATTEMPTS',networkAttempts);
+if(networkAttempts!==0){
+  process.exitCode=2;
+  log('NETWORK_SIDE_EFFECT_GATE','FAIL');
+}else log('NETWORK_SIDE_EFFECT_GATE','PASS');
+log('MODEL_POST_COUNT','NOT_OBSERVED_REAL_PROVIDER');
 log('ORIGINAL_ANDROID_ENGINE_ATTACHED','NO');
 log('ORIGINAL_AGENT_AUTOCONTINUATION','NOT_TESTED');
 if(outcome!=='CREATED_WITHOUT_USER_PROMPT'){
