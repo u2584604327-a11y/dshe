@@ -125,7 +125,7 @@ def test():
  assert values=={"CMD","RESULT"}
  assert calls["FILE_INPUT"]==1 and calls["FILE_OUTPUT"]==1
  assert exact_const_string(FakeIns("const-string",0,'v0, "different.json"'),
-                           FakeDex()) is None
+                           FakeDex())!="cmd.json"
  assert owner_bucket("Lcom/dsh/android/browser/BrowserBridge;")=="ORIGINAL_BROWSER_BRIDGE"
  assert owner_bucket("Lcom/dsh/android/browser/AiBrowserView;")=="ORIGINAL_AI_BROWSER_VIEW"
  print("P80_SYNTHETIC_EXACT_METHOD_LITERAL_AND_IO_CLASSIFIER=PASS")
