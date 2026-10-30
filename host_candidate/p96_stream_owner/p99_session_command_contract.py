@@ -135,6 +135,44 @@ def method_contract(class_body, method_name):
         if len(assignments) >= 40:
             break
 
+    object_calls = []
+    for root, method, args in re.findall(
+        r"\b([A-Za-z_$][A-Za-z0-9_$]{0,80})\.([A-Za-z_$][A-Za-z0-9_$]{0,80})\s*\(([^)]{0,900})\)",
+        body,
+    ):
+        if method not in {"steer", "followup", "commit", "resolveAgent", "createUserMessage", "bindPrompt", "admitPromptContent"}:
+            continue
+        ids = [
+            x for x in re.findall(r"\b([A-Za-z_$][A-Za-z0-9_$]{0,80})\b", args)
+            if safe_ident(x) and x not in {"true", "false", "null", "undefined", "await"}
+        ]
+        fields = [
+            f"{r}.{m}" for r, m in re.findall(
+                r"\b([A-Za-z_$][A-Za-z0-9_$]{0,80})\??\.([A-Za-z_$][A-Za-z0-9_$]{0,80})",
+                args,
+            )
+            if safe_ident(r) and safe_ident(m)
+        ]
+        item = {
+            "root": root,
+            "method": method,
+            "argIdentifiers": list(dict.fromkeys(ids))[:40],
+            "argFields": list(dict.fromkeys(fields))[:40],
+        }
+        if item not in object_calls:
+            object_calls.append(item)
+        if len(object_calls) >= 40:
+            break
+
+    mode_branches = []
+    for op, value in re.findall(
+        r"request\??\.mode\s*(===|==|!==|!=)\s*['\"]([A-Za-z_$][A-Za-z0-9_$-]{0,48})['\"]",
+        body,
+    ):
+        item = {"operator": op, "value": value}
+        if item not in mode_branches:
+            mode_branches.append(item)
+
     return {
         "name": method_name,
         "params": params,
@@ -142,6 +180,8 @@ def method_contract(class_body, method_name):
         "paramFields": param_fields,
         "memberCalls": member_calls,
         "directCalls": direct_calls,
+        "objectCalls": object_calls,
+        "modeBranches": mode_branches,
         "safeLiterals": safe_literals,
         "assignments": assignments,
         "sourceSize": len(body),
