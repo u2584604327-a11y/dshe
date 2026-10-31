@@ -7,7 +7,7 @@ from p96_original_engine_owner import SOURCE_BYTES, SOURCE_SHA, file_hash, requi
 
 ROOT="node_modules/@deepseek-ai/dsh-agent-loop/"
 MAX_MEMBER=3_000_000
-RECEIVER=re.compile(rb"([A-Za-z_$][A-Za-z0-9_$]*(?:(?:\\?\\.)[A-Za-z_$][A-Za-z0-9_$]*){0,6})(?:\\?\\.)includes\\s*\\(")
+RECEIVER=re.compile(rb"([A-Za-z_$][A-Za-z0-9_$]*(?:(?:\\?\\.|\\.)[A-Za-z_$][A-Za-z0-9_$]*){0,6})(?:\\?\\.|\\.)includes\\s*\\(")
 
 def inspect(apk:pathlib.Path):
     require(apk.stat().st_size==SOURCE_BYTES,"APK_SIZE_DRIFT")
