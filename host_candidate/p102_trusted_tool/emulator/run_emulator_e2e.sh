@@ -42,7 +42,7 @@ if len(buttons)!=1:raise SystemExit("P102_NATIVE_BUTTON_NOT_UNIQUE")
 button=buttons[0]
 if button.attrib.get("enabled")!="true":raise SystemExit("P102_NATIVE_BUTTON_NOT_ENABLED")
 bounds=button.attrib.get("bounds","")
-m=re.fullmatch(r"\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]",bounds)
+m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",bounds)
 if not m:raise SystemExit("P102_NATIVE_BUTTON_BOUNDS_INVALID")
 a,b,c,d=map(int,m.groups())
 if not(0<=a<c<=10000 and 0<=b<d<=10000):
