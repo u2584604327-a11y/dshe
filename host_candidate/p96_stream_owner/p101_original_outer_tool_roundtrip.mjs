@@ -598,6 +598,14 @@ try{
     committedToolResults[0].sourceEventSeqs.length===1&&
     committedToolResults[0].sourceEventSeqs[0]===committedToolCalls[0].seq;
   const resultMessage=committedToolResults[0]?.data?.message;
+  log('P101_RESULT_MESSAGE_SHAPE',JSON.stringify({
+    type:Array.isArray(resultMessage)?'array':typeof resultMessage,
+    keys:resultMessage&&typeof resultMessage==='object'?Object.keys(resultMessage).slice(0,25):[],
+    role:resultMessage?.role??null,
+    callId:resultMessage?.callId??null,
+    toolCallId:resultMessage?.toolCallId??null,
+    isError:resultMessage?.isError??null
+  }));
   const resultMessageMatches=resultMessage?.role==='tool'&&
     resultMessage?.callId==='call_p101_0001'&&resultMessage?.isError!==true;
   const firstAssistantCalls=assistantEvents.length===2&&
