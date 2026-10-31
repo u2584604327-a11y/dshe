@@ -31,6 +31,7 @@ try{
     providerRetryPolicy(){return undefined;},
     async resolveModel(model){
       return {
+        provider:'p99-local',
         id:model,
         name:'P99 Local Fixture Model',
         description:'Synthetic local metadata only',
