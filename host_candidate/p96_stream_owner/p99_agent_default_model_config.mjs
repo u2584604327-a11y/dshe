@@ -16,7 +16,7 @@ function primitiveSummary(value){
   return undefined;
 }
 function shape(value,depth=0){
-  if(!value||typeof value!=='object'||depth>3)return null;
+  if(!value||!['object','function'].includes(typeof value)||depth>3)return null;
   const out={};
   for(const key of Object.keys(value).filter(safe).slice(0,60)){
     const v=value[key];
