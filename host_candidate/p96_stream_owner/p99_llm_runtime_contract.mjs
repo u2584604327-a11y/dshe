@@ -31,6 +31,27 @@ function contract(name){
 const methods=Object.getOwnPropertyNames(LlmRuntime.prototype||{})
   .filter(x=>x!=='constructor'&&safe(x)&&typeof LlmRuntime.prototype[x]==='function')
   .sort();
+
+const normalizeSrc=Function.prototype.toString.call(LlmRuntime.prototype.normalizeModelInfo);
+const modelFields=['provider','id','name','description','context','inputModalities',
+  'systemPromptUpdate','toolUpdate','defaultMaxTokens','reasoning'];
+const validationShape={};
+for(const field of modelFields){
+  const direct='resolved.'+field;
+  const escapedDirect='resolved\\.'+field;
+  const info={
+    referenced:normalizeSrc.includes(direct),
+    typeofChecks:new RegExp('typeof\\\\s+'+escapedDirect,'g').test(normalizeSrc),
+    arrayCheck:new RegExp('Array\\\\.isArray\\\\(\\\\s*'+escapedDirect,'g').test(normalizeSrc),
+    integerCheck:new RegExp('Number\\\\.is(?:Safe)?Integer\\\\(\\\\s*'+escapedDirect,'g').test(normalizeSrc),
+    lengthCheck:new RegExp(escapedDirect+'\\\\??\\\\.length','g').test(normalizeSrc),
+    subFields:[...normalizeSrc.matchAll(new RegExp('\\\\b'+field+'\\\\??\\\\.([A-Za-z_$][A-Za-z0-9_$]{0,80})','g'))]
+      .map(x=>x[1]).filter(safe)
+  };
+  info.subFields=[...new Set(info.subFields)].slice(0,30);
+  validationShape[field]=info;
+}
+process.stdout.write('P99_LLM_MODEL_VALIDATION_SHAPE='+JSON.stringify(validationShape)+'\\n');
 process.stdout.write('P99_LLM_RUNTIME_METHODS='+JSON.stringify(
   methods.map(name=>({name,arity:LlmRuntime.prototype[name].length})).slice(0,100))+'\n');
 for(const name of methods){
