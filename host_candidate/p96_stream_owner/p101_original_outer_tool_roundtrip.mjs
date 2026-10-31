@@ -30,7 +30,7 @@ import https from 'node:https';
 
 let networkAttempts=0,prepareCalls=0,workspaceAccesses=0;
 let streamCalls=0,toolExecutions=0,toolNotifications=0,toolRuntimeAttempts=0;
-let originalToolExecute=null,observedTools=null;
+let originalToolExecute=null,observedTools=null,originalAgentStep=null;
 let toolRegistration=null;
 let selectionCalls=0,saveSelectionCalls=0,workspaceArchiveReads=0,workspaceArchiveSize=null;
 const deny=()=>{networkAttempts++;throw new Error('P99_NETWORK_DENIED');};
@@ -342,6 +342,25 @@ try{
     })).filter(x=>/step|run|tool|dispatch|finish|call|execute|handle|turn|process/i.test(x.method)).slice(0,40):[];
   log('P101_ORIGINAL_AGENT_METHOD_META',JSON.stringify(protoRows(agentProto)));
   log('P101_ORIGINAL_DISPATCH_METHOD_META',JSON.stringify(protoRows(dispatchProto)));
+  log('P101_DISPATCH_VALUE_SHAPE',JSON.stringify({
+    type:typeof handle.dispatch,
+    keys:handle.dispatch&&typeof handle.dispatch==='object'
+      ?Object.keys(handle.dispatch).slice(0,30):[]
+  }));
+  originalAgentStep=handle.step;
+  if(typeof originalAgentStep!=='function')throw Error('P101_ORIGINAL_STEP_NOT_CALLABLE');
+  handle.step=async function(...args){
+    const decision=await originalAgentStep.apply(this,args);
+    const keys=decision&&typeof decision==='object'?Object.keys(decision).slice(0,30):[];
+    log('P101_ORIGINAL_STEP_DECISION',JSON.stringify({
+      kind:typeof decision?.kind==='string'?decision.kind:null,
+      type:Array.isArray(decision)?'array':typeof decision,
+      keys,
+      toolCallsCount:Array.isArray(decision?.toolCalls)?decision.toolCalls.length:null,
+      callsCount:Array.isArray(decision?.calls)?decision.calls.length:null
+    }));
+    return decision;
+  };
   observerPhase='session-created';
   const expectedSessionId='p99_session_controller_once';
   const expectedStored=ctx.get('sessions').get(expectedSessionId);
@@ -577,6 +596,7 @@ try{
     try{handle.session.commit=originalSessionCommit;}catch{}
   }
   if(typeof disposeSessionObserver==='function')try{disposeSessionObserver();}catch{}
+  if(handle&&typeof originalAgentStep==='function')try{handle.step=originalAgentStep;}catch{}
   if(observedTools&&typeof originalToolExecute==='function')try{observedTools.execute=originalToolExecute;}catch{}
   if(typeof toolRegistration==='function')try{toolRegistration();}catch{}
   if(typeof unregister==='function')try{unregister();}catch{}
