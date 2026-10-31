@@ -18,7 +18,7 @@ try{
    try{a.push(chunk);}
    catch(e){log('FAILED_CHUNK_TYPE',chunk.type);throw e;}
  }
- const blocks=a.blocks;
+ const blocks=a.blocks();
  log('BLOCKS',JSON.stringify(Array.isArray(blocks)?blocks.map(x=>({
    type:x?.type,name:x?.name,id:x?.id,
    argumentType:typeof x?.arguments,keys:x&&typeof x==='object'?Object.keys(x):[]
