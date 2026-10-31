@@ -31,7 +31,7 @@ test "$(grep -c 'android:exported="false"' \
   host_candidate/p102_trusted_tool/emulator/AndroidManifest.xml)" -eq 1
 PASS="$(openssl rand -hex 20)"
 keytool -genkeypair -alias ephemeral -keyalg RSA -keysize 3072 \
-  -validity 1 -storetype PKCS12 \
+  -validity 30 -storetype PKCS12 \
   -dname 'CN=P102 DISPOSABLE BINDER CI ONLY' \
   -keystore .p102tmp/test.p12 -storepass "$PASS" \
   -keypass "$PASS" -noprompt >/dev/null 2>&1
