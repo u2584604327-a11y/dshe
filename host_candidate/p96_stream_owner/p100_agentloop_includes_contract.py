@@ -89,7 +89,7 @@ def inspect(apk:pathlib.Path):
                     if re.fullmatch(r"[A-Za-z][A-Za-z0-9_./:-]{1,80}",value2):
                         safe_literals.append(value2)
                 arg_match=re.match(
-                    rb"\\s*([A-Za-z_$][A-Za-z0-9_$]*(?:\\??\\.[A-Za-z_$][A-Za-z0-9_$]*){0,5})\\s*\\)",
+                    rb"\s*([A-Za-z_$][A-Za-z0-9_$]*(?:\??\.[A-Za-z_$][A-Za-z0-9_$]*){0,5})\s*\)",
                     raw[m.end():m.end()+240])
                 includes_arg=None
                 if arg_match:
