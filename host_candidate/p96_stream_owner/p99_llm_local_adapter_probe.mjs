@@ -35,7 +35,7 @@ try{
         id:model,
         name:'P99 Local Fixture Model',
         description:'Synthetic local metadata only',
-        context:8192,
+        context:{contextWindow:8192},
         inputModalities:['text'],
         systemPromptUpdate:'in-history',
         toolUpdate:'addition-only',
