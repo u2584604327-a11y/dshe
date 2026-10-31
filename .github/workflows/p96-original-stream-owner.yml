@@ -219,6 +219,15 @@ jobs:
           grep -Fxq 'P99_PROMPT_DEP_METHOD_REFLECTION_ONLY=PASS' .p96private/p99-prompt-deps.log
           cat .p96private/p99-prompt-deps.log
           echo 'P99_PROMPT_DEP_METHOD_REFLECTION_ONLY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          cp host_candidate/p96_stream_owner/p99_llm_runtime_contract.mjs \
+            .p96private/agent-runtime/p99_llm_runtime_contract.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 12s node .p96private/agent-runtime/p99_llm_runtime_contract.mjs \
+            > .p96private/p99-llm-contract.log
+          grep -Fxq 'P99_LLM_RUNTIME_REFLECTION_ONLY=PASS' .p96private/p99-llm-contract.log
+          cat .p96private/p99-llm-contract.log
+          echo 'P99_LLM_RUNTIME_REFLECTION_ONLY=PASS' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p99_original_session_services_boot.mjs \
             .p96private/agent-runtime/p99_original_session_services_boot.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
