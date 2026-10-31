@@ -1,8 +1,9 @@
 /**
  * Exact original SessionController construction readiness probe.
  * Attaches exact original services wherever they can boot safely. Two clearly
- * marked fail-closed boundary Services exist only to satisfy unused construction
- * injection keys: agentDefaultModel and storageDomain. They throw if accessed.
+ * marked fail-closed boundary Services exist only to satisfy construction
+ * injection keys that are outside this prompt gate: agentDefaultModel and
+ * workspaceRegistry. They throw if accessed.
  * No session turn/prompt/model/tool/browser/Android/user data/file write.
  */
 import {Context,Service} from '@deepseek-ai/cordis';
@@ -16,9 +17,7 @@ import {HostConnectionService} from '@deepseek-ai/dsh-client-connection';
 import {FileUploads} from '@deepseek-ai/dsh-client-file-upload';
 import {FileSystem} from '@deepseek-ai/dsh-fs';
 import {SessionQueryEngine} from '@deepseek-ai/dsh-session-query';
-import {SessionPersistence} from '@deepseek-ai/dsh-session-persistence';
 import {TypertRegistry} from '@deepseek-ai/dsh-typert-registry';
-import {WorkspaceRegistry} from '@deepseek-ai/dsh-workspace';
 import {SessionController} from '@deepseek-ai/dsh-api-session-controller';
 import net from 'node:net';
 import http from 'node:http';
@@ -47,10 +46,13 @@ class P99AgentDefaultModelBoundary extends Service {
   currentSelection(){adapterAccesses++;throw new Error('P99_AGENT_DEFAULT_MODEL_BOUNDARY_ACCESSED');}
   saveSelection(){adapterAccesses++;throw new Error('P99_AGENT_DEFAULT_MODEL_BOUNDARY_ACCESSED');}
 }
-class P99StorageDomainBoundary extends Service {
-  constructor(innerCtx){super(innerCtx,'storageDomain');}
-  open(){adapterAccesses++;throw new Error('P99_STORAGE_DOMAIN_BOUNDARY_ACCESSED');}
-  get(){adapterAccesses++;throw new Error('P99_STORAGE_DOMAIN_BOUNDARY_ACCESSED');}
+class P99WorkspaceRegistryBoundary extends Service {
+  constructor(innerCtx){super(innerCtx,'workspaceRegistry');}
+  get(){adapterAccesses++;throw new Error('P99_WORKSPACE_REGISTRY_BOUNDARY_ACCESSED');}
+  list(){adapterAccesses++;throw new Error('P99_WORKSPACE_REGISTRY_BOUNDARY_ACCESSED');}
+  sessionKnown(){adapterAccesses++;throw new Error('P99_WORKSPACE_REGISTRY_BOUNDARY_ACCESSED');}
+  resolveByPath(){adapterAccesses++;throw new Error('P99_WORKSPACE_REGISTRY_BOUNDARY_ACCESSED');}
+  bootstrap(){adapterAccesses++;throw new Error('P99_WORKSPACE_REGISTRY_BOUNDARY_ACCESSED');}
 }
 
 
@@ -100,9 +102,7 @@ try{
   }
 
   await attach('FILE_UPLOADS',FileUploads);
-  await attach('SESSION_PERSISTENCE',SessionPersistence);
-  await attach('STORAGE_DOMAIN_BOUNDARY',P99StorageDomainBoundary);
-  await attach('WORKSPACE_REGISTRY',WorkspaceRegistry);
+  await attach('WORKSPACE_REGISTRY_BOUNDARY',P99WorkspaceRegistryBoundary);
 
   const inject=Array.isArray(SessionController.inject)?SessionController.inject:[];
   const serviceTypes={};
