@@ -141,10 +141,11 @@ function safeInboxMeta(inbox){
 }
 
 const ctx=new Context();
-let handle=null,unregister=null,disposeSessionObserver=null,originalSessionCommit=null;
+let handle=null,unregister=null,disposeSessionObserver=null,originalSessionCommit=null,originalSessionAppend=null;
 let promptError=null;
 const observedSessionEvents=[];
 const observedCommitAttempts=[];
+const observedAppendAttempts=[];
 function safeObservedObject(value){
   if(!value||typeof value!=='object')return {type:typeof value};
   const meta={
@@ -234,6 +235,37 @@ try{
   if(!stored||stored!==handle.session)
     throw new Error('P99_SESSION_STORE_HANDLE_MISMATCH');
 
+  // Transparent append-entry observer. Records only safe argument metadata,
+  // never content. This distinguishes an append that throws before commit
+  // from a committed replacement event; original execution is unchanged.
+  originalSessionAppend=handle.session.append;
+  if(typeof originalSessionAppend!=='function')
+    throw new Error('P100_SESSION_APPEND_NOT_CALLABLE');
+  handle.session.append=function(type,data,...options){
+    const surface=options[0];
+    const record={
+      eventType:typeof type==='string'?type.slice(0,80):typeof type,
+      argCount:2+options.length,
+      dataType:Array.isArray(data)?'array':typeof data,
+      surfaceOptionsType:Array.isArray(surface)?'array':typeof surface,
+      surfaceOptionKeys:surface&&typeof surface==='object'
+        ?Object.keys(surface).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,20):[],
+      surfaceOp:typeof surface?.surfaceOp==='string'?surface.surfaceOp.slice(0,40):undefined,
+      sourceEventSeqsType:Array.isArray(surface?.sourceEventSeqs)?'array':typeof surface?.sourceEventSeqs,
+      sourceEventSeqsCount:Array.isArray(surface?.sourceEventSeqs)?surface.sourceEventSeqs.length:null
+    };
+    observedAppendAttempts.push(record);
+    try{
+      return originalSessionAppend.call(this,type,data,...options);
+    }catch(error){
+      record.threw={
+        type:String(error?.code||error?.name||'UNKNOWN').replace(/[^A-Za-z0-9_]/g,'').slice(0,80),
+        reason:safeReason(error)
+      };
+      throw error;
+    }
+  };
+
   // Transparent diagnostic proxy: capture the exact event before the
   // original Session.commit pipeline and then call the original unchanged.
   // Never mutates event/entry and always rethrows the original error.
@@ -315,6 +347,7 @@ try{
 
   log('OBSERVED_SESSION_EVENT_META',JSON.stringify(observedSessionEvents.slice(-30)));
   log('COMMIT_ATTEMPT_META',JSON.stringify(observedCommitAttempts.slice(-30)));
+  log('APPEND_ATTEMPT_META',JSON.stringify(observedAppendAttempts.slice(-30)));
   log('AFTER_EVENTS',JSON.stringify(eventShape(afterEvents)));
   const committedDelta=Array.isArray(afterEvents)&&Array.isArray(beforeEvents)
     ?afterEvents.slice(beforeEvents.length):[];
@@ -359,6 +392,9 @@ try{
   log('NETWORK_ATTEMPTS',networkAttempts);
   process.exitCode=2;
 }finally{
+  if(handle?.session && typeof originalSessionAppend==='function'){
+    try{handle.session.append=originalSessionAppend;}catch{}
+  }
   if(handle?.session && typeof originalSessionCommit==='function'){
     try{handle.session.commit=originalSessionCommit;}catch{}
   }
