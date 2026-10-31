@@ -396,6 +396,12 @@ jobs:
           grep -Fxq 'P100_AGENTLOOP_INCLUDES_SCAN=PASS' .p96private/p100-includes.log
           cat .p96private/p100-includes.log
           echo 'P100_AGENTLOOP_INCLUDES_RECEIVER_INVENTORY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          python host_candidate/p96_stream_owner/p100_runtime_context_projection_contract.py \
+            --original "$f" > .p96private/p100-runtime-context.log
+          grep -Fxq 'P100_RUNTIME_CONTEXT_SOURCE_EXPORTED=NO' .p96private/p100-runtime-context.log
+          grep -Fxq 'P100_RUNTIME_CONTEXT_SCAN=PASS' .p96private/p100-runtime-context.log
+          cat .p96private/p100-runtime-context.log
+          echo 'P100_RUNTIME_CONTEXT_PROJECTION_CONTRACT=PASS' >> "$GITHUB_STEP_SUMMARY"
           python host_candidate/p96_stream_owner/p100_surface_event_contract.py \
             --original "$f" > .p96private/p100-surface-symbols.log
           grep -Fxq 'P100_SURFACE_EVENT_SOURCE_EXPORTED=NO' .p96private/p100-surface-symbols.log
