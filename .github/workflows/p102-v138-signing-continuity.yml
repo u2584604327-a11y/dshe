@@ -1,0 +1,71 @@
+name: P102 v138 fixed-signature continuity read-only gate
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '.github/workflows/p102-v138-signing-continuity.yml'
+permissions:
+  contents: read
+jobs:
+  verify-v138-baseline-certificate-only:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inspect existing SHA-locked v138 APK certificate without using signer
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = 'u2584604327-a11y/dshe'
+          mkdir -p .p102-cert-readonly
+          trap 'rm -rf .p102-cert-readonly' EXIT
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo "$GH_REPO" \
+            --pattern 'DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk' \
+            --dir .p102-cert-readonly
+          f=.p102-cert-readonly/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          printf '%s  %s\n' \
+            3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 "$f" \
+            | sha256sum -c -
+          test -n "${ANDROID_HOME:-}"
+          verifier=$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 \
+            -type f -name apksigner -print | sort -V | tail -n 1)
+          test -n "$verifier" && test -x "$verifier"
+          "$verifier" verify --verbose --print-certs "$f" \
+            > .p102-cert-readonly/verification.txt
+          grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' \
+            .p102-cert-readonly/verification.txt
+          cert=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
+            .p102-cert-readonly/verification.txt | head -n 1 | tr '[:upper:]' '[:lower:]')
+          test "${#cert}" -eq 64
+          case "$cert" in
+            90072b7de43e96999be92d99869ce5e5b7639b5f2449417b99a1790831b60ff8)
+              echo 'P102_V138_FIXED_MOD_TEST_SIGNER_MATCH=PASS'
+              echo 'P102_ORIGINAL_THIRD_PARTY_V70_SIGNER_IS_DIFFERENT=YES'
+              echo 'P102_SAME_CERT_OVERWRITE_FROM_FIXED_MOD_BRANCH=POSSIBLE_SUBJECT_TO_DEVICE'
+              ;;
+            ef6afe33330839ed6d6739fb4d4bb84d358fd7bec8c1116c97309f92d9d3f385)
+              echo 'P102_V138_APK_IS_THIRD_PARTY_V70_SIGNER=YES'
+              echo 'P102_FIXED_MOD_TEST_KEY_OVERWRITE=DENIED_SIGNER_MISMATCH'
+              exit 1
+              ;;
+            *)
+              echo 'P102_V138_SIGNER_UNKNOWN=FAIL_CLOSED'
+              exit 1
+              ;;
+          esac
+          echo 'P102_CURRENT_DEVICE_INSTALLED_CERT=NOT_OBSERVED'
+          echo 'P102_V139_APK_SIGNED_OR_TESTED=NO'
+          echo 'P102_ORIGINAL_NODE_BINDER_PRODUCTION=NOT_WIRED'
+          echo 'P102_V138_EXISTING_APK_READONLY_SIGNATURE_PROVENANCE=CHECKED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_PHONE_INSTALLED_CERT_MATCH=NOT_OBSERVED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_V139_PRODUCTION_BINDER=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
