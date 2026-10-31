@@ -23,9 +23,14 @@ public final class P102FixtureActivity extends Activity {
   private static final String TAG="P102_TOOL_BINDER";
   private final AtomicInteger trustedExecCount=new AtomicInteger();
   private String pendingCallId;
+  private Button approveButton;
   private final P102AndroidToolBinderPort port=new P102AndroidToolBinderPort(
       (callId,toolName)->{
         pendingCallId=callId;
+        if(approveButton!=null){
+          approveButton.setEnabled(true);
+          approveButton.setText("P102 isolated Binder lab\nApprove ONE synthetic read (no DSH access)");
+        }
         Log.i(TAG,"P102_REAL_BINDER_PENDING_NATIVE_APPROVAL=PASS");
       },
       (name,args)->{
@@ -65,14 +70,19 @@ public final class P102FixtureActivity extends Activity {
   };
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
-    Button approve=new Button(this);
-    approve.setText("Approve one synthetic read (native UI)");
-    approve.setContentDescription("P102_TRUSTED_NATIVE_APPROVAL");
-    setContentView(approve);
-    approve.setOnClickListener(v->{
+    approveButton=new Button(this);
+    approveButton.setAllCaps(false);
+    approveButton.setText("P102 standalone lab\nWaiting for isolated Binder request\nNo access to original DSH");
+    approveButton.setEnabled(false);
+    approveButton.setContentDescription("P102_TRUSTED_NATIVE_APPROVAL");
+    setContentView(approveButton);
+    approveButton.setOnClickListener(v->{
       boolean dispatched=port.onTrustedNativeUiApprove(pendingCallId);
       Log.i(TAG,"P102_NATIVE_UI_APPROVAL_DISPATCH="+(dispatched?"YES":"NO"));
-      approve.setEnabled(false);
+      approveButton.setEnabled(false);
+      approveButton.setText(dispatched
+        ? "Native approval dispatched\nInspect P102_TOOL_BINDER logs for terminal/replay"
+        : "Native approval rejected\nNo tool was approved");
     });
     port.onTrustedServiceBindingInitiated();
     bound=bindService(new Intent(this,P102IsolatedWorker.class),
