@@ -447,11 +447,18 @@ try{
   });
   log('COMMITTED_USER_INBOX_EVENT',committedUserEvent?'PASS':'FAIL');
   log('REAL_SESSION_COMMITTED_USER_TURN',committedUserEvent?'PASS':'FAIL');
+  // Strict P100 independent gate. The sole prepareCall implementation is
+  // the fail-closed local adapter; the harness never invokes it directly.
+  // Only the original AgentLoop following outer SessionController.prompt can.
+  const originalAutoPrepareOnce=committedUserEvent&&prepareCalls===1&&
+    networkAttempts===0&&workspaceAccesses===0&&saveSelectionCalls===0&&
+    workspaceArchiveReads>=1&&workspaceArchiveSize===0&&listenerArgShapePass;
+  log('P100_AUTOMATIC_ORIGINAL_PREPARE_ONCE',originalAutoPrepareOnce?'PASS':'FAIL');
   log('MODEL_WAKEUP_FAIL_CLOSED',prepareCalls<=1?'PASS':'FAIL');
   log('NO_NETWORK',networkAttempts===0?'PASS':'FAIL');
   log('WORKSPACE_UNUSED',workspaceAccesses===0?'PASS':'FAIL');
 
-  if(!committedUserEvent||networkAttempts!==0||workspaceAccesses!==0||saveSelectionCalls!==0)
+  if(!originalAutoPrepareOnce)
     process.exitCode=2;
 }catch(e){
   log('HARNESS_RESULT','BLOCKED_'+String(e?.code||e?.name||'UNKNOWN').replace(/[^A-Za-z0-9_]/g,''));
