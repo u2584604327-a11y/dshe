@@ -256,9 +256,13 @@ try{
   if(!controller||typeof controller.prompt!=='function')
     throw new Error('P99_SESSION_CONTROLLER_NOT_RESOLVED');
 
-  // Exact original AgentLoop session.
+  // Exact original configured AgentLoop creation path: AgentOptions must
+  // carry provider and model. No manual pi-ai/LlmRuntime call or fake event.
   observerPhase='creating-session';
-  handle=await ctx.get('agentLoop').create('p99_session_controller_once');
+  handle=await ctx.get('agentLoop').createAgent(ctx,{
+    sessionId:'p99_session_controller_once',
+    agentOptions:{provider:'p99-local',model:'p99-model'}
+  });
   observedSessionIdentity=handle.session;
   observerPhase='session-created';
   const stored=ctx.get('sessions').get(handle.id);
