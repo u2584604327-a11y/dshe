@@ -85,11 +85,34 @@ def inspect(apk:pathlib.Path):
                     "nearbyCalls":sorted(set(calls))[:60],
                 })
             if receivers:
+                helper_imports=[]
+                for im in re.finditer(
+                    rb"import\\s*\\{([^}]{1,1800})\\}\\s*from\\s*['\"]([^'\"]{1,180})['\"]",
+                    raw):
+                    clause=im.group(1).decode("utf-8","replace")
+                    module=im.group(2).decode("utf-8","replace")
+                    if any(token in clause for token in (
+                        "isReplacementSurfaceEvent","eventsNewestFirst",
+                        "createUserMessage","createSystemMessage","textOf")):
+                        helper_imports.append({
+                            "module":module,
+                            "helpers":[token for token in (
+                                "isReplacementSurfaceEvent","eventsNewestFirst",
+                                "createUserMessage","createSystemMessage","textOf")
+                                if token in clause]
+                        })
+                class_assignments=[]
+                for cm in re.finditer(
+                    rb"(?:const|let|var)\\s+([A-Za-z_$][A-Za-z0-9_$]{0,64})\\s*=\\s*class\\b",
+                    raw[max(0,details[0]["offset"]-20000):details[0]["offset"]]):
+                    class_assignments.append(cm.group(1).decode("utf-8","replace"))
                 rows.append({
                     "path":name,
                     "sha12":sha(raw)[:12],
                     "includesReceivers":sorted(set(receivers))[:80],
                     "occurrences":len(receivers),
+                    "helperImports":helper_imports[:20],
+                    "nearestAssignedClasses":class_assignments[-5:],
                     "details":details[:20],
                 })
     print("P100_AGENTLOOP_INCLUDES_RECEIVER_INVENTORY="+json.dumps(rows,sort_keys=True))
