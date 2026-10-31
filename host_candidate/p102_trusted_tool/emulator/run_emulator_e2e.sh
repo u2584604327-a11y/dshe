@@ -126,6 +126,29 @@ print("P102_UI_DIAG_ENABLED_APPROVAL_NODES="+str(len(enabled)))
     grep -E 'mResumedActivity=|topResumedActivity=|mFocusedApp=' |
     sed -E 's/.*(com\.dsh\.p102\.trustedtoolprobe|com\.android\.systemui|com\.android\.launcher[[:alnum:]_.]*).*/P102_UI_DIAG_FOCUS_PACKAGE=\1/' |
     grep '^P102_UI_DIAG_FOCUS_PACKAGE=' | head -n 3 || true
+  # Diagnostics are counts/categories from the lab-only log tag, never
+  # original DSH chat, account data, model text, screenshots or raw UI XML.
+  # Crucially, do not relaunch the Activity or attempt a blind approval.
+  probe 'P102_PREAPPROVAL_REQUEST_GATE=PASS' || true
+  for spec in \
+    'P102_REAL_BINDER_PENDING_NATIVE_APPROVAL=PASS' \
+    'P102_NATIVE_BACKGROUND_REVOKE=PASS' \
+    'P102_NATIVE_FOREGROUND_BIND=PASS' \
+    'P102_REAL_SERVICE_BIND=FAIL' \
+    'P102_TRUSTED_EXECUTION_COUNT=' \
+    'P102_NATIVE_UI_APPROVAL_DISPATCH='; do
+    count="$(grep -Fc "$spec" .p102tmp/filtered-log.txt || true)"
+    key="${spec%%=*}"
+    echo "P102_UI_DIAG_${key}=${count}"
+  done
+  latest="$(grep -Eo 'P102_(NATIVE_BACKGROUND_REVOKE|REAL_BINDER_PENDING_NATIVE_APPROVAL|NATIVE_FOREGROUND_BIND)=PASS' \
+    .p102tmp/filtered-log.txt | tail -n 1 || true)"
+  case "$latest" in
+    P102_NATIVE_BACKGROUND_REVOKE=PASS) echo 'P102_UI_DIAG_LATEST_LIFECYCLE=REVOKED';;
+    P102_REAL_BINDER_PENDING_NATIVE_APPROVAL=PASS) echo 'P102_UI_DIAG_LATEST_LIFECYCLE=PENDING';;
+    P102_NATIVE_FOREGROUND_BIND=PASS) echo 'P102_UI_DIAG_LATEST_LIFECYCLE=BOUND_AWAITING_REQUEST';;
+    *) echo 'P102_UI_DIAG_LATEST_LIFECYCLE=NOT_OBSERVED';;
+  esac
   exit 1
 fi
 read -r X Y <<< "$COORDS"
