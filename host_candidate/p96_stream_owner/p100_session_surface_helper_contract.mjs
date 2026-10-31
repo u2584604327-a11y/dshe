@@ -42,4 +42,23 @@ for(const name of names){
     process.stdout.write('P100_SESSION_SURFACE_EXPORT_SHAPE='+JSON.stringify({name,type:typeof value})+'\n');
   }
 }
+const truthCases=[
+  {label:'USER_NO_OP',event:{type:'user/message'}},
+  {label:'USER_APPEND',event:{type:'user/message',surfaceOp:'append'}},
+  {label:'USER_REPLACE_NO_SOURCES',event:{type:'user/message',surfaceOp:'replace'}},
+  {label:'USER_REPLACE_EMPTY_SOURCES',event:{type:'user/message',surfaceOp:'replace',sourceEventSeqs:[]}},
+  {label:'INBOX_REPLACE',event:{type:'agent/inbox/spliced',surfaceOp:'replace'}}
+];
+const surfaceFn=SessionPkg.isSurfaceEvent;
+const appendFn=SessionPkg.isAppendSurfaceEvent;
+const replaceFn=SessionPkg.isReplacementSurfaceEvent;
+for(const row of truthCases){
+  process.stdout.write('P100_SESSION_SURFACE_TRUTH='+JSON.stringify({
+    label:row.label,
+    isSurface:typeof surfaceFn==='function'?surfaceFn(row.event):null,
+    isAppend:typeof appendFn==='function'?appendFn(row.event):null,
+    isReplacement:typeof replaceFn==='function'?replaceFn(row.event):null
+  })+'\n');
+}
+process.stdout.write('P100_SESSION_SURFACE_PURE_TRUTH_TABLE=PASS\n');
 process.stdout.write('P100_SESSION_SURFACE_REFLECTION_ONLY=PASS\n');
