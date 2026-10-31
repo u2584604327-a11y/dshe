@@ -84,13 +84,31 @@ public final class P102FixtureActivity extends Activity {
         ? "Native approval dispatched\nInspect P102_TOOL_BINDER logs for terminal/replay"
         : "Native approval rejected\nNo tool was approved");
     });
+  }
+  @Override protected void onResume(){
+    super.onResume();
+    if(bound)return;
+    // Bind only while the native UI is actively visible and ready for consent.
+    // A prior onStop revokes forever; a new resume needs a fresh Binder session.
+    pendingCallId=null;
+    approveButton.setEnabled(false);
+    approveButton.setText("P102 standalone lab\nWaiting for isolated Binder request\nNo access to original DSH");
     port.onTrustedServiceBindingInitiated();
     bound=bindService(new Intent(this,P102IsolatedWorker.class),
       connection,Context.BIND_AUTO_CREATE);
     if(!bound)Log.e(TAG,"P102_REAL_SERVICE_BIND=FAIL");
+    else Log.i(TAG,"P102_NATIVE_FOREGROUND_BIND=PASS");
   }
   @Override protected void onStop(){
+    // Never retain an approved or pending slot while the Activity is hidden.
     port.onTrustedUiBackground();
+    if(bound){
+      unbindService(connection);
+      bound=false;
+      isolated=null;
+    }
+    pendingCallId=null;
+    approveButton.setEnabled(false);
     Log.i(TAG,"P102_NATIVE_BACKGROUND_REVOKE=PASS");
     super.onStop();
   }
