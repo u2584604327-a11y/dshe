@@ -44,6 +44,21 @@ def patch(runtime,test):
       "  p116Entry.preBody=toolExecutions===0;\n"
       "  p116Entry.notAborted=signal?.aborted!==true;\n"
       "};\n")
+    # Expose only bounded original session terminal metadata; never log
+    # original message text, tool arguments, full session contents or APK.
+    js=one(js,
+      "  const committedTurnEnds=committedDelta.filter(x=>x?.type==='turn/end');\n",
+      "  const committedTurnEnds=committedDelta.filter(x=>x?.type==='turn/end');\n"
+      "  if(process.env.P116_ISOLATED_HARD_DENY==='1'){\n"
+      "    const kinds=committedTurnEnds.map(e=>e?.data?.reason?.kind??'UNKNOWN');\n"
+      "    log('P119_DENIED_ORIGINAL_TURN_END_COUNT',committedTurnEnds.length);\n"
+      "    log('P119_DENIED_ORIGINAL_TURN_END_KIND',kinds.join(',').slice(0,96));\n"
+      "    log('P119_DENIED_ORIGINAL_PROMPT_ERROR_PRESENT',promptError?'YES':'NO');\n"
+      "    log('P119_DENIED_ORIGINAL_PHASE_KIND',\n"
+      "      String(handle?.phase?.kind??'UNKNOWN').replace(/[^A-Za-z0-9_-]/g,'').slice(0,40));\n"
+      "    log('P119_DENIED_ORIGINAL_SESSIONSTORE_STILL_LIVE',\n"
+      "      ctx.get('sessions').get(handle.id)===handle.session?'YES':'NO');\n"
+      "  }\n")
     js=one(js,
       "}finally{\n  if(handle?.session",
       "}finally{\n"
