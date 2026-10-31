@@ -97,6 +97,16 @@ function safeEventMeta(event){
     insertedCount:inserted.length,
     insertedRoles:inserted.map(x=>String(x?.role??'UNKNOWN').slice(0,40)),
     insertedTypes:inserted.map(x=>String(x?.type??'UNKNOWN').slice(0,40)),
+    insertedShapes:inserted.map(x=>({
+      keys:x&&typeof x==='object'
+        ?Object.keys(x).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,25):[],
+      surfaceOp:typeof x?.surfaceOp==='string'?x.surfaceOp.slice(0,40):undefined,
+      sourceEventSeqsType:Array.isArray(x?.sourceEventSeqs)?'array':typeof x?.sourceEventSeqs,
+      sourceEventSeqsCount:Array.isArray(x?.sourceEventSeqs)?x.sourceEventSeqs.length:null,
+      sourceType:Array.isArray(x?.source)?'array':typeof x?.source,
+      sourceKeys:x?.source&&typeof x.source==='object'
+        ?Object.keys(x.source).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,20):[]
+    })),
     reasonShape:{
       type:Array.isArray(data?.reason)?'array':typeof data?.reason,
       nullValue:data?.reason===null,
