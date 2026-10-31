@@ -28,6 +28,7 @@ public final class P102AndroidToolBinderPort {
   }
   private final NativeApprovalUi approvalUi;
   private final P102TrustedToolGate.TrustedExecutor trustedExecutor;
+  private final P102TrustedToolGate.OriginalCallVerifier trustedOriginalCallVerifier;
   private final Messenger inbox;
   private P102TrustedToolGate gate;
   private Messenger workerReply;
@@ -36,10 +37,12 @@ public final class P102AndroidToolBinderPort {
   private String session;
 
   public P102AndroidToolBinderPort(NativeApprovalUi ui,
-      P102TrustedToolGate.TrustedExecutor executor){
-    if(ui==null||executor==null)
+      P102TrustedToolGate.TrustedExecutor executor,
+      P102TrustedToolGate.OriginalCallVerifier verifiedOriginalTurn){
+    if(ui==null||executor==null||verifiedOriginalTurn==null)
       throw new IllegalArgumentException("P102_NATIVE_UI_AND_EXECUTOR_REQUIRED");
     approvalUi=ui;trustedExecutor=executor;
+    trustedOriginalCallVerifier=verifiedOriginalTurn;
     inbox=new Messenger(new Handler(Looper.getMainLooper()){
       @Override public void handleMessage(Message m){onWorkerFrame(m);}
     });
@@ -99,7 +102,8 @@ public final class P102AndroidToolBinderPort {
         workerUid=sender;workerReply=request.replyTo;
         session=newHostSession();expectingHello=false;
         gate=new P102TrustedToolGate(sender,session,SystemClock::elapsedRealtime,
-          Process::isIsolatedUid,trustedExecutor,this::sendTerminal);
+          Process::isIsolatedUid,trustedExecutor,this::sendTerminal,
+          trustedOriginalCallVerifier);
         Bundle fields=new Bundle();fields.putString("session",session);
         fields.putString("status","BOUND_NOT_APPROVED");
         if(!send(workerReply,HELLO_REPLY,fields))revoke();
@@ -111,13 +115,16 @@ public final class P102AndroidToolBinderPort {
         revoke();return;
       }
       Bundle b=request.getData();
-      if(!exact(b,"session","callId","toolName","arguments")){revoke();return;}
+      if(!exact(b,"session","originalSessionId","callId","toolName","arguments")){
+        revoke();return;
+      }
       String sessionIn=text(b,"session",64);
+      String originalSessionId=text(b,"originalSessionId",128);
       String callId=text(b,"callId",96);
       String toolName=text(b,"toolName",80);
       String arguments=text(b,"arguments",128);
       P102TrustedToolGate.Decision decision=gate.accept(
-        sender,sessionIn,callId,toolName,arguments);
+        sender,sessionIn,originalSessionId,callId,toolName,arguments);
       Bundle reply=new Bundle();reply.putString("status",decision.name());
       if(!send(workerReply,REQUEST_ACK,reply)){revoke();return;}
       if(decision!=P102TrustedToolGate.Decision.PENDING_NATIVE_APPROVAL){
