@@ -17,12 +17,15 @@ function contract(name,fn){
     .map(x=>x[1]);
   const includesReceivers=[...src.matchAll(/([A-Za-z_$][A-Za-z0-9_$]*(?:\??\.[A-Za-z_$][A-Za-z0-9_$]*){0,5})\??\.includes\s*\(/g)]
     .map(x=>x[1].replaceAll('?.','.'));
+  const comparisons=[...src.matchAll(/(event\??\.(?:surfaceOp|type))\s*(===|!==|==|!=)\s*['"]([A-Za-z0-9_./:-]{1,80})['"]/g)]
+    .map(x=>({field:x[1].replaceAll('?.','.'),operator:x[2],value:x[3]}));
   return {
     name,arity:fn.length,params,
     referencedFields:[...new Set(fields)].slice(0,60),
     calledIdentifiers:[...new Set(calls)].slice(0,60),
     safeLiterals:[...new Set(literals)].slice(0,60),
     includesReceivers:[...new Set(includesReceivers)].slice(0,30),
+    comparisons:comparisons.slice(0,30),
     sourceSize:src.length
   };
 }
