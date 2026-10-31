@@ -109,6 +109,36 @@ def main():
     print("P104_ADDED_PATHS="+repr(added[:100]))
     print("P104_REMOVED_PATHS="+repr(removed[:100]))
     print("P104_DEX_ENTRY_IDENTITY="+",".join(dex_summary))
+    # Byte-level scope on the SHA-pinned primary DEX only. Report offsets and
+    # counts, never decompiled instructions, strings or original code bodies.
+    with zipfile.ZipFile(args.v135) as z135, zipfile.ZipFile(args.v138) as z138:
+        primary135=z135.read("classes.dex")
+        primary138=z138.read("classes.dex")
+    require(len(primary135)<=20*1024*1024 and
+            len(primary138)<=20*1024*1024,"PRIMARY_DEX_SIZE_LIMIT")
+    print("P104_PRIMARY_DEX_SIZE_135="+str(len(primary135)))
+    print("P104_PRIMARY_DEX_SIZE_138="+str(len(primary138)))
+    if len(primary135)==len(primary138):
+        ranges=[]
+        begin=None
+        differences=0
+        for off,(left,right) in enumerate(zip(primary135,primary138)):
+            if left!=right:
+                differences+=1
+                if begin is None:begin=off
+            elif begin is not None:
+                ranges.append((begin,off))
+                begin=None
+        if begin is not None:ranges.append((begin,len(primary135)))
+        require(differences>0 and len(ranges)<=20000,
+                "PRIMARY_DEX_DELTA_OUT_OF_BOUNDS")
+        print("P104_PRIMARY_DEX_CHANGED_BYTES="+str(differences))
+        print("P104_PRIMARY_DEX_CHANGED_RANGES="+str(len(ranges)))
+        print("P104_PRIMARY_DEX_CHANGED_RANGES_FIRST20="+
+              repr(ranges[:20]))
+        print("P104_PRIMARY_DEX_CODE_ITEM_OWNERS=NOT_PROVEN")
+    else:
+        print("P104_PRIMARY_DEX_OFFSET_COMPARISON=NOT_APPLICABLE_SIZE_DRIFT")
     print("P104_V135_TO_V138_SAME_BINARY=NO")
     print("P104_V91_UPSTREAM_APK_DIRECT_PARENT=NOT_PROVEN")
     print("P104_ORIGINAL_DSH_NATIVE_TOOL_BINDER_PRODUCTION=NOT_WIRED")
