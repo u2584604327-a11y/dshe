@@ -36,36 +36,36 @@ def find_matching(text,start):
 def safe_project_return_structure(body):
     """Describe original return/retained shapes without emitting source expressions."""
     rows=[]
-    for m in re.finditer(r"\\breturn\\s+([^;]{1,500});",body,re.S):
+    for m in re.finditer(r"\breturn\s+([^;]{1,500});",body,re.S):
         expr=m.group(1).strip()
         if expr.startswith("{"): kind="object"
         elif expr.startswith("["): kind="array"
-        elif re.match(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)*\\s*\\(",expr): kind="call"
-        elif re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)*",expr): kind="reference"
+        elif re.match(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\s*\(",expr): kind="call"
+        elif re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*",expr): kind="reference"
         else: kind="other"
-        keys=sorted(set(re.findall(r"(?<![A-Za-z0-9_$])([A-Za-z_$][A-Za-z0-9_$]{0,64})\\s*:",expr)))[:35]
-        calls=sorted(set(re.findall(r"([A-Za-z_$][A-Za-z0-9_$]{0,64})\\s*\\(",expr)))[:25]
+        keys=sorted(set(re.findall(r"(?<![A-Za-z0-9_$])([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*:",expr)))[:35]
+        calls=sorted(set(re.findall(r"([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*\(",expr)))[:25]
         rows.append({"form":kind,"lexicalObjectKeys":keys,"calledIdentifiers":calls,
-                     "referencesSourceEventSeqs":bool(re.search(r"\\bsourceEventSeqs\\b",expr)),
-                     "referencesSurfaceOp":bool(re.search(r"\\bsurfaceOp\\b",expr)),
-                     "referencesRetained":bool(re.search(r"\\bretained\\b",expr))})
+                     "referencesSourceEventSeqs":bool(re.search(r"\bsourceEventSeqs\b",expr)),
+                     "referencesSurfaceOp":bool(re.search(r"\bsurfaceOp\b",expr)),
+                     "referencesRetained":bool(re.search(r"\bretained\b",expr))})
     assigns=[]
-    for m in re.finditer(r"this\\.retained\\s*=\\s*([^;]{1,320});",body,re.S):
+    for m in re.finditer(r"this\.retained\s*=\s*([^;]{1,320});",body,re.S):
         rhs=m.group(1).strip()
         category=("object" if rhs.startswith("{") else "array" if rhs.startswith("[")
                   else "nullish" if rhs in ("null","undefined")
-                  else "call" if re.match(r"[A-Za-z_$][A-Za-z0-9_$.]*\\s*\\(",rhs)
-                  else "reference" if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\\.[A-Za-z_$][A-Za-z0-9_$]*)*",rhs)
+                  else "call" if re.match(r"[A-Za-z_$][A-Za-z0-9_$.]*\s*\(",rhs)
+                  else "reference" if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*",rhs)
                   else "other")
         assigns.append({"valueCategory":category,
                         "referenceName":rhs if category=="reference" and re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$.]{0,80}",rhs) else None,
-                        "lexicalObjectKeys":sorted(set(re.findall(r"([A-Za-z_$][A-Za-z0-9_$]{0,64})\\s*:",rhs)))[:30]})
+                        "lexicalObjectKeys":sorted(set(re.findall(r"([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*:",rhs)))[:30]})
     return {"returnCount":len(rows),"returnShapes":rows[:12],
             "retainedAssignments":assigns[:12],
-            "projectReferencesSourceEventSeqs":bool(re.search(r"\\bsourceEventSeqs\\b",body)),
-            "projectReferencesSurfaceOp":bool(re.search(r"\\bsurfaceOp\\b",body)),
-            "projectReferencesMessage":bool(re.search(r"\\bmessage\\b",body)),
-            "projectReferencesSource":bool(re.search(r"\\bsource\\b",body))}
+            "projectReferencesSourceEventSeqs":bool(re.search(r"\bsourceEventSeqs\b",body)),
+            "projectReferencesSurfaceOp":bool(re.search(r"\bsurfaceOp\b",body)),
+            "projectReferencesMessage":bool(re.search(r"\bmessage\b",body)),
+            "projectReferencesSource":bool(re.search(r"\bsource\b",body))}
 
 def safe_contract(body):
     params=[]
