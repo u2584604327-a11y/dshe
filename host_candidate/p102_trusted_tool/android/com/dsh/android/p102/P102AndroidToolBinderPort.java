@@ -22,7 +22,7 @@ import java.util.Set;
  * No arbitrary tool, path, web access, Node code or native grant via Binder.
  */
 public final class P102AndroidToolBinderPort {
-  public static final int HELLO=10201,REQUEST=10202;
+  public static final int HELLO=10201,REQUEST=10202,WORKER_DIAGNOSTIC_RECEIPT=10204;
   public static final int HELLO_REPLY=10301,REQUEST_ACK=10302,TOOL_TERMINAL=10303;
   public interface NativeApprovalUi {
     void showTrustedNativeApproval(String callId,String toolName);
@@ -36,6 +36,9 @@ public final class P102AndroidToolBinderPort {
   private int workerUid=-1;
   private boolean expectingHello;
   private String session;
+  // Observability only: never a permission or model-execution authority.
+  private String sentTerminalCall;
+  private boolean diagnosticReceiptLogged;
 
   public P102AndroidToolBinderPort(NativeApprovalUi ui,
       P102TrustedToolGate.TrustedExecutor executor,
@@ -91,6 +94,7 @@ public final class P102AndroidToolBinderPort {
     expectingHello=false;
     if(gate!=null){gate.revoke();gate=null;}
     workerReply=null;workerUid=-1;session=null;
+    sentTerminalCall=null;diagnosticReceiptLogged=false;
   }
   private synchronized void onWorkerFrame(Message request){
     if(request==null)return;
@@ -108,6 +112,27 @@ public final class P102AndroidToolBinderPort {
         Bundle fields=new Bundle();fields.putString("session",session);
         fields.putString("status","BOUND_NOT_APPROVED");
         if(!send(workerReply,HELLO_REPLY,fields))revoke();
+        return;
+      }
+      if(request.what==WORKER_DIAGNOSTIC_RECEIPT){
+        // Isolated worker's post-validation observation is informational.
+        // It never grants or extends an operation and never substitutes for
+        // the trusted original SessionStore/ToolRuntime verifier.
+        if(gate==null||workerReply==null||sentTerminalCall==null||
+           diagnosticReceiptLogged||sender!=workerUid||
+           !Process.isIsolatedUid(sender)||request.replyTo==null||
+           request.replyTo.getBinder()!=workerReply.getBinder()||
+           !exact(request.getData(),"session","callId","status")||
+           !session.equals(text(request.getData(),"session",64))||
+           !sentTerminalCall.equals(text(request.getData(),"callId",96))||
+           !"TERMINAL_VALIDATED_REPLAY_DENIED".equals(
+             text(request.getData(),"status",48))){
+          Log.e("P102_TOOL_BINDER","P102_HOST_WORKER_DIAGNOSTIC_RECEIPT=REJECTED");
+          return;
+        }
+        diagnosticReceiptLogged=true;
+        Log.i("P102_TOOL_BINDER",
+          "P102_HOST_WORKER_TERMINAL_AND_REPLAY_RECEIPT=PASS_OBSERVATION_ONLY");
         return;
       }
       if(request.what!=REQUEST||gate==null||workerReply==null||
@@ -160,6 +185,7 @@ public final class P102AndroidToolBinderPort {
       revoke();
     }else{
       // Successful Messenger.send is delivery to Binder, NOT worker receipt.
+      sentTerminalCall=terminal.id;
       Log.i("P102_TOOL_BINDER","P102_HOST_TERMINAL_SEND=PASS_NOT_RECEIPT");
     }
   }
