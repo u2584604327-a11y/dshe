@@ -38,7 +38,7 @@ def inspect(apk: pathlib.Path):
                 continue
             source = raw.decode("utf-8", "strict")
             pkg = item.name.split("/")[2]
-            package = pkg if IDENT.fullmatch(pkg) else "UNKNOWN"
+            package = pkg if re.fullmatch(r"[a-z][a-z0-9-]{0,80}", pkg) else "UNKNOWN"
             mentions = [source.count("\n", 0, m.start()) + 1
                         for m in re.finditer(r"\bunderArchivedSession\b", source)]
             if not any(abs(line - FRAME_LINE) <= 150 for line in mentions):
@@ -60,12 +60,43 @@ def inspect(apk: pathlib.Path):
                                   "receiver": m.group(1).replace("?.", "."),
                                   "optional": m.group(2) == "?.",
                                   "atCaughtLine": abs(line - FRAME_LINE) <= 2})
+            # Examine only safe lexical metadata around the actual throw frame.
+            # Never print assignment RHS, source snippets or arbitrary strings.
+            window_start = max(0, FRAME_LINE - 25)
+            window = "\n".join(source.splitlines()[window_start:FRAME_LINE + 15])
+            assignments = []
+            for assignment in re.finditer(r"\barchived\s*=\s*([^;\n]{1,350})", window):
+                rhs = assignment.group(1)
+                line = window_start + window.count("\n", 0, assignment.start()) + 1
+                paths = sorted(set(
+                    x.replace("?.", ".") for x in re.findall(
+                        r"[A-Za-z_$][A-Za-z0-9_$]*(?:(?:\?\.|\.)[A-Za-z_$][A-Za-z0-9_$]*){1,6}",
+                        rhs)))
+                calls = sorted(set(
+                    x for x in re.findall(r"([A-Za-z_$][A-Za-z0-9_$]{0,80})\s*\(", rhs)
+                    if IDENT.fullmatch(x)))
+                identifiers = sorted(set(
+                    x for x in re.findall(r"\b([A-Za-z_$][A-Za-z0-9_$]{0,80})\b", rhs)
+                    if IDENT.fullmatch(x)))
+                assignments.append({"line": line,
+                                    "kind": "object" if rhs.lstrip().startswith("{") else
+                                            "array" if rhs.lstrip().startswith("[") else
+                                            "expression",
+                                    "propertyPaths": paths[:35],
+                                    "calledIdentifiers": calls[:25],
+                                    "identifiers": identifiers[:45]})
+            window_paths = sorted(set(
+                x.replace("?.", ".") for x in re.findall(
+                    r"[A-Za-z_$][A-Za-z0-9_$]*(?:(?:\?\.|\.)[A-Za-z_$][A-Za-z0-9_$]*){1,6}",
+                    window)))[:80]
             matches.append({"package": package,
                             "moduleSha12": sha(raw)[:12],
                             "reportedFrameLine": FRAME_LINE,
                             "underArchivedSessionMentions": mentions[:30],
                             "functionSignatures": signatures[:12],
-                            "nearbyIncludes": receivers[:40]})
+                            "nearbyIncludes": receivers[:40],
+                            "archivedAssignments": assignments[:12],
+                            "windowPropertyPaths": window_paths})
     print("P100_UNDER_ARCHIVED_SESSION_CONTRACT=" +
           json.dumps(matches, sort_keys=True))
     print("P100_UNDER_ARCHIVED_SESSION_SOURCE_EXPORTED=NO")
