@@ -43,6 +43,29 @@ jobs:
           grep -Eq '^P102_JVM8_NATIVE_TOOL_TRUST_GATE=PASS checks=[0-9]+$' \
             .p102tmp/jvm-gate.log
           echo 'P102_NATIVE_SECURITY_JVM_GATE=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Assert user phone diagnostic script is read-only and never deletes an APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          script=Path('host_candidate/p102_trusted_tool/emulator/P102_Phone_ReadOnly_Check.ps1').read_text(encoding='utf-8')
+          # Examine only live (non-comment) script lines. Reject any package,
+          # log-buffer or filesystem modification, including indirect aliases.
+          active='\n'.join(x for x in script.splitlines() if not x.lstrip().startswith('#'))
+          forbidden=[
+            r'\b(?:adb|AdbPath)\s+(?:uninstall|install|push|pull|reboot|root|remount|sync)\b',
+            r'\bshell\s+(?:rm|rmdir|pm\s+clear|am\s+force-stop|cmd\s+package\s+uninstall)\b',
+            r'\b(?:Remove-Item|Clear-Content|Set-Content|Out-File|del|erase|rmdir)\b',
+            r'\blogcat\s+-c\b',
+            r'\b(?:shell\s+input|shell\s+monkey|shell\s+am\s+start)\b',
+          ]
+          assert not any(re.search(p,active,re.I) for p in forbidden),'P102_PHONE_SCRIPT_HAS_SIDE_EFFECTS'
+          for needed in ('pm list packages','P102_TOOL_BINDER:V','logcat -b all -d','Read-Host','P102_DIAGNOSTIC_ONLY=YES'):
+            assert needed in active,'P102_PHONE_SCRIPT_MISSING_READONLY_GATE'
+          print('P102_PHONE_READONLY_NO_UNINSTALL_DELETE_OR_LAUNCH=PASS')
+          PY
       - name: Compile actual Android35 Messenger/framework-UID adapter
         shell: bash
         run: |
