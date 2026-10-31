@@ -410,6 +410,14 @@ jobs:
             .p96private/p100-user-message-producer.log
           cat .p96private/p100-user-message-producer.log
           echo 'P100_AGENTLOOP_USER_MESSAGE_PRODUCER_CONTRACT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          python host_candidate/p96_stream_owner/p100_request_surface_generation_contract.py \
+            --original "$f" > .p96private/p100-request-surface-generation.log
+          grep -Fxq 'P100_REQUEST_SURFACE_GENERATION_SOURCE_EXPORTED=NO' \
+            .p96private/p100-request-surface-generation.log
+          grep -Fxq 'P100_REQUEST_SURFACE_GENERATION_SCAN=PASS' \
+            .p96private/p100-request-surface-generation.log
+          cat .p96private/p100-request-surface-generation.log
+          echo 'P100_REQUEST_SURFACE_GENERATION_CONTRACT=PASS' >> "$GITHUB_STEP_SUMMARY"
           python host_candidate/p96_stream_owner/p100_surface_event_contract.py \
             --original "$f" > .p96private/p100-surface-symbols.log
           grep -Fxq 'P100_SURFACE_EVENT_SOURCE_EXPORTED=NO' .p96private/p100-surface-symbols.log
