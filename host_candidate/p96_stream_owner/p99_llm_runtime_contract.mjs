@@ -61,6 +61,28 @@ for(const field of modelFields){
   };
 }
 process.stdout.write('P99_LLM_MODEL_VALIDATION_SHAPE='+JSON.stringify(validationShape)+'\n');
+
+const genericChecks={};
+for(const field of ['provider','id','name','description']){
+  const token='resolved\\.'+field;
+  const checks={types:[],comparisons:[]};
+  const typeRe=new RegExp(
+    "typeof\\s+resolved\\."+field+"\\s*(===|!==|==|!=)\\s*['\"]([A-Za-z]+)['\"]",
+    'g'
+  );
+  for(const m of normalizeSrc.matchAll(typeRe)){
+    checks.types.push({operator:m[1],type:m[2]});
+  }
+  const cmpRe=new RegExp(
+    token+"\\s*(===|!==|==|!=)\\s*([A-Za-z_$][A-Za-z0-9_$.]{0,120})",
+    'g'
+  );
+  for(const m of normalizeSrc.matchAll(cmpRe)){
+    checks.comparisons.push({operator:m[1],identifier:m[2]});
+  }
+  genericChecks[field]=checks;
+}
+process.stdout.write('P99_LLM_GENERIC_MODEL_CHECKS='+JSON.stringify(genericChecks)+'\n');
 process.stdout.write('P99_LLM_RUNTIME_METHODS='+JSON.stringify(
   methods.map(name=>({name,arity:LlmRuntime.prototype[name].length})).slice(0,100))+'\n');
 for(const name of methods){
