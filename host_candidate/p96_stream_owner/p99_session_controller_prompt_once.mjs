@@ -97,7 +97,11 @@ function safeEventMeta(event){
       keys:data?.reason&&typeof data.reason==='object'
         ?Object.keys(data.reason).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,20):[],
       primitive:['string','number','boolean'].includes(typeof data?.reason)
-        ?String(data.reason).slice(0,80):undefined
+        ?String(data.reason).slice(0,80):undefined,
+      kind:typeof data?.reason?.kind==='string'?data.reason.kind.slice(0,60):undefined,
+      errorName:typeof data?.reason?.error?.name==='string'
+        ?data.reason.error.name.replace(/[^A-Za-z0-9_$-]/g,'').slice(0,60):undefined,
+      errorMessage:data?.reason?.error?safeReason(data.reason.error):undefined
     },
     turnShape:{
       type:Array.isArray(data?.turn)?'array':typeof data?.turn,
