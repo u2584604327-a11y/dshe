@@ -35,7 +35,8 @@ test('exact original IDs and host session are preserved; one result only',async(
   assert.equal(boundary.state,'COMPLETED');
   assert.equal(metrics.bind,1);assert.equal(metrics.request,1);
   assert.equal(metrics.verified,2);assert.equal(metrics.revoke,0);
-  assert.deepEqual(metrics.frames[0],{session:SESSION,callId:'call_p101_0001',
+  assert.deepEqual(metrics.frames[0],{session:SESSION,
+    originalSessionId:'p99_session_controller_once',callId:'call_p101_0001',
     toolName:'read_synthetic_fixture',arguments:'{"query":"fixture"}'});
   await assert.rejects(boundary.execute(call()),/REPLAY_OR_CONCURRENT/);
   checks++;
@@ -120,12 +121,18 @@ test('source-level parity with Android trusted Messenger contract (not runtime B
     'fields.putBoolean("outcomeUnknown",terminal.outcomeUnknown)',
     'fields.putBoolean("retrySafe",terminal.retrySafe)'])
     assert.ok(port.includes(literal),'port drift: '+literal);
-  assert.ok(!port.includes('sessionId'),'original session not bound on native side yet');
+  for(const literal of ['originalSessionId','trustedOriginalCallVerifier',
+    'P102TrustedToolGate.OriginalCallVerifier','Process.isIsolatedUid(sender)'])
+    assert.ok(port.includes(literal),'native original session provenance missing: '+literal);
+  for(const literal of ['OriginalCallVerifier','originalCallValid(originalSession,callId)',
+    'originalCallValid(originalSessionId,pendingCallId)'])
+    assert.ok(gate.includes(literal),'trusted original call recheck missing: '+literal);
   checks++;
 });
 process.on('beforeExit',()=>{
   assert.ok(checks>=26,'only '+checks+' checks');
   console.log('P102_NODE_TO_BINDER_CANDIDATE_GATE=PASS cases='+checks);
+  console.log('P102_ORIGINAL_SESSION_NATIVE_PROVENANCE_CONTRACT=PASS');
   console.log('P102_ORIGINAL_TOOLRUNTIME_PRODUCTION_HOOK=NOT_WIRED');
   console.log('P102_REAL_DSH_NODE_TO_ANDROID_BINDER=NOT_TESTED');
   console.log('P102_NO_NETWORK_NO_DEVICE_SIDE_EFFECTS=PASS');
