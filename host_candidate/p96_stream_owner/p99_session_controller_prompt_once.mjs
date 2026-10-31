@@ -141,8 +141,27 @@ function safeInboxMeta(inbox){
 }
 
 const ctx=new Context();
-let handle=null,unregister=null;
+let handle=null,unregister=null,disposeSessionObserver=null;
 let promptError=null;
+const observedSessionEvents=[];
+function safeObservedObject(value){
+  if(!value||typeof value!=='object')return {type:typeof value};
+  const meta={
+    type:'object',
+    keys:Object.keys(value).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,30),
+    eventType:typeof value.type==='string'?value.type.slice(0,80):undefined,
+    seq:typeof value.seq==='number'?value.seq:undefined,
+    surfaceOp:typeof value.surfaceOp==='string'?value.surfaceOp.slice(0,40):undefined,
+    sourceEventSeqsType:Array.isArray(value.sourceEventSeqs)?'array':typeof value.sourceEventSeqs,
+    sourceEventSeqsCount:Array.isArray(value.sourceEventSeqs)?value.sourceEventSeqs.length:null,
+    dataKeys:value.data&&typeof value.data==='object'
+      ?Object.keys(value.data).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,25):[]
+  };
+  if(value.event&&typeof value.event==='object'){
+    meta.nestedEvent=safeObservedObject(value.event);
+  }
+  return meta;
+}
 try{
   // Exact original core.
   await ctx.plugin(AgentRegistry,{});
@@ -194,6 +213,14 @@ try{
   await llm.resolveModelInfo('p99-local','p99-model',new AbortController().signal);
   log('LOCAL_MODEL_RESOLVED','PASS');
 
+  // Read-only observer for transient original session events, including
+  // events that may be rolled back after a fail-closed turn error.
+  if(typeof ctx.on==='function'){
+    disposeSessionObserver=ctx.on('session/event',(...args)=>{
+      observedSessionEvents.push(args.slice(0,5).map(safeObservedObject));
+    });
+  }
+
   // Exact original SessionController.
   await ctx.plugin(SessionController,{});
   const controller=ctx.get('sessionController');
@@ -240,6 +267,7 @@ try{
   const userDelta=afterRoles.filter(x=>x==='user').length-
     beforeRoles.filter(x=>x==='user').length;
 
+  log('OBSERVED_SESSION_EVENT_META',JSON.stringify(observedSessionEvents.slice(-30)));
   log('AFTER_EVENTS',JSON.stringify(eventShape(afterEvents)));
   const committedDelta=Array.isArray(afterEvents)&&Array.isArray(beforeEvents)
     ?afterEvents.slice(beforeEvents.length):[];
@@ -284,6 +312,7 @@ try{
   log('NETWORK_ATTEMPTS',networkAttempts);
   process.exitCode=2;
 }finally{
+  if(typeof disposeSessionObserver==='function')try{disposeSessionObserver();}catch{}
   if(typeof unregister==='function')try{unregister();}catch{}
   if(handle){
     for(const op of ['close','dispose']){
