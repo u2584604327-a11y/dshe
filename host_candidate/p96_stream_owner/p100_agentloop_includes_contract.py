@@ -43,18 +43,18 @@ def inspect(apk:pathlib.Path):
                 window=raw[lo:hi]
                 method_candidates=[]
                 for mm in re.finditer(
-                    rb"(?:async\\s+)?([A-Za-z_$][A-Za-z0-9_$]{0,64})\\s*\\([^()]{0,320}\\)\\s*\\{",
+                    rb"(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*\([^()]{0,320}\)\s*\{",
                     raw[lo:m.start()]):
                     method_candidates.append(mm.group(1).decode("utf-8","replace"))
                 prop_refs=[]
                 for pm in re.finditer(
-                    rb"\\b(event|message|entry|item|decision|session|this)\\??\\.([A-Za-z_$][A-Za-z0-9_$]{0,64})",
+                    rb"\b(event|message|entry|item|decision|session|this)\??\.([A-Za-z_$][A-Za-z0-9_$]{0,64})",
                     window):
                     prop_refs.append(
                         pm.group(1).decode("utf-8","replace")+"."+pm.group(2).decode("utf-8","replace"))
                 calls=[]
                 for cm in re.finditer(
-                    rb"(?:this\\.)?([A-Za-z_$][A-Za-z0-9_$]{0,64})\\s*\\(",
+                    rb"(?:this\.)?([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*\(",
                     window):
                     calls.append(cm.group(1).decode("utf-8","replace"))
                 details.append({
