@@ -135,6 +135,10 @@ try{
    log('INJECT_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'inject')));
    log('WAKE_DRIVER_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'wakeDriver')));
    log('TURN_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'turn')));
+   log('PRESTEP_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'preStep')));
+   log('PREPARE_REQUEST_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'prepareRequest')));
+   log('BUILD_REQUEST_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'buildRequest')));
+   log('TOOLS_CHANGED_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'toolsChanged')));
    log('STEP_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'step')));
    const currentInbox=handle.inbox.current();
    log('INBOX_CURRENT_RETURN_TYPE',Array.isArray(currentInbox)?'array':typeof currentInbox);
