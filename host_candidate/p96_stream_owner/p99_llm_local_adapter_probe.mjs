@@ -29,8 +29,9 @@ try{
   const adapter={
     providerInfo(provider){return {id:provider,name:'P99 Local Fixture'};},
     providerRetryPolicy(){return undefined;},
-    async resolveModel(model){
+    async resolveModel(provider,model){
       log('RESOLVE_MODEL_INPUT_SHAPE',JSON.stringify({
+        provider:typeof provider==='string'?provider:typeof provider,
         type:Array.isArray(model)?'array':typeof model,
         nullValue:model===null,
         keys:model&&typeof model==='object'
@@ -40,7 +41,7 @@ try{
         model:typeof model?.model==='string'?model.model:undefined
       }));
       return {
-        provider:'p99-local',
+        provider,
         id:model,
         name:'P99 Local Fixture Model',
         description:'Synthetic local metadata only',
