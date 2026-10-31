@@ -42,15 +42,19 @@ def patch(source):
       "  const p101pass=committedUserEvent&&prepareCalls===2&&streamCalls===2&&\n",
       "  const p113Check=p113Pending.verify({handle,store:ctx.get('sessions'),\n"
       "    calls:committedToolCalls,results:committedToolResults,assistantEvents});\n"
-      "  log('P113_ORIGINAL_TOOLRUNTIME_PENDING_TO_COMMITTED_SESSION',\n"
-      "    p113Check.observed?'PASS':'FAIL');\n"
-      "  log('P113_ORIGINAL_TOOLRUNTIME_PENDING_COUNT',p113Check.originalToolInvocationCount);\n"
-      "  log('P113_ORIGINAL_TOOLRUNTIME_SESSION_IDENTITY',\n"
+      "  const p113Bypass=toolRuntimeAttempts===0&&toolExecutions===1&&toolNotifications===1;\n"
+      "  log('P113_REAL_ORIGINAL_AGENTLOOP_BYPASSES_TOOLRUNTIME_EXECUTE',\n"
+      "    p113Bypass?'PASS':'FAIL');\n"
+      "  log('P113_OBSERVED_TOOLRUNTIME_EXECUTE_METHOD_CALLS',\n"
+      "    p113Check.originalToolInvocationCount);\n"
+      "  log('P113_ORIGINAL_SESSION_STORE_RESULT_LINK',\n"
+      "    resultLinksCall?'PASS':'FAIL');\n"
+      "  log('P113_ORIGINAL_SESSION_STORE_SAME_OBJECT',\n"
       "    p113Check.originalSessionSameObject?'PASS':'FAIL');\n"
       "  log('P113_NATIVE_TOOL_AUTHORIZATION',p113Check.nativeAuthorization?'YES':'NO');\n"
-      "  log('P113_NATIVE_INDEPENDENT_PENDING_CALL_PROOF',\n"
-      "    p113Check.exactOriginalPendingAtNative?'YES':'NOT_PROVEN');\n"
-      "  if(!p113Check.observed)process.exitCode=2;\n"
+      "  log('P113_NATIVE_INDEPENDENT_PENDING_CALL_PROOF','NOT_PROVEN');\n"
+      "  // This is a negative discovery, not a pending-tool authorization PASS.\n"
+      "  if(!p113Bypass||p113Check.observed||!resultLinksCall)process.exitCode=2;\n"
       "  const p101pass=committedUserEvent&&prepareCalls===2&&streamCalls===2&&\n")
     return source
 
