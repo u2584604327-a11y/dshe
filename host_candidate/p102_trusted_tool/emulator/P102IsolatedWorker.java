@@ -87,6 +87,7 @@ public final class P102IsolatedWorker extends Service {
       request.replyTo=inbox;
       Bundle data=new Bundle();
       data.putString("session",session);
+      data.putString("originalSessionId","p99_session_controller_once");
       data.putString("callId",CALL);
       data.putString("toolName",P102TrustedToolGate.TOOL);
       data.putString("arguments",P102TrustedToolGate.FIXED_ARGS);
