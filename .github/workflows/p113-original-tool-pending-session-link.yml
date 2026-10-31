@@ -9,6 +9,7 @@ on:
       - 'host_candidate/p114_original_tool_dispatch_identifier_audit.py'
       - 'host_candidate/p115_original_helper_ci_only_hook.py'
       - 'host_candidate/p116_original_helper_hard_deny_ci.py'
+      - 'host_candidate/p117_original_helper_scope_probe_ci.py'
       - '.github/workflows/p113-original-tool-pending-session-link.yml'
 permissions:
   contents: read
@@ -78,6 +79,9 @@ jobs:
           python3 host_candidate/p115_original_helper_ci_only_hook.py \
             --runtime-dir .p113private/agent-runtime \
             --test-file .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs
+          python3 host_candidate/p117_original_helper_scope_probe_ci.py \
+            --runtime-dir .p113private/agent-runtime \
+            --test-file .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs
       - name: Run ACTUAL original outer prompt to ToolRuntime to committed session result and continuation
         shell: bash
         run: |
@@ -98,6 +102,10 @@ jobs:
           grep -Fxq 'P99_PROMPT_ONCE_P115_REAL_ORIGINAL_HELPER_CALL_COUNT=1' .p113private/p113-evidence.log
           grep -Fxq 'P99_PROMPT_ONCE_P115_ORIGINAL_CALL_ID_MATCHED_BEFORE_TOOL_BODY=PASS' .p113private/p113-evidence.log
           grep -Fxq 'P99_PROMPT_ONCE_P115_ANDROID_NATIVE_CALL_ATTESTATION=NOT_PROVEN' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P117_ACTUAL_ORIGINAL_HELPER_SCOPE_AND_SIGNAL=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P117_NATIVE_INDEPENDENT_SCOPE_PROOF=NOT_PROVEN' .p113private/p113-evidence.log
+          echo 'P117_ORIGINAL_HELPER_SCOPE_AND_SIGNAL_PREBODY=PASS_CI_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P117_ANDROID_NATIVE_INDEPENDENT_SCOPE_OR_CALL_PROOF=NOT_PROVEN' >> "$GITHUB_STEP_SUMMARY"
           echo 'P115_ACTUAL_ORIGINAL_AGENTLOOP_EXECUTE_TOOLCALLS_PENDING_ENTRY=PASS_CI_ONLY' >> "$GITHUB_STEP_SUMMARY"
           echo 'P115_NATIVE_SESSION_CALL_PROOF_OR_PRODUCTION_BINDER=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
           echo 'P113_REAL_ORIGINAL_AGENTLOOP_DISPATCH_BYPASSES_TOOLS_EXECUTE=CONFIRMED' >> "$GITHUB_STEP_SUMMARY"
