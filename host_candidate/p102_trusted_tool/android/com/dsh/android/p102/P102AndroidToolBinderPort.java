@@ -125,14 +125,14 @@ public final class P102AndroidToolBinderPort {
            !exact(request.getData(),"session","callId","status")||
            !session.equals(text(request.getData(),"session",64))||
            !sentTerminalCall.equals(text(request.getData(),"callId",96))||
-           !"TERMINAL_VALIDATED_REPLAY_DENIED".equals(
+           !"TERMINAL_VALIDATED".equals(
              text(request.getData(),"status",48))){
           Log.e("P102_TOOL_BINDER","P102_HOST_WORKER_DIAGNOSTIC_RECEIPT=REJECTED");
           return;
         }
         diagnosticReceiptLogged=true;
         Log.i("P102_TOOL_BINDER",
-          "P102_HOST_WORKER_TERMINAL_AND_REPLAY_RECEIPT=PASS_OBSERVATION_ONLY");
+          "P102_HOST_WORKER_TERMINAL_RECEIPT=PASS_OBSERVATION_ONLY");
         return;
       }
       if(request.what!=REQUEST||gate==null||workerReply==null||
@@ -158,6 +158,10 @@ public final class P102AndroidToolBinderPort {
       }
       Log.i("P102_TOOL_BINDER","P102_HOST_REQUEST_ACK_SEND=PASS");
       if(decision!=P102TrustedToolGate.Decision.PENDING_NATIVE_APPROVAL){
+        if(decision==P102TrustedToolGate.Decision.REJECTED &&
+           sentTerminalCall!=null && sentTerminalCall.equals(callId)){
+          Log.i("P102_TOOL_BINDER","P102_HOST_REPLAY_REQUEST_REJECTED=PASS");
+        }
         revoke();return;
       }
       // Only trusted native Android UI receives a display request.
