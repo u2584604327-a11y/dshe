@@ -49,6 +49,35 @@ jobs:
           grep -Fxq 'P102_ENGINE_MANAGER_OR_TOOL_BINDER_PRODUCTION_HOOK=NOT_PROVEN' .p102binary/report.log
           grep -Fxq 'P102_PRODUCTION_NODE_TOOLRUNTIME_ANDROID_BINDER=NOT_WIRED' .p102binary/report.log
           grep '^P102_' .p102binary/report.log | grep -v 'P102_DEX_HOST_METHOD_METADATA='
+          # Publish a bounded, ASCII-only class/method *identifier* summary, not code.
+          python3 - <<'PY'
+          import json,re
+          lines=open('.p102binary/report.log',encoding='utf-8').read().splitlines()
+          raw=next(line.split('=',1)[1] for line in lines
+                   if line.startswith('P102_DEX_HOST_METHOD_METADATA='))
+          report=json.loads(raw)
+          classes=[x for d in report['dex'] for x in d['target_classes']]
+          safe=lambda x:bool(re.fullmatch(r'[A-Za-z0-9_/$;<>-]{1,128}',x))
+          selection=[]
+          for item in classes:
+              name=item['class']
+              if not safe(name):continue
+              methods=[m['name'] for m in item['methods']
+                       if safe(m['name']) and re.search(
+                         r'on(Create|Bind|Start|Destroy)|start|stop|engine|node|'
+                         r'binder|service|attach|session|tool|init|run',
+                         m['name'],re.I)]
+              selection.append({'class':name,'candidate_methods':methods[:16]})
+          selection.sort(key=lambda x:(0 if x['class'].endswith('/MainActivity;')
+                                       else 1 if 'EngineManager' in x['class']
+                                       else 2,x['class']))
+          print('P102_V138_HOST_CLASS_CANDIDATE_COUNT='+str(len(classes)))
+          print('P102_V138_HOST_IDENTIFIERS='+json.dumps(
+                selection[:24],separators=(',',':')))
+          print('P102_ENGINE_MANAGER_DECLARED='+(
+                'YES' if any('EngineManager' in x['class'] for x in classes)
+                else 'NO'))
+          PY
           # Public logs contain ONLY bounded metadata, never extracted app code.
           # No APK, code or metadata artifacts are uploaded or published.
           echo 'P102_ORIGINAL_V138_DEX_HOST_DECLARATION_MAPPING=PASS_READONLY_ONLY' >> "$GITHUB_STEP_SUMMARY"
