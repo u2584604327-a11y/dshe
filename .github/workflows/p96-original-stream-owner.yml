@@ -459,6 +459,18 @@ jobs:
           grep -Fxq 'P100_CREATE_CHAIN_REFLECTION_ONLY=PASS' .p96private/p100-create-chain.log
           cat .p96private/p100-create-chain.log
           echo 'P100_SESSION_CREATE_CHAIN_CONTRACT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          # Exact original Session and SurfaceManager method provenance:
+          # import/reflection only, no event mutation, model, tool or network.
+          cp host_candidate/p96_stream_owner/p100_surface_origin_contract.mjs \
+            .p96private/agent-runtime/p100_surface_origin_contract.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 12s node .p96private/agent-runtime/p100_surface_origin_contract.mjs \
+            > .p96private/p100-surface-origin.log
+          grep -Fxq 'P100_SURFACE_ORIGIN_NO_MUTATION=PASS' .p96private/p100-surface-origin.log
+          grep -Fxq 'P100_SURFACE_ORIGIN_MODEL_AUTO_CALL=NOT_TESTED' .p96private/p100-surface-origin.log
+          cat .p96private/p100-surface-origin.log
+          echo 'P100_SESSION_SURFACE_ORIGIN_REFLECTION_ONLY=PASS' >> "$GITHUB_STEP_SUMMARY"
           python host_candidate/p96_stream_owner/p99_session_command_contract.py --original "$f" > .p96private/p99-command.log
           grep -Fxq 'P99_SESSION_COMMAND_CLASS_FOUND=PASS' .p96private/p99-command.log
           grep -Fxq 'P99_SESSION_COMMAND_SOURCE_EXPORTED=NO' .p96private/p99-command.log
