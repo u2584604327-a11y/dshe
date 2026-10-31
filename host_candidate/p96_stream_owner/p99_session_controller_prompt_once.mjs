@@ -65,6 +65,12 @@ class P99WorkspaceBoundary extends Service {
   bootstrap(){return this._deny();}
 }
 
+function safeStackFunctions(error){
+  const stack=String(error?.stack||'');
+  return stack.split('\n').slice(1,10).map(line=>
+    line.match(/at\s+([A-Za-z_$][A-Za-z0-9_$.]{0,100})/)?.[1]||'UNKNOWN'
+  );
+}
 function eventShape(events){
   if(!Array.isArray(events))return {type:typeof events,count:null,types:[]};
   return {
@@ -101,7 +107,8 @@ function safeEventMeta(event){
       kind:typeof data?.reason?.kind==='string'?data.reason.kind.slice(0,60):undefined,
       errorName:typeof data?.reason?.error?.name==='string'
         ?data.reason.error.name.replace(/[^A-Za-z0-9_$-]/g,'').slice(0,60):undefined,
-      errorMessage:data?.reason?.error?safeReason(data.reason.error):undefined
+      errorMessage:data?.reason?.error?safeReason(data.reason.error):undefined,
+      errorStackFunctions:data?.reason?.error?safeStackFunctions(data.reason.error):[]
     },
     turnShape:{
       type:Array.isArray(data?.turn)?'array':typeof data?.turn,
