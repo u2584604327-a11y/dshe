@@ -35,6 +35,41 @@ function contract(label,name,fn){
   };
   process.stdout.write('P100_SURFACE_ORIGIN_METHOD='+JSON.stringify(result)+'\n');
 }
+const safeToken=/[A-Za-z_$][A-Za-z0-9_$]{0,72}|===|!==|==|!=|\?\?|&&|\|\||\?|:|\.|\[|\]|\{|\}|['"][A-Za-z0-9_./:-]{1,72}['"]/g;
+function tokenWindows(src,needle){
+  const rows=[];
+  let from=0;
+  while(true){
+    const pos=src.indexOf(needle,from);
+    if(pos<0)break;
+    const window=src.slice(Math.max(0,pos-220),Math.min(src.length,pos+320));
+    rows.push([...window.matchAll(safeToken)].map(x=>x[0]).slice(0,120));
+    from=pos+needle.length;
+  }
+  return rows.slice(0,12);
+}
+function sessionAppendDetail(){
+  const SessionClass=SessionPkg.Session;
+  const fn=SessionClass?.prototype?.append;
+  if(typeof fn!=='function')return {available:false};
+  const src=Function.prototype.toString.call(fn);
+  const entryProps=[...src.matchAll(/\bentry\??\.([A-Za-z_$][A-Za-z0-9_$]{0,72})/g)].map(x=>x[1]);
+  const eventProps=[...src.matchAll(/\bevent\??\.([A-Za-z_$][A-Za-z0-9_$]{0,72})/g)].map(x=>x[1]);
+  const objectKeys=[...src.matchAll(/(?:^|[,\{])\s*([A-Za-z_$][A-Za-z0-9_$]{0,72})\s*:/g)].map(x=>x[1]);
+  return {
+    available:true,
+    arity:fn.length,
+    entryProperties:[...new Set(entryProps)].slice(0,40),
+    eventProperties:[...new Set(eventProps)].slice(0,40),
+    lexicalObjectKeys:[...new Set(objectKeys)].slice(0,50),
+    surfaceOpWindows:tokenWindows(src,'surfaceOp'),
+    sourceEventSeqsWindows:tokenWindows(src,'sourceEventSeqs'),
+    publicationEntryWindows:tokenWindows(src,'publicationEntry'),
+    sourceSize:src.length
+  };
+}
+process.stdout.write('P100_SESSION_APPEND_SURFACE_DETAIL='+JSON.stringify(sessionAppendDetail())+'\n');
+
 const choices=[
   ...Object.entries(SessionPkg).map(([n,v])=>['session',n,v]),
   ...Object.entries(SurfacePkg).map(([n,v])=>['surface',n,v])
