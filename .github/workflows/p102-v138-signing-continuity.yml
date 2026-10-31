@@ -68,7 +68,7 @@ jobs:
             exit 1
           fi
           # Output only the public certificate digest label if parsing fails.
-          cert=$(sed -nE 's/^[[:space:]]*Signer #1 certificate SHA-256 digest:[[:space:]]*([A-Fa-f0-9]{64})[[:space:]]*$/\1/p' \
+          cert=$(sed -nE 's/^[[:space:]]*V2 Signer: certificate SHA-256 digest:[[:space:]]*([A-Fa-f0-9]{64})[[:space:]]*$/\1/p' \
             .p102-cert-readonly/verification.txt | head -n 1 | tr '[:upper:]' '[:lower:]')
           if test "${#cert}" -ne 64; then
             echo 'P102_SIGNER_SHA256_PARSE=FAIL'
