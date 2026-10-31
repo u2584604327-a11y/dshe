@@ -90,6 +90,44 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
           script: bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
+      - name: Verify standalone test APK identities and prepare phone artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          BT="$SDK/build-tools/35.0.0"
+          f=".p102tmp/p102-emulator-only.apk"
+          test -s "$f"
+          "$BT/apksigner" verify --verbose --print-certs "$f" > .p102tmp/public-certificate.txt
+          grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' .p102tmp/public-certificate.txt
+          cert="$(sed -nE 's/^V2 Signer: certificate SHA-256 digest: ([A-Fa-f0-9]{64})$/\1/p' .p102tmp/public-certificate.txt | head -n 1 | tr '[:upper:]' '[:lower:]')"
+          test "${#cert}" -eq 64
+          test "$cert" != '90072b7de43e96999be92d99869ce5e5b7639b5f2449417b99a1790831b60ff8'
+          test "$cert" != 'ef6afe33330839ed6d6739fb4d4bb84d358fd7bec8c1116c97309f92d9d3f385'
+          "$BT/aapt" dump badging "$f" | grep -Fq "package: name='com.dsh.p102.trustedtoolprobe'"
+          if "$BT/aapt" dump permissions "$f" | grep -Fq 'uses-permission:';then
+            echo 'P102_STANDALONE_APK_PERMISSIONS=FAIL'
+            exit 1
+          fi
+          mkdir -p .p102tmp/phone-upload
+          cp "$f" .p102tmp/phone-upload/P102-Standalone-Binder-Lab-Android34plus.apk
+          (cd .p102tmp/phone-upload && sha256sum P102-Standalone-Binder-Lab-Android34plus.apk > SHA256SUMS.txt)
+          echo 'P102_STANDALONE_PACKAGE_DIFFERENT_FROM_DSH=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_STANDALONE_TEST_SIGNATURE_DISTINCT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_STANDALONE_ZERO_PERMISSION_APK=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_STANDALONE_DISPOSABLE_SIGNER_SHA256='"$cert" >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_REAL_PHONE_INSTALLATION=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_ORIGINAL_DSH_AGENTLOOP_PRODUCTION=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload actual emulator-tested APK for optional Android phone lab
+        uses: actions/upload-artifact@v4
+        with:
+          name: P102-Standalone-Phone-Lab-${{ github.event.pull_request.head.sha }}
+          path: |
+            .p102tmp/phone-upload/P102-Standalone-Binder-Lab-Android34plus.apk
+            .p102tmp/phone-upload/SHA256SUMS.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
       - name: Cleanup and forbid confusing candidate with original DSH
         if: always()
         shell: bash
@@ -99,5 +137,6 @@ jobs:
             echo 'P102_PRODUCTION_DSH_TOOL_TO_NATIVE_BINDER=NOT_WIRED'
             echo 'P102_REAL_ANDROID_UID_E2E=CHECK_PRECEDING_STEP'
             echo 'P102_ENGINE_MANAGER_MAIN_ACTIVITY=UNCHANGED'
-            echo 'P102_NO_APK_NO_SIGNER_NO_RELEASE=YES'
+            echo 'P102_PRODUCTION_DSH_APK_SIGNING_RELEASE=NONE'
+            echo 'P102_DISPOSABLE_STANDALONE_PHONE_LAB_ARTIFACT=YES'
           } >> "$GITHUB_STEP_SUMMARY"
