@@ -54,8 +54,12 @@ jobs:
             'app/src/main/java/com/dsh/android/p102/P102TrustedToolGate.java',
             'app/src/main/java/com/dsh/android/p102/P102AndroidToolBinderPort.java',
           }
-          got={s[3:] for s in subprocess.check_output(
-             ['git','-C','original','status','--porcelain'],text=True).splitlines()}
+          modified=subprocess.check_output(['git','-C','original','diff','--name-only'],
+              text=True).splitlines()
+          newfiles=subprocess.check_output(
+              ['git','-C','original','ls-files','--others','--exclude-standard'],
+              text=True).splitlines()
+          got=set(modified+newfiles)
           assert got==expected,('P109_UNAUTHORIZED_ORIGINAL_CHANGE',sorted(got))
           b=(root/'app/src/main/java/com/dsh/android/P109OriginalToolHostBoundary.kt').read_text()
           activity=(root/'app/src/main/java/com/dsh/android/MainActivity.kt').read_text()
