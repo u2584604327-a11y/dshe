@@ -290,6 +290,27 @@ jobs:
           grep -Fxq 'P99_CONTROLLER_READY_NETWORK_ATTEMPTS=0' \
             .p96private/p99-controller-ready.log
           echo 'P99_ORIGINAL_SESSION_CONTROLLER_READINESS_DIAGNOSTIC=PASS' >> "$GITHUB_STEP_SUMMARY"
+          # One exact outer SessionController.prompt() call. Core session/agent/
+          # projections/controller services remain original; only the model
+          # selector and workspace boundary are explicit fail-closed test
+          # Services. Any model wakeup is trapped locally in prepareCall.
+          cp host_candidate/p96_stream_owner/p99_session_controller_prompt_once.mjs \
+            .p96private/agent-runtime/p99_session_controller_prompt_once.mjs
+          set +e
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 18s node .p96private/agent-runtime/p99_session_controller_prompt_once.mjs \
+            > .p96private/p99-prompt-once.log 2>&1
+          p99_prompt_rc=$?
+          set -e
+          cat .p96private/p99-prompt-once.log
+          test "$p99_prompt_rc" -eq 0
+          grep -Fxq 'P99_PROMPT_ONCE_LOCAL_MODEL_RESOLVED=PASS' .p96private/p99-prompt-once.log
+          grep -Fxq 'P99_PROMPT_ONCE_REAL_SESSION_COMMITTED_USER_TURN=PASS' .p96private/p99-prompt-once.log
+          grep -Fxq 'P99_PROMPT_ONCE_NO_NETWORK=PASS' .p96private/p99-prompt-once.log
+          grep -Fxq 'P99_PROMPT_ONCE_WORKSPACE_UNUSED=PASS' .p96private/p99-prompt-once.log
+          grep -Fxq 'P99_PROMPT_ONCE_SAVE_SELECTION_CALLS=0' .p96private/p99-prompt-once.log
+          echo 'P99_REAL_OUTER_SESSION_CONTROLLER_COMMITTED_USER_TURN=PASS' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p96_original_agent_runtime_probe.mjs \
             .p96private/agent-runtime/p96_original_agent_runtime_probe.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
