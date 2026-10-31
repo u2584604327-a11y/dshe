@@ -44,7 +44,8 @@ if len(raw)>200000:raise SystemExit("P102_UI_HIERARCHY_LIMIT")
 try:root=ET.fromstring(raw)
 except ET.ParseError:raise SystemExit("P102_UI_XML_TRANSIENT")
 buttons=[n for n in root.iter() if n.attrib.get("content-desc")=="P102_TRUSTED_NATIVE_APPROVAL"]
-if len(buttons)!=1:raise SystemExit("P102_NATIVE_BUTTON_NOT_UNIQUE")
+if not buttons:raise SystemExit("P102_NATIVE_BUTTON_MISSING")
+if len(buttons)>1:raise SystemExit("P102_NATIVE_BUTTON_DUPLICATE_COUNT_"+str(len(buttons)))
 button=buttons[0]
 if button.attrib.get("enabled")!="true":raise SystemExit("P102_NATIVE_BUTTON_NOT_ENABLED")
 bounds=button.attrib.get("bounds","")
@@ -73,6 +74,30 @@ print((a+c)//2,(b+d)//2)
 done
 if test -z "$COORDS";then
   echo "P102_NATIVE_BUTTON_UNAVAILABLE_AFTER_BOUNDED_POLL=${UI_LAST_REASON}"
+  # Android emulator only: bounded, privacy-safe diagnostics of the failure.
+  # Do NOT emit the full UI XML, text, screenshot, app data or accessibility
+  # content of unrelated windows. Only count/identify the lab's own nodes.
+  adb exec-out cat /sdcard/p102-window.xml 2>/dev/null | python3 -c '
+import sys,xml.etree.ElementTree as ET
+raw=sys.stdin.buffer.read(200001)
+try:root=ET.fromstring(raw)
+except (ET.ParseError,ValueError):
+  print("P102_UI_DIAG_XML=UNAVAILABLE")
+  sys.exit(0)
+nodes=list(root.iter())
+lab=[x for x in nodes if x.attrib.get("package")=="com.dsh.p102.trustedtoolprobe"]
+exact=[x for x in nodes if x.attrib.get("content-desc")=="P102_TRUSTED_NATIVE_APPROVAL"]
+enabled=[x for x in exact if x.attrib.get("enabled")=="true"]
+print("P102_UI_DIAG_TOTAL_NODES="+str(len(nodes)))
+print("P102_UI_DIAG_LAB_NODES="+str(len(lab)))
+print("P102_UI_DIAG_EXACT_APPROVAL_NODES="+str(len(exact)))
+print("P102_UI_DIAG_ENABLED_APPROVAL_NODES="+str(len(enabled)))
+' || true
+  # This read-only window summary never changes focus or calls am start.
+  adb shell dumpsys activity activities 2>/dev/null |
+    grep -E 'mResumedActivity=|topResumedActivity=|mFocusedApp=' |
+    sed -E 's/.*(com\.dsh\.p102\.trustedtoolprobe|com\.android\.systemui|com\.android\.launcher[[:alnum:]_.]*).*/P102_UI_DIAG_FOCUS_PACKAGE=\1/' |
+    grep '^P102_UI_DIAG_FOCUS_PACKAGE=' | head -n 3 || true
   exit 1
 fi
 read -r X Y <<< "$COORDS"
