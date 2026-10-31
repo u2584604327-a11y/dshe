@@ -60,24 +60,29 @@ def scan_dex(blob):
     type_count,type_off=table(blob,64,68,4,MAX_STRINGS)
     method_count,method_off=table(blob,88,92,8,MAX_METHODS)
     class_count,class_off=table(blob,96,100,32,MAX_CLASSES)
-    strings=[]
-    for i in range(string_count):
-        pos=u32(blob,string_off+i*4)
-        _,pos=uleb(blob,pos)
-        end=blob.find(b'\0',pos,min(pos+4096,len(blob)))
-        check(end>=pos,'DEX_STRING_BOUNDS')
-        strings.append(blob[pos:end].decode('utf-8',errors='replace'))
+    # DEX strings include long literal contents unrelated to class/method metadata.
+    # Decode ONLY referenced type and method-name indices, with bounded symbols.
+    string_cache={}
+    def symbol(index):
+        check(index<string_count,'DEX_STRING_INDEX')
+        if index not in string_cache:
+            pos=u32(blob,string_off+index*4)
+            _,pos=uleb(blob,pos)
+            end=blob.find(b'\0',pos,min(pos+4096,len(blob)))
+            string_cache[index]=('<OVERLONG_DEX_SYMBOL>' if end<0 else
+                                 blob[pos:end].decode('utf-8',errors='replace'))
+        return string_cache[index]
     types=[]
     for i in range(type_count):
         index=u32(blob,type_off+i*4)
         check(index<string_count,'DEX_TYPE_INDEX')
-        types.append(strings[index])
+        types.append(symbol(index))
     methods=[]
     for i in range(method_count):
         at=method_off+i*8
         owner,name_index=u16(blob,at),u32(blob,at+4)
         check(owner<type_count and name_index<string_count,'DEX_METHOD_INDEX')
-        methods.append((types[owner],strings[name_index]))
+        methods.append((types[owner],symbol(name_index)))
     targets=[]
     for i in range(class_count):
         at=class_off+i*32
