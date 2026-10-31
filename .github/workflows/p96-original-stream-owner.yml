@@ -228,6 +228,15 @@ jobs:
           grep -Fxq 'P99_LLM_RUNTIME_REFLECTION_ONLY=PASS' .p96private/p99-llm-contract.log
           cat .p96private/p99-llm-contract.log
           echo 'P99_LLM_RUNTIME_REFLECTION_ONLY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          cp host_candidate/p96_stream_owner/p99_principal_contract.mjs \
+            .p96private/agent-runtime/p99_principal_contract.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 10s node .p96private/agent-runtime/p99_principal_contract.mjs \
+            > .p96private/p99-principal.log
+          grep -Fxq 'P99_PRINCIPAL_CONTRACT_NO_SIDE_EFFECT=PASS' .p96private/p99-principal.log
+          cat .p96private/p99-principal.log
+          echo 'P99_PRINCIPAL_CONTRACT_NO_SIDE_EFFECT=PASS' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p99_llm_local_adapter_probe.mjs \
             .p96private/agent-runtime/p99_llm_local_adapter_probe.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
