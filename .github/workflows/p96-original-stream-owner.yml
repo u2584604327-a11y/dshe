@@ -307,6 +307,8 @@ jobs:
           test "$p99_prompt_rc" -eq 0
           grep -Fxq 'P99_PROMPT_ONCE_LOCAL_MODEL_RESOLVED=PASS' .p96private/p99-prompt-once.log
           grep -Fxq 'P99_PROMPT_ONCE_REAL_SESSION_COMMITTED_USER_TURN=PASS' .p96private/p99-prompt-once.log
+          grep -Fxq 'P99_PROMPT_ONCE_P100_AUTOMATIC_ORIGINAL_PREPARE_ONCE=PASS' .p96private/p99-prompt-once.log
+          grep -Fxq 'P99_PROMPT_ONCE_MODEL_PREPARE_CALLS=1' .p96private/p99-prompt-once.log
           grep -Eq '^P99_PROMPT_ONCE_WORKSPACE_ARCHIVE_READS=[1-9][0-9]*$' .p96private/p99-prompt-once.log
           grep -Fxq 'P99_PROMPT_ONCE_WORKSPACE_ARCHIVE_IDS_COUNT=0' .p96private/p99-prompt-once.log
           grep -Eq '^P99_PROMPT_ONCE_APPEND_ATTEMPT_META=\[' .p96private/p99-prompt-once.log
@@ -341,14 +343,13 @@ jobs:
             .p96private/p100-exception-location.log
           grep -Fxq 'P99_PROMPT_ONCE_WORKSPACE_ARCHIVE_IDS_COUNT=0' \
             .p96private/p100-exception-location.log
-          if grep -Fxq 'P99_PROMPT_ONCE_MODEL_PREPARE_CALLS=1' \
-            .p96private/p100-exception-location.log; then
-            grep -Fxq 'P100_EXCEPTION_LOCATION_OBSERVED=NOT_OBSERVED' \
-              .p96private/p100-exception-location.log
-            echo 'P100_ORIGINAL_AGENTLOOP_AUTO_MODEL_PREPARE_ONCE=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'P100_ORIGINAL_AGENTLOOP_AUTO_MODEL_PREPARE_ONCE=BLOCKED' >> "$GITHUB_STEP_SUMMARY"
-          fi
+          grep -Fxq 'P99_PROMPT_ONCE_MODEL_PREPARE_CALLS=1' \
+            .p96private/p100-exception-location.log
+          grep -Fxq 'P99_PROMPT_ONCE_P100_AUTOMATIC_ORIGINAL_PREPARE_ONCE=PASS' \
+            .p96private/p100-exception-location.log
+          grep -Fxq 'P100_EXCEPTION_LOCATION_OBSERVED=NOT_OBSERVED' \
+            .p96private/p100-exception-location.log
+          echo 'P100_ORIGINAL_AGENTLOOP_AUTO_MODEL_PREPARE_ONCE=PASS_ISOLATED_OUTER_PROMPT' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p96_original_agent_runtime_probe.mjs \
             .p96private/agent-runtime/p96_original_agent_runtime_probe.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
