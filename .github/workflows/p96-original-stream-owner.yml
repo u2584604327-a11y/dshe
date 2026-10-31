@@ -316,6 +316,28 @@ jobs:
           grep -Fxq 'P99_PROMPT_ONCE_WORKSPACE_UNUSED=PASS' .p96private/p99-prompt-once.log
           grep -Fxq 'P99_PROMPT_ONCE_SAVE_SELECTION_CALLS=0' .p96private/p99-prompt-once.log
           echo 'P99_REAL_OUTER_SESSION_CONTROLLER_COMMITTED_USER_TURN=PASS' >> "$GITHUB_STEP_SUMMARY"
+          # Independent one-shot exception-location witness; uses in-process
+          # Node inspector only. Never accesses call frame locals or source text.
+          cp host_candidate/p96_stream_owner/p100_exception_location.mjs \
+            .p96private/agent-runtime/p100_exception_location.mjs
+          set +e
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 22s node .p96private/agent-runtime/p100_exception_location.mjs \
+            > .p96private/p100-exception-location.log 2>&1
+          p100_exception_rc=$?
+          set -e
+          cat .p96private/p100-exception-location.log
+          test "$p100_exception_rc" -eq 0
+          grep -Fxq 'P100_EXCEPTION_LOCATION_OBSERVED=PASS' \
+            .p96private/p100-exception-location.log
+          grep -Fxq 'P100_EXCEPTION_ORIGINAL_RUNTIME_UNPATCHED=YES' \
+            .p96private/p100-exception-location.log
+          grep -Fxq 'P99_PROMPT_ONCE_MODEL_PREPARE_CALLS=0' \
+            .p96private/p100-exception-location.log
+          grep -Fxq 'P99_PROMPT_ONCE_NETWORK_ATTEMPTS=0' \
+            .p96private/p100-exception-location.log
+          echo 'P100_ORIGINAL_CAUGHT_EXCEPTION_LOCATION=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p96_original_agent_runtime_probe.mjs \
             .p96private/agent-runtime/p96_original_agent_runtime_probe.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
