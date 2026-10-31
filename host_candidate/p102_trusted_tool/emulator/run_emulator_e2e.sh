@@ -28,15 +28,21 @@ if grep -Fq 'P102_TERMINAL_TOOL_RESULT=PASS' .p102tmp/filtered-log.txt;then
   echo 'P102_TERMINAL_BEFORE_NATIVE_APPROVAL=FAIL';exit 1
 fi
 echo 'P102_REAL_BINDER_PREGRANT_NO_EXECUTION=PASS'
-# Do not guess that the centre of the physical screen is the Activity Button
-# (Android 16 may have changed window insets, decorations or focus).
-# Only click the explicit, *enabled*, original test native-approval button.
-adb shell uiautomator dump /sdcard/p102-window.xml >/dev/null
-COORDS="$(adb exec-out cat /sdcard/p102-window.xml | python3 -c '
+# Android 36 can transiently present an incomplete accessibility tree.
+# Only re-read UI hierarchy. Never relaunch, guess tap coordinates or click
+# multiple/disabled buttons. Unresolved ambiguity remains a hard failure.
+COORDS=""
+UI_LAST_REASON="NOT_OBSERVED"
+for attempt in $(seq 1 15); do
+  if ! adb shell uiautomator dump /sdcard/p102-window.xml >/dev/null 2>&1; then
+    UI_LAST_REASON="UI_DUMP_UNAVAILABLE"
+  else
+    if COORDS="$(adb exec-out cat /sdcard/p102-window.xml | python3 -c '
 import re,sys,xml.etree.ElementTree as ET
 raw=sys.stdin.buffer.read(200001)
 if len(raw)>200000:raise SystemExit("P102_UI_HIERARCHY_LIMIT")
-root=ET.fromstring(raw)
+try:root=ET.fromstring(raw)
+except ET.ParseError:raise SystemExit("P102_UI_XML_TRANSIENT")
 buttons=[n for n in root.iter() if n.attrib.get("content-desc")=="P102_TRUSTED_NATIVE_APPROVAL"]
 if len(buttons)!=1:raise SystemExit("P102_NATIVE_BUTTON_NOT_UNIQUE")
 button=buttons[0]
@@ -48,7 +54,27 @@ a,b,c,d=map(int,m.groups())
 if not(0<=a<c<=10000 and 0<=b<d<=10000):
     raise SystemExit("P102_NATIVE_BUTTON_RECT_INVALID")
 print((a+c)//2,(b+d)//2)
-')"
+' 2> .p102tmp/ui-selection-reason.txt)"; then
+      UI_LAST_REASON="READY"
+      break
+    else
+      UI_LAST_REASON="$(head -n1 .p102tmp/ui-selection-reason.txt || true)"
+      COORDS=""
+    fi
+  fi
+  probe 'P102_PREAPPROVAL_REQUEST_GATE=PASS' || {
+    echo 'P102_PREAPPROVAL_LOST_DURING_UI_POLL=FAIL'; exit 1;
+  }
+  if grep -Fq '=FAIL' .p102tmp/filtered-log.txt ||
+     grep -Fq 'P102_TRUSTED_EXECUTION_COUNT=' .p102tmp/filtered-log.txt;then
+    echo 'P102_UNEXPECTED_NATIVE_GATE_STATE_DURING_UI_POLL=FAIL'; exit 1
+  fi
+  sleep 1
+done
+if test -z "$COORDS";then
+  echo "P102_NATIVE_BUTTON_UNAVAILABLE_AFTER_BOUNDED_POLL=${UI_LAST_REASON}"
+  exit 1
+fi
 read -r X Y <<< "$COORDS"
 echo 'P102_NATIVE_ENABLED_BUTTON_IDENTIFIED=PASS'
 adb shell input tap "$X" "$Y"
