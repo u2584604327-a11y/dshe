@@ -34,7 +34,7 @@ session.on('Debugger.paused',({params})=>{
   try{
     // The description is compared against a fixed, known error class only.
     // It is NEVER logged, nor are receiver values or call frame locals.
-    if(params?.reason==='exception' &&
+    if((params?.reason==='exception'||params?.reason==='promiseRejection') &&
        typeof params?.data?.description==='string' &&
        params.data.description.includes("Cannot read properties of undefined (reading 'includes')") &&
        matched.length<8){
