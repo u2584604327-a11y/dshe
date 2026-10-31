@@ -140,6 +140,9 @@ jobs:
             'P99_PROMPT_ONCE_P116_ANDROID_NATIVE_PERMISSION=NEVER_GRANTED'; do
             grep -Fxq "$marker" .p113private/p116-deny.log
           done
+          # P119 advisory: expose only bounded original denial terminal metadata.
+          grep -E '^P99_PROMPT_ONCE_P119_DENIED_ORIGINAL_' .p113private/p116-deny.log || true
+          echo 'P119_DENIED_TURN_END_AND_PHASE=OBSERVATION_ONLY' >> "$GITHUB_STEP_SUMMARY"
           # Explicitly report whether the original agent completed its turn
           # or took the error/abort path. Neither is silently called success.
           grep -E '^P99_PROMPT_ONCE_(HARNESS_RESULT|P101_COMPLETED_TURN_ONCE|P101_TOOL_EXECUTIONS|P101_TOOL_NOTIFICATIONS|P116_)' \
