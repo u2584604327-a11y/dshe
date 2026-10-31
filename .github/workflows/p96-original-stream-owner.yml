@@ -350,6 +350,24 @@ jobs:
           grep -Fxq 'P100_EXCEPTION_LOCATION_OBSERVED=NOT_OBSERVED' \
             .p96private/p100-exception-location.log
           echo 'P100_ORIGINAL_AGENTLOOP_AUTO_MODEL_PREPARE_ONCE=PASS_ISOLATED_OUTER_PROMPT' >> "$GITHUB_STEP_SUMMARY"
+          # P101 next blocker: inspect SHA-pinned original prepareCall/tool
+          # consumption contract before returning any synthetic model stream.
+          # This gate never executes a tool or substitutes AgentLoop behavior.
+          python host_candidate/p96_stream_owner/p101_original_tool_contract.py \
+            --original "$f" > .p96private/p101-source-contract.log
+          grep -Fxq 'P101_ORIGINAL_MODULES_SOURCE_EXPORTED=NO' .p96private/p101-source-contract.log
+          grep -Fxq 'P101_ORIGINAL_MODEL_TOOL_AGENT_CONTRACT_SCAN=PASS' .p96private/p101-source-contract.log
+          cat .p96private/p101-source-contract.log
+          cp host_candidate/p96_stream_owner/p101_original_runtime_contract.mjs \
+            .p96private/agent-runtime/p101_original_runtime_contract.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 12s node .p96private/agent-runtime/p101_original_runtime_contract.mjs \
+            > .p96private/p101-runtime-contract.log
+          grep -Fxq 'P101_ORIGINAL_RUNTIME_REFLECTION_ONLY=PASS' .p96private/p101-runtime-contract.log
+          cat .p96private/p101-runtime-contract.log
+          echo 'P101_EXACT_ORIGINAL_TOOL_MODEL_CONTRACT=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P101_AUTOMATIC_TOOL_RESULT_CONTINUATION=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p96_original_agent_runtime_probe.mjs \
             .p96private/agent-runtime/p96_original_agent_runtime_probe.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
