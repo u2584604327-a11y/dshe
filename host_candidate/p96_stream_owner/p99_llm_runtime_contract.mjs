@@ -34,7 +34,7 @@ const methods=Object.getOwnPropertyNames(LlmRuntime.prototype||{})
 process.stdout.write('P99_LLM_RUNTIME_METHODS='+JSON.stringify(
   methods.map(name=>({name,arity:LlmRuntime.prototype[name].length})).slice(0,100))+'\n');
 for(const name of methods){
-  if(/register|model|provider|resolve|stream|api|config/i.test(name)){
+  if(/register|registration|adapter|model|provider|resolve|stream|api|config|prepare|route/i.test(name)){
     process.stdout.write('P99_LLM_RUNTIME_CONTRACT='+JSON.stringify(contract(name))+'\n');
   }
 }
