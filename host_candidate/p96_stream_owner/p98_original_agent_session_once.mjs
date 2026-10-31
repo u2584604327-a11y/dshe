@@ -161,6 +161,7 @@ try{
          /^[A-Za-z_$][A-Za-z0-9_$-]{0,64}$/.test(x)).slice(0,45)));
    }
    log('SESSION_APPEND_CONTRACT',JSON.stringify(safeMethodContract(handle.session,'append')));
+   log('SESSION_PUBLICATION_ENTRY_CONTRACT',JSON.stringify(safeMethodContract(handle.session,'publicationEntry')));
    log('SESSION_COMMIT_CONTRACT',JSON.stringify(safeMethodContract(handle.session,'commit')));
    log('INBOX_PROTOTYPE_METHODS',JSON.stringify(methods(handle.inbox)));
    log('SESSION_PROTOTYPE_METHODS',JSON.stringify(methods(handle.session)));
