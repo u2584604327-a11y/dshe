@@ -29,7 +29,8 @@ import http from 'node:http';
 import https from 'node:https';
 
 let networkAttempts=0,prepareCalls=0,workspaceAccesses=0;
-let streamCalls=0,toolExecutions=0,toolNotifications=0;
+let streamCalls=0,toolExecutions=0,toolNotifications=0,toolRuntimeAttempts=0;
+let originalToolExecute=null,observedTools=null;
 let toolRegistration=null;
 let selectionCalls=0,saveSelectionCalls=0,workspaceArchiveReads=0,workspaceArchiveSize=null;
 const deny=()=>{networkAttempts++;throw new Error('P99_NETWORK_DENIED');};
@@ -191,6 +192,12 @@ try{
     if(exec?.name==='read_synthetic_fixture' && exec?.callId==='call_p101_0001' &&
        result?.isError!==true)toolNotifications++;
   });
+  observedTools=ctx.get('tools');
+  originalToolExecute=observedTools.execute;
+  observedTools.execute=function(exec){
+    toolRuntimeAttempts++;
+    return originalToolExecute.call(this,exec);
+  };
   toolRegistration=ctx.get('tools').register({
     name:'read_synthetic_fixture',
     description:'Returns a fixed in-memory string only; no device or external access.',
@@ -319,6 +326,22 @@ try{
   if(!handle||typeof configuredOwner?.dispose!=='function')
     throw new Error('P100_ORIGINAL_CREATE_AGENT_WRAPPER_CONTRACT_FAILED');
   observedSessionIdentity=handle?.session;
+  const safeLiterals=fn=>{
+    if(typeof fn!=='function')return [];
+    const src=Function.prototype.toString.call(fn);
+    return [...new Set([...src.matchAll(/['"]([A-Za-z][A-Za-z0-9_./:-]{1,70})['"]/g)]
+      .map(x=>x[1]))].slice(0,100);
+  };
+  const agentProto=Object.getPrototypeOf(handle);
+  const dispatchProto=handle?.dispatch&&typeof handle.dispatch==='object'
+    ?Object.getPrototypeOf(handle.dispatch):null;
+  const protoRows=(proto)=>proto?Object.getOwnPropertyNames(proto).filter(x=>
+    /^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(x) &&
+    typeof Object.getOwnPropertyDescriptor(proto,x)?.value==='function').map(x=>({
+      method:x,arity:proto[x].length,literals:safeLiterals(proto[x])
+    })).filter(x=>/step|run|tool|dispatch|finish|call|execute|handle|turn|process/i.test(x.method)).slice(0,40):[];
+  log('P101_ORIGINAL_AGENT_METHOD_META',JSON.stringify(protoRows(agentProto)));
+  log('P101_ORIGINAL_DISPATCH_METHOD_META',JSON.stringify(protoRows(dispatchProto)));
   observerPhase='session-created';
   const expectedSessionId='p99_session_controller_once';
   const expectedStored=ctx.get('sessions').get(expectedSessionId);
@@ -502,6 +525,7 @@ try{
   // The harness does not call prepareCall, tools.execute or session.append.
   log('P101_MODEL_PREPARE_CALLS',prepareCalls);
   log('P101_MODEL_STREAM_CALLS',streamCalls);
+  log('P101_TOOL_RUNTIME_ATTEMPTS',toolRuntimeAttempts);
   log('P101_TOOL_EXECUTIONS',toolExecutions);
   log('P101_TOOL_NOTIFICATIONS',toolNotifications);
   const toolAppend=observedAppendAttempts.filter(x=>/tool/i.test(x.eventType));
@@ -520,7 +544,12 @@ try{
         argumentType:typeof b?.arguments,
         keys:b&&typeof b==='object'?Object.keys(b).slice(0,20):[]
       })).slice(0,15),
-      streamType:Array.isArray(x?.data?.stream)?'array':typeof x?.data?.stream
+      streamType:Array.isArray(x?.data?.stream)?'array':typeof x?.data?.stream,
+      streamRecords:Array.isArray(x?.data?.stream)?x.data.stream.slice(0,25).map(r=>({
+        type:r?.type??null,chunkType:r?.chunk?.type??null,
+        finishKind:r?.chunk?.reason?.kind??null,
+        keys:r&&typeof r==='object'?Object.keys(r).slice(0,15):[]
+      })):[]
     };
   })));
   log('P101_TURN_END_REASONS',JSON.stringify(committedDelta.filter(x=>x?.type==='turn/end')
@@ -548,6 +577,7 @@ try{
     try{handle.session.commit=originalSessionCommit;}catch{}
   }
   if(typeof disposeSessionObserver==='function')try{disposeSessionObserver();}catch{}
+  if(observedTools&&typeof originalToolExecute==='function')try{observedTools.execute=originalToolExecute;}catch{}
   if(typeof toolRegistration==='function')try{toolRegistration();}catch{}
   if(typeof unregister==='function')try{unregister();}catch{}
   if(configuredOwner&&typeof configuredOwner.dispose==='function'){
