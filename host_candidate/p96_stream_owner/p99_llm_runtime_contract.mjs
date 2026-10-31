@@ -83,6 +83,16 @@ for(const field of ['provider','id','name','description']){
   genericChecks[field]=checks;
 }
 process.stdout.write('P99_LLM_GENERIC_MODEL_CHECKS='+JSON.stringify(genericChecks)+'\n');
+
+const localBindings={};
+for(const name of ['provider','context','reasoning']){
+  const re=new RegExp(
+    '\\b(?:const|let|var)\\s+'+name+'\\s*=\\s*([A-Za-z_$][A-Za-z0-9_$]*(?:\\??\\.[A-Za-z_$][A-Za-z0-9_$]*){0,6})',
+    'g'
+  );
+  localBindings[name]=[...normalizeSrc.matchAll(re)].map(m=>m[1]).slice(0,10);
+}
+process.stdout.write('P99_LLM_NORMALIZE_LOCAL_BINDINGS='+JSON.stringify(localBindings)+'\n');
 process.stdout.write('P99_LLM_RUNTIME_METHODS='+JSON.stringify(
   methods.map(name=>({name,arity:LlmRuntime.prototype[name].length})).slice(0,100))+'\n');
 for(const name of methods){
