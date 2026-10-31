@@ -43,13 +43,6 @@ for(const field of modelFields){
     new RegExp(token+'\\??\\.([A-Za-z_$][A-Za-z0-9_$]{0,80})','g')
   )].map(x=>x[1]).filter(safe);
   const comparisons=[];
-  const rhsRe=new RegExp(
-    token+'\\s*(===|!==|==|!=|<=|>=|<|>)\\s*(?:[\\'\"]([A-Za-z_$][A-Za-z0-9_$-]{0,60})[\\'\"]|([A-Za-z_$][A-Za-z0-9_$.]{0,100}))',
-    'g'
-  );
-  for(const m of normalizeSrc.matchAll(rhsRe)){
-    comparisons.push({operator:m[1],literal:m[2]||null,identifier:m[3]||null});
-  }
   const nestedPaths=[...normalizeSrc.matchAll(
     new RegExp(token+'((?:\\??\\.[A-Za-z_$][A-Za-z0-9_$]{0,80}){1,4})','g')
   )].map(m=>m[1].replace(/\\?\\./g,'.')).slice(0,30);
