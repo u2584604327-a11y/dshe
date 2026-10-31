@@ -46,9 +46,31 @@ jobs:
               *) echo "P105_PINNED_SOURCE_FETCH_ERROR=$code"; exit 1;;
             esac
           done
+          # Public MIT source has plugin entries even when prepacked assets
+          # are absent. Compare their bytes to nested signed-v138 ZIP members.
+          for spec in \
+            dsh-android-browser/package.json \
+            dsh-android-browser/lib/index.js \
+            dsh-android-browser-pane/package.json \
+            dsh-android-browser-pane/lib/index.js \
+            dsh-android-browser-pane/lib/client.js \
+            dsh-android-logs/package.json \
+            dsh-android-logs/lib/index.js; do
+            url="https://raw.githubusercontent.com/pht88888888/DSHAPP/${UPSTREAM_REVISION}/mobile-ui-plugin/$spec"
+            target=".p105/public-plugins/$spec"
+            mkdir -p "$(dirname "$target")"
+            code="$(curl -sSL --retry 2 --max-time 35 --max-filesize 8000000 \
+              -w '%{http_code}' "$url" -o "$target")"
+            case "$code" in
+              200) test -s "$target";;
+              404) rm -f "$target";;
+              *) echo "P105_PLUGIN_FETCH_ERROR=$code"; exit 1;;
+            esac
+          done
           python3 host_candidate/p105_upstream_v91_asset_compat_readonly.py \
             --apk .p105/apk/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
-            --public-assets .p105/public | tee .p105/report.txt
+            --public-assets .p105/public \
+            --public-plugins .p105/public-plugins | tee .p105/report.txt
           grep -Fqx 'P105_PUBLIC_SOURCE_BINARY_EQUIVALENCE=NOT_PROVEN' .p105/report.txt
           grep -Fqx 'P105_ORIGINAL_AGENTLOOP_BINDER_PRODUCTION=NOT_WIRED' .p105/report.txt
           grep -Fqx 'P105_V138_APK_OR_USER_DATA_MODIFIED=NO' .p105/report.txt
