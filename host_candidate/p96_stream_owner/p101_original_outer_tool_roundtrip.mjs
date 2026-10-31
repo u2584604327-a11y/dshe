@@ -587,9 +587,40 @@ try{
     .map(x=>({kind:x?.data?.reason?.kind??null,keys:x?.data?.reason&&typeof x.data.reason==='object'
       ?Object.keys(x.data.reason).slice(0,15):[]}))));
 
+  // These are original SessionStore-backed committed events, never harness
+  // fabricated tool/call or tool/result entries. Assert exactly-once and
+  // verify the result's source sequence points at the actual tool call.
+  const committedToolCalls=committedDelta.filter(x=>x?.type==='tool/call');
+  const committedToolResults=committedDelta.filter(x=>x?.type==='tool/result');
+  const committedTurnEnds=committedDelta.filter(x=>x?.type==='turn/end');
+  const resultLinksCall=committedToolCalls.length===1&&committedToolResults.length===1&&
+    Array.isArray(committedToolResults[0]?.sourceEventSeqs)&&
+    committedToolResults[0].sourceEventSeqs.length===1&&
+    committedToolResults[0].sourceEventSeqs[0]===committedToolCalls[0].seq;
+  const resultMessage=committedToolResults[0]?.data?.message;
+  const resultMessageMatches=resultMessage?.role==='tool'&&
+    resultMessage?.callId==='call_p101_0001'&&resultMessage?.isError!==true;
+  const firstAssistantCalls=assistantEvents.length===2&&
+    assistantEvents[0]?.data?.message?.content?.filter(b=>
+      b?.type==='tool-call'&&b?.name==='read_synthetic_fixture'&&
+      b?.id==='call_p101_0001').length===1;
+  const secondAssistantText=assistantEvents.length===2&&
+    assistantEvents[1]?.data?.message?.content?.some(b=>
+      b?.type==='text'&&b?.text==='synthetic continuation complete');
+  const turnCompletedOnce=committedTurnEnds.length===1&&
+    committedTurnEnds[0]?.data?.reason?.kind==='completed';
+  log('P101_COMMITTED_TOOL_CALL_COUNT',committedToolCalls.length);
+  log('P101_COMMITTED_TOOL_RESULT_COUNT',committedToolResults.length);
+  log('P101_RESULT_SOURCE_LINKS_CALL',resultLinksCall?'PASS':'FAIL');
+  log('P101_RESULT_MESSAGE_MATCHES',resultMessageMatches?'PASS':'FAIL');
+  log('P101_FIRST_ASSISTANT_TOOL_CALL',firstAssistantCalls?'PASS':'FAIL');
+  log('P101_SECOND_ASSISTANT_TEXT',secondAssistantText?'PASS':'FAIL');
+  log('P101_COMPLETED_TURN_ONCE',turnCompletedOnce?'PASS':'FAIL');
   const p101pass=committedUserEvent&&prepareCalls===2&&streamCalls===2&&
     toolExecutions===1&&toolNotifications===1&&networkAttempts===0&&
-    workspaceAccesses===0&&saveSelectionCalls===0&&listenerArgShapePass;
+    workspaceAccesses===0&&saveSelectionCalls===0&&listenerArgShapePass&&
+    resultLinksCall&&resultMessageMatches&&firstAssistantCalls&&
+    secondAssistantText&&turnCompletedOnce;
   log('P101_ORIGINAL_AUTOMATIC_TOOL_ROUNDTRIP',p101pass?'PASS':'FAIL');
   log('P101_NO_NETWORK',networkAttempts===0?'PASS':'FAIL');
   if(!p101pass)process.exitCode=2;
