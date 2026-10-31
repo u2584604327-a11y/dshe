@@ -27,15 +27,33 @@ def patch(runtime,test):
       "  // P116 CI-only negative admission. The original function body is never\n"
       "  // reached when the original-host verifier is absent.\n"
       "  if (process.env.P116_ISOLATED_HARD_DENY === '1') {\n"
+      "    // CI-only entry observation is never approval or execution.\n"
+      "    try { globalThis.__P116_ORIGINAL_ENTRY_EVIDENCE__?.({toolCalls,signal}); }\n"
+      "    catch { /* entry evidence cannot affect denial */ }\n"
       "    throw new Error('P116_UNVERIFIED_ORIGINAL_CORE_TOOL_DENIED');\n"
       "  }\n"+anchor)
     js=test.read_text(encoding="utf-8")
     js=one(js,
+      "const p115Helper={calls:0,originalCallIdMatch:false,preToolBody:false,notAborted:false};\n",
+      "const p115Helper={calls:0,originalCallIdMatch:false,preToolBody:false,notAborted:false};\n"
+      "const p116Entry={seen:0,idMatch:false,preBody:false,notAborted:false};\n"
+      "globalThis.__P116_ORIGINAL_ENTRY_EVIDENCE__=({toolCalls,signal})=>{\n"
+      "  p116Entry.seen++;\n"
+      "  p116Entry.idMatch=Array.isArray(toolCalls)&&toolCalls.length===1&&\n"
+      "    toolCalls[0]?.id==='call_p101_0001';\n"
+      "  p116Entry.preBody=toolExecutions===0;\n"
+      "  p116Entry.notAborted=signal?.aborted!==true;\n"
+      "};\n")
+    js=one(js,
       "}finally{\n  if(handle?.session",
       "}finally{\n"
       "  if(process.env.P116_ISOLATED_HARD_DENY==='1'){\n"
-      "    const stopped=p115Helper.calls===0&&toolExecutions===0&&\n"
+      "    const stopped=p116Entry.seen===1&&p116Entry.idMatch&&\n"
+      "      p116Entry.preBody&&p116Entry.notAborted&&\n"
+      "      p115Helper.calls===0&&toolExecutions===0&&\n"
       "      toolNotifications===0&&networkAttempts===0;\n"
+      "    log('P116_REAL_ORIGINAL_HELPER_ENTRY_SEEN_ONCE',p116Entry.seen===1?'PASS':'FAIL');\n"
+      "    log('P116_REAL_ORIGINAL_CALL_ID_BEFORE_DENY',p116Entry.idMatch?'PASS':'FAIL');\n"
       "    log('P116_ORIGINAL_HELPER_DENIED_BEFORE_OBSERVER',\n"
       "      stopped?'PASS':'FAIL');\n"
       "    log('P116_NO_ORIGINAL_TOOL_BODY',toolExecutions===0?'PASS':'FAIL');\n"
