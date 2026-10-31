@@ -233,6 +233,22 @@ try{
   if(!stored||stored!==handle.session)
     throw new Error('P99_SESSION_STORE_HANDLE_MISMATCH');
 
+  const surfaceManager=handle.session?.surfaceManager;
+  const projections=surfaceManager?.projections;
+  log('SURFACE_MANAGER_META',JSON.stringify({
+    type:Array.isArray(surfaceManager)?'array':typeof surfaceManager,
+    keys:surfaceManager&&typeof surfaceManager==='object'
+      ?Object.keys(surfaceManager).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,30):[],
+    constructorName:surfaceManager?.constructor?.name&&/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(surfaceManager.constructor.name)
+      ?surfaceManager.constructor.name:null,
+    projectionsType:Array.isArray(projections)?'array':typeof projections,
+    projectionsCount:Array.isArray(projections)?projections.length:null,
+    projectionsConstructor:projections?.constructor?.name&&/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(projections.constructor.name)
+      ?projections.constructor.name:null,
+    projectionsKeys:projections&&typeof projections==='object'&&!Array.isArray(projections)
+      ?Object.keys(projections).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,20):[]
+  }));
+
   const beforeEvents=handle.session.snapshotEvents();
   const beforeMessages=handle.session.deriveMessages();
   log('BEFORE_EVENTS',JSON.stringify(eventShape(beforeEvents)));
