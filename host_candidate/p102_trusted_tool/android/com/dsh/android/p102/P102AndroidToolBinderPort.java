@@ -9,6 +9,7 @@ import android.os.Messenger;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.util.Log;
 import java.security.SecureRandom;
 import java.util.Set;
 
@@ -126,7 +127,11 @@ public final class P102AndroidToolBinderPort {
       P102TrustedToolGate.Decision decision=gate.accept(
         sender,sessionIn,originalSessionId,callId,toolName,arguments);
       Bundle reply=new Bundle();reply.putString("status",decision.name());
-      if(!send(workerReply,REQUEST_ACK,reply)){revoke();return;}
+      if(!send(workerReply,REQUEST_ACK,reply)){
+        Log.e("P102_TOOL_BINDER","P102_HOST_REQUEST_ACK_SEND=FAIL");
+        revoke();return;
+      }
+      Log.i("P102_TOOL_BINDER","P102_HOST_REQUEST_ACK_SEND=PASS");
       if(decision!=P102TrustedToolGate.Decision.PENDING_NATIVE_APPROVAL){
         revoke();return;
       }
@@ -150,6 +155,12 @@ public final class P102AndroidToolBinderPort {
     fields.putBoolean("outcomeUnknown",terminal.outcomeUnknown);
     fields.putBoolean("retrySafe",terminal.retrySafe);
     if(terminal.ok)fields.putString("fixedResult","fixture-read-success");
-    if(!send(workerReply,TOOL_TERMINAL,fields))revoke();
+    if(!send(workerReply,TOOL_TERMINAL,fields)){
+      Log.e("P102_TOOL_BINDER","P102_HOST_TERMINAL_SEND=FAIL");
+      revoke();
+    }else{
+      // Successful Messenger.send is delivery to Binder, NOT worker receipt.
+      Log.i("P102_TOOL_BINDER","P102_HOST_TERMINAL_SEND=PASS_NOT_RECEIPT");
+    }
   }
 }
