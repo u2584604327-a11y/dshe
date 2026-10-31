@@ -79,6 +79,18 @@ public final class P102IsolatedWorker extends Service {
             Log.e(TAG,"P102_TERMINAL_UNEXPECTED_STAGE=FAIL");return;
           }
           Bundle b=msg.getData();
+          // A previously unapproved, background-revoked native request must
+          // terminate *without* executing, and must not count as tool success.
+          // This is the exact fail-closed P71ToolReplyOnce.browserLost() shape.
+          if(CALL.equals(b.getString("callId")) &&
+             "BROWSER_UNAVAILABLE".equals(b.getString("status")) &&
+             !b.getBoolean("outcomeUnknown",true) &&
+             b.getBoolean("retrySafe",false) &&
+             !b.containsKey("fixedResult")){
+            stage=5;
+            Log.i(TAG,"P102_PREGRANT_BACKGROUND_REVOKE_TERMINAL=PASS_NO_EXECUTION");
+            return;
+          }
           if(!CALL.equals(b.getString("callId"))||
              !"SUCCESS".equals(b.getString("status"))||
              !"fixture-read-success".equals(b.getString("fixedResult"))||
