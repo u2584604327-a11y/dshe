@@ -1,0 +1,56 @@
+name: P102 exact v138 Android host DEX metadata provenance (read-only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p102_binary_host_probe/**'
+      - '.github/workflows/p102-v138-binary-host-provenance.yml'
+permissions:
+  contents: read
+jobs:
+  readonly-original-host-metadata:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check bounded metadata parser without original APK
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p102_binary_host_probe/p102_exact_apk_host_methods.py --selftest
+      - name: Pin exact existing v138 APK and map native class/method declarations only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = "u2584604327-a11y/dshe"
+          mkdir -p .p102binary
+          trap 'rm -rf .p102binary' EXIT
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo "$GH_REPO" \
+            --pattern 'DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk' \
+            --dir .p102binary
+          f=.p102binary/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          printf '%s  %s\n' \
+            3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 "$f" \
+            | sha256sum -c -
+          timeout 90s python3 \
+            host_candidate/p102_binary_host_probe/p102_exact_apk_host_methods.py \
+            --original "$f" > .p102binary/report.log
+          grep -Fxq 'P102_EXACT_SIGNED_V138_APK_SOURCE_SHA=PASS' .p102binary/report.log
+          grep -Fxq 'P102_MAIN_ACTIVITY_DEFINED=YES' .p102binary/report.log
+          grep -Fxq 'P102_ENGINE_MANAGER_OR_TOOL_BINDER_PRODUCTION_HOOK=NOT_PROVEN' .p102binary/report.log
+          grep -Fxq 'P102_PRODUCTION_NODE_TOOLRUNTIME_ANDROID_BINDER=NOT_WIRED' .p102binary/report.log
+          grep '^P102_' .p102binary/report.log | grep -v 'P102_DEX_HOST_METHOD_METADATA='
+          # Public logs contain ONLY bounded metadata, never extracted app code.
+          # No APK, code or metadata artifacts are uploaded or published.
+          echo 'P102_ORIGINAL_V138_DEX_HOST_DECLARATION_MAPPING=PASS_READONLY_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_ACTUAL_DSH_NODE_BINDER_TOOL_INTEGRATION=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_EXTRACTED_ORIGINAL_CODE_ARCHIVED=NO' >> "$GITHUB_STEP_SUMMARY"
