@@ -141,9 +141,10 @@ function safeInboxMeta(inbox){
 }
 
 const ctx=new Context();
-let handle=null,unregister=null,disposeSessionObserver=null;
+let handle=null,unregister=null,disposeSessionObserver=null,originalSessionCommit=null;
 let promptError=null;
 const observedSessionEvents=[];
+const observedCommitAttempts=[];
 function safeObservedObject(value){
   if(!value||typeof value!=='object')return {type:typeof value};
   const meta={
@@ -233,6 +234,35 @@ try{
   if(!stored||stored!==handle.session)
     throw new Error('P99_SESSION_STORE_HANDLE_MISMATCH');
 
+  // Transparent diagnostic proxy: capture the exact event before the
+  // original Session.commit pipeline and then call the original unchanged.
+  // Never mutates event/entry and always rethrows the original error.
+  originalSessionCommit=handle.session.commit;
+  if(typeof originalSessionCommit!=='function')
+    throw new Error('P100_SESSION_COMMIT_NOT_CALLABLE');
+  handle.session.commit=function(event,entry){
+    const record={
+      event:safeObservedObject(event),
+      entry:entry&&typeof entry==='object'?{
+        type:'object',
+        keys:Object.keys(entry).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,30),
+        appending:typeof entry.appending==='boolean'?entry.appending:undefined,
+        announcing:typeof entry.announcing==='boolean'?entry.announcing:undefined,
+        detachRequested:typeof entry.detachRequested==='boolean'?entry.detachRequested:undefined
+      }:{type:typeof entry}
+    };
+    observedCommitAttempts.push(record);
+    try{
+      return originalSessionCommit.call(this,event,entry);
+    }catch(error){
+      record.threw={
+        type:String(error?.code||error?.name||'UNKNOWN').replace(/[^A-Za-z0-9_]/g,'').slice(0,80),
+        reason:safeReason(error)
+      };
+      throw error;
+    }
+  };
+
   const surfaceManager=handle.session?.surfaceManager;
   const projections=surfaceManager?.projections;
   log('SURFACE_MANAGER_META',JSON.stringify({
@@ -284,6 +314,7 @@ try{
     beforeRoles.filter(x=>x==='user').length;
 
   log('OBSERVED_SESSION_EVENT_META',JSON.stringify(observedSessionEvents.slice(-30)));
+  log('COMMIT_ATTEMPT_META',JSON.stringify(observedCommitAttempts.slice(-30)));
   log('AFTER_EVENTS',JSON.stringify(eventShape(afterEvents)));
   const committedDelta=Array.isArray(afterEvents)&&Array.isArray(beforeEvents)
     ?afterEvents.slice(beforeEvents.length):[];
@@ -328,6 +359,9 @@ try{
   log('NETWORK_ATTEMPTS',networkAttempts);
   process.exitCode=2;
 }finally{
+  if(handle?.session && typeof originalSessionCommit==='function'){
+    try{handle.session.commit=originalSessionCommit;}catch{}
+  }
   if(typeof disposeSessionObserver==='function')try{disposeSessionObserver();}catch{}
   if(typeof unregister==='function')try{unregister();}catch{}
   if(handle){
