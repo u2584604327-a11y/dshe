@@ -58,7 +58,15 @@ def scan(path):
       assert len(data)==member.size,"P114_MEMBER_BYTES"
       refs=data.count(b"executeToolCalls")
       if refs==0:continue
-      decl=bool(re.search(rb"\b(?:async\s+)?function\s+executeToolCalls\s*\(",data))
+      declaration=re.search(
+        rb"\b(?:async\s+)?function\s+executeToolCalls\s*\(([^)]{0,480})\)",data)
+      decl=declaration is not None
+      param_names=[]
+      if decl:
+        params=declaration.group(1).decode("utf-8","replace")
+        for raw_param in params.split(","):
+          value=raw_param.strip()
+          param_names.append(value if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]{0,80}",value) else "COMPLEX_OR_DEFAULT")
       assigned=bool(re.search(rb"\b(?:const|let|var)\s+executeToolCalls\b",data))
       invoked=len(re.findall(rb"\bexecuteToolCalls\s*\(",data))
       imported=bool(re.search(rb"\bimport\s*\{[^}]{0,1000}\bexecuteToolCalls\b",data,re.S))
@@ -70,6 +78,7 @@ def scan(path):
       matches.append({
         "path":name,"references":refs,"invocations":invoked,
         "functionDeclared":decl,"varDeclared":assigned,
+        "parameterNames":param_names[:12],
         "namedImported":imported,"imports":sorted(set(sources))[:12],
       })
   assert any("/dsh-agent-loop/" in r["path"] for r in matches),"P114_ORIGINAL_HELPER_NOT_FOUND"
@@ -80,6 +89,7 @@ def scan(path):
     print("P114_CALLSITE_REFS="+str(row["references"]))
     print("P114_CALLSITE_CALLS="+str(row["invocations"]))
     print("P114_CALLSITE_DECLARE="+str(row["functionDeclared"]).lower())
+    print("P114_CALLSITE_PARAMETER_NAMES="+",".join(row["parameterNames"]))
     print("P114_CALLSITE_IMPORT="+str(row["namedImported"]).lower())
     # Import names only (not executable source)
     print("P114_CALLSITE_MODULE_IMPORTS="+",".join(row["imports"]))
