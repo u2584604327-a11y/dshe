@@ -1,0 +1,87 @@
+name: P113 actual original AgentLoop ToolRuntime pending and SessionStore committed link (isolated)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p113_original_tool_pending_observation.mjs'
+      - 'host_candidate/p113_original_tool_pending_observation.test.mjs'
+      - 'host_candidate/p113_overlay_original_p101.py'
+      - '.github/workflows/p113-original-tool-pending-session-link.yml'
+permissions:
+  contents: read
+jobs:
+  original-source-locked-toolruntime-to-committed-session:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Unit gate forbids stale, spoofed or duplicate original call linkage
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test host_candidate/p113_original_tool_pending_observation.test.mjs
+          echo 'P113_ISOLATED_PENDING_OBSERVER_NEGATIVE_TESTS=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Download exact signed modified v138 as read-only original engine fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = 'u2584604327-a11y/dshe'
+          mkdir -p .p113private
+          gh release download dsh-baseline-v135dsh-baseline-v135 --repo "$GH_REPO" \
+            --pattern 'DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk' \
+            --dir .p113private
+          printf '%s  %s\n' \
+            3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 \
+            .p113private/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk | sha256sum -c -
+          echo 'P113_ORIGINAL_V138_SIGNED_APK_SHA256=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Extract exact original Cordis/AgentLoop/ToolRuntime/SessionStore closure into disposable directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p96_stream_owner/p96_extract_original_agent_runtime.py \
+            --original .p113private/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --out .p113private/agent-runtime
+          test -f .p113private/agent-runtime/node_modules/@deepseek-ai/dsh-tools/package.json
+          test -f .p113private/agent-runtime/node_modules/@deepseek-ai/dsh-session/package.json
+          cp host_candidate/p113_original_tool_pending_observation.mjs \
+            .p113private/agent-runtime/p113_original_tool_pending_observation.mjs
+          python3 host_candidate/p113_overlay_original_p101.py \
+            --source host_candidate/p96_stream_owner/p101_original_outer_tool_roundtrip.mjs \
+            --destination .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs
+      - name: Run ACTUAL original outer prompt to ToolRuntime to committed session result and continuation
+        shell: bash
+        run: |
+          set -euo pipefail
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 40s node .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs \
+            | tee .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P101_ORIGINAL_AUTOMATIC_TOOL_ROUNDTRIP=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P101_NO_NETWORK=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P113_ORIGINAL_TOOLRUNTIME_PENDING_TO_COMMITTED_SESSION=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P113_ORIGINAL_TOOLRUNTIME_PENDING_COUNT=1' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P113_ORIGINAL_TOOLRUNTIME_SESSION_IDENTITY=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P113_NATIVE_TOOL_AUTHORIZATION=NO' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P113_NATIVE_INDEPENDENT_PENDING_CALL_PROOF=NOT_PROVEN' .p113private/p113-evidence.log
+          echo 'P113_REAL_ORIGINAL_AGENTLOOP_TOOLRUNTIME_SESSION_PENDING_LINK=PASS_ISOLATED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P113_NATIVE_INDEPENDENT_SESSION_CALL_PROOF=NOT_PROVEN' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P113_PRODUCTION_ANDROID_BINDER_ORIGINAL_TOOL=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P113_ORIGINAL_APK_OR_SIGNING_MODIFIED=NO' >> "$GITHUB_STEP_SUMMARY"
+      - name: Delete exact original runtime temporary bytes
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p113private
+          echo 'P113_PRIVATE_ENGINE_BYTES_EXPORTED_OR_UPLOADED=NO' >> "$GITHUB_STEP_SUMMARY"
