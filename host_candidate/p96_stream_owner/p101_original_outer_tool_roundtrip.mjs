@@ -607,7 +607,7 @@ try{
     isError:resultMessage?.isError??null
   }));
   const resultMessageMatches=resultMessage?.role==='tool'&&
-    resultMessage?.callId==='call_p101_0001'&&resultMessage?.isError!==true;
+    resultMessage?.toolCallId==='call_p101_0001'&&resultMessage?.isError===false;
   const firstAssistantCalls=assistantEvents.length===2&&
     assistantEvents[0]?.data?.message?.content?.filter(b=>
       b?.type==='tool-call'&&b?.name==='read_synthetic_fixture'&&
