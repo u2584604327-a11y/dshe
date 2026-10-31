@@ -75,13 +75,13 @@ def safe_reference_origins(raw,pos,name):
     window_start=max(0,pos-10000)
     window=raw[window_start:pos]
     key=re.escape(name.encode("ascii"))
-    chain=rb"([A-Za-z_$][A-Za-z0-9_$]*(?:\\??\\.[A-Za-z_$][A-Za-z0-9_$]*){0,6})"
+    chain=rb"([A-Za-z_$][A-Za-z0-9_$]*(?:\??\.[A-Za-z_$][A-Za-z0-9_$]*){0,6})"
     rows=[]
     patterns=[
-        ("decl-call",rb"(?:const|let|var)\\s+"+key+rb"\\s*=\\s*(?:await\\s+)?"+chain+rb"\\s*\\("),
-        ("assign-call",rb"\\b"+key+rb"\\s*=\\s*(?:await\\s+)?"+chain+rb"\\s*\\("),
-        ("decl-ref",rb"(?:const|let|var)\\s+"+key+rb"\\s*=\\s*"+chain),
-        ("assign-ref",rb"\\b"+key+rb"\\s*=\\s*"+chain),
+        ("decl-call",rb"(?:const|let|var)\s+"+key+rb"\s*=\s*(?:await\s+)?"+chain+rb"\s*\("),
+        ("assign-call",rb"\b"+key+rb"\s*=\s*(?:await\s+)?"+chain+rb"\s*\("),
+        ("decl-ref",rb"(?:const|let|var)\s+"+key+rb"\s*=\s*"+chain),
+        ("assign-ref",rb"\b"+key+rb"\s*=\s*"+chain),
     ]
     for kind,pat in patterns:
         for m in re.finditer(pat,window):
@@ -122,13 +122,13 @@ def safe_second_arg(segment):
 
 def safe_field_value(segment,field):
     key=re.escape(field.encode("ascii"))
-    m=re.search(key+rb"\\s*:\\s*['\\\"]([A-Za-z0-9_./:-]{1,80})['\\\"]",segment)
+    m=re.search(key+rb"\s*:\s*['\"]([A-Za-z0-9_./:-]{1,80})['\"]",segment)
     if m:
         return {"kind":"literal","value":m.group(1).decode("utf-8","replace")}
-    m=re.search(key+rb"\\s*:\\s*([A-Za-z_$][A-Za-z0-9_$]*(?:\\??\\.[A-Za-z_$][A-Za-z0-9_$]*){0,5})",segment)
+    m=re.search(key+rb"\s*:\s*([A-Za-z_$][A-Za-z0-9_$]*(?:\??\.[A-Za-z_$][A-Za-z0-9_$]*){0,5})",segment)
     if m:
         return {"kind":"reference","value":m.group(1).decode("utf-8","replace").replace("?.",".")}
-    m=re.search(key+rb"\\s*:\\s*([\\[{])",segment)
+    m=re.search(key+rb"\s*:\s*([\[{])",segment)
     if m:
         return {"kind":"array" if m.group(1)==b"[" else "object"}
     return {"kind":"absent"}
