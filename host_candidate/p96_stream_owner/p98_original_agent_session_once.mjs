@@ -101,8 +101,11 @@ try{
        return /^(?:true|false|[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*){0,4}|['"][A-Za-z_$][A-Za-z0-9_$-]{0,31}['"])$/.test(v)
          ? v : 'COMPLEX_OR_UNSAFE';
      };
+     const calls=[...source.matchAll(/(?:this\.)?([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*\(/g)]
+       .map(x=>x[1]).filter(x=>!['if','for','while','switch','catch'].includes(x));
      return {name,arity:method.length,parameters,
        referencedFields:[...new Set(fields)].slice(0,45),
+       calledIdentifiers:[...new Set(calls)].slice(0,45),
        safeLiterals:[...new Set(safeLiterals)],
        sendTargetExpression:sendMatch?cleanExpr(sendMatch[1]):null,
        sendWakeupExpression:sendMatch?cleanExpr(sendMatch[2]):null,
@@ -127,6 +130,9 @@ try{
    log('FOLLOWUP_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'followup')));
    log('STEER_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'steer')));
    log('INJECT_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'inject')));
+   log('WAKE_DRIVER_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'wakeDriver')));
+   log('TURN_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'turn')));
+   log('STEP_METHOD_CONTRACT',JSON.stringify(safeMethodContract(handle,'step')));
    const currentInbox=handle.inbox.current();
    log('INBOX_CURRENT_RETURN_TYPE',Array.isArray(currentInbox)?'array':typeof currentInbox);
    log('INBOX_CURRENT_RETURN_CONSTRUCTOR',
