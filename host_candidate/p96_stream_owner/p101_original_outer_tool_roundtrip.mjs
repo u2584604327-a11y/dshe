@@ -268,7 +268,7 @@ try{
           yield {type:'block-start',index:0,blockType:'tool-call'};
           yield {type:'tool-call-delta',index:0,id:'call_p101_0001',
             name:'read_synthetic_fixture',argumentsDelta:'{"query":"fixture"}'};
-          yield {type:'block-end',index:0,block:{type:'toolCall',id:'call_p101_0001',name:'read_synthetic_fixture',arguments:{query:'fixture'}}};
+          yield {type:'block-end',index:0,block:{type:'tool-call',id:'call_p101_0001',name:'read_synthetic_fixture',arguments:{query:'fixture'}}};
           yield {type:'finish',reason:{kind:'tool-call'}};
         }else if(streamCalls===2){
           yield {type:'block-start',index:0,blockType:'text'};
