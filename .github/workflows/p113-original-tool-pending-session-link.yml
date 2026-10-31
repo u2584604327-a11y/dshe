@@ -142,7 +142,20 @@ jobs:
           done
           # P119 advisory: expose only bounded original denial terminal metadata.
           grep -E '^P99_PROMPT_ONCE_P119_DENIED_ORIGINAL_' .p113private/p116-deny.log || true
-          echo 'P119_DENIED_TURN_END_AND_PHASE=OBSERVATION_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          # Original SessionStore MUST commit exactly one error turn/end,
+          # retain the original live session, and return the agent to idle.
+          # This is genuine original Node handling, not Android UI rendering.
+          for marker in \
+            'P99_PROMPT_ONCE_P119_DENIED_ORIGINAL_TURN_END_COUNT=1' \
+            'P99_PROMPT_ONCE_P119_DENIED_ORIGINAL_TURN_END_KIND=error' \
+            'P99_PROMPT_ONCE_P119_DENIED_ORIGINAL_PROMPT_ERROR_PRESENT=NO' \
+            'P99_PROMPT_ONCE_P119_DENIED_ORIGINAL_PHASE_KIND=idle' \
+            'P99_PROMPT_ONCE_P119_DENIED_ORIGINAL_SESSIONSTORE_STILL_LIVE=YES'; do
+            grep -Fxq "$marker" .p113private/p116-deny.log
+          done
+          echo 'P119_ACTUAL_ORIGINAL_DENIED_TOOL_ONE_ERROR_TURN_END_AND_IDLE=PASS_CI_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P119_ORIGINAL_SESSIONSTORE_SURVIVES_DENIAL=PASS_CI_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P119_ANDROID_UI_ERROR_PRESENTATION=NOT_PROVEN' >> "$GITHUB_STEP_SUMMARY"
           # Explicitly report whether the original agent completed its turn
           # or took the error/abort path. Neither is silently called success.
           grep -E '^P99_PROMPT_ONCE_(HARNESS_RESULT|P101_COMPLETED_TURN_ONCE|P101_TOOL_EXECUTIONS|P101_TOOL_NOTIFICATIONS|P116_)' \
