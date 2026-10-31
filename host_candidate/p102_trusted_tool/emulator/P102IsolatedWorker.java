@@ -71,6 +71,18 @@ public final class P102IsolatedWorker extends Service {
             stage=4;
             Log.i(TAG,"P102_REPLAY_REQUEST_DENIED=PASS");
             Log.i(TAG,"P102_REAL_BINDER_NATIVE_TOOL_E2E=PASS");
+            // Post-terminal, post-replay diagnostic receipt ONLY. Never
+            // authorizes an operation or claims original DSH integration.
+            Message diagnostic=Message.obtain(null,
+              P102AndroidToolBinderPort.WORKER_DIAGNOSTIC_RECEIPT);
+            diagnostic.replyTo=inbox;
+            Bundle evidence=new Bundle();
+            evidence.putString("session",session);
+            evidence.putString("callId",CALL);
+            evidence.putString("status","TERMINAL_VALIDATED_REPLAY_DENIED");
+            diagnostic.setData(evidence);
+            host.send(diagnostic);
+            Log.i(TAG,"P102_WORKER_DIAGNOSTIC_RECEIPT_SENT=YES");
             Log.i(TAG,"P102_ORIGINAL_DSH_NODE_CONNECTED=NO");
           }
         }else if(msg.what==P102AndroidToolBinderPort.TOOL_TERMINAL){
