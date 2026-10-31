@@ -378,6 +378,16 @@ jobs:
           grep -Fxq 'P101_ADAPTER_STREAM_REFLECTION_ONLY=PASS' .p96private/p101-adapter-stream.log
           cat .p96private/p101-adapter-stream.log
           echo 'P101_ADAPTER_STREAM_RETURN_SHAPE=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          # Exact original normalized assistant chunk helper contract.
+          cp host_candidate/p96_stream_owner/p101_assistant_chunk_contract.mjs \
+            .p96private/agent-runtime/p101_assistant_chunk_contract.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 12s node .p96private/agent-runtime/p101_assistant_chunk_contract.mjs \
+            > .p96private/p101-assistant-chunks.log
+          grep -Fxq 'P101_ASSISTANT_CHUNK_REFLECTION_ONLY=PASS' .p96private/p101-assistant-chunks.log
+          cat .p96private/p101-assistant-chunks.log
+          echo 'P101_ASSISTANT_CHUNK_HELPERS=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p96_original_agent_runtime_probe.mjs \
             .p96private/agent-runtime/p96_original_agent_runtime_probe.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
