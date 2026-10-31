@@ -1,0 +1,70 @@
+name: Attribution and independent-modification notice (DSHAPP MIT)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - README.md
+      - NOTICE.md
+      - THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+      - .github/workflows/attribution-origin-and-modifications.yml
+permissions:
+  contents: read
+jobs:
+  verify-original-credit-and-independent-modifications:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Checkout authorized PR only; no signing or build
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify the full unmodified public upstream MIT license
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s README.md
+          test -s NOTICE.md
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          curl -fsSL --retry 2 --max-time 35 --max-filesize 25000 \
+            https://raw.githubusercontent.com/pht88888888/DSHAPP/4dddb12fd076d052e788a16638a658b7a447b669/LICENSE \
+            -o /tmp/dshapp-original-mit-license
+          cmp -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt /tmp/dshapp-original-mit-license
+          echo 'DSH_ORIGINAL_MIT_VERBATIM_WITH_COPYRIGHT=PASS'
+          echo 'DSH_ORIGINAL_MIT_VERBATIM_WITH_COPYRIGHT=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Fail closed if origin, license, unofficial status, or version caveat missing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('README.md').read_text(encoding='utf-8')
+          n=Path('NOTICE.md').read_text(encoding='utf-8')
+          checks={
+            'original project credit': 'pht88888888/DSHAPP',
+            'original MIT notice file': 'THIRD_PARTY_LICENSES/DSHAPP-MIT.txt',
+            'independent notice link': 'NOTICE.md',
+            'third party author': 'pht88888888',
+            'existing modified version': 'v138',
+            'planned but unreleased version': 'v139',
+          }
+          for label,value in checks.items():
+            assert value in r and value in n, 'DSH_ATTRIBUTION_MISSING_'+label.replace(' ','_').upper()
+          assert '非官方' in r and '二次修改' in r
+          assert 'unofficial' in n and 'independent' in n
+          assert 'NOT' in n and 'NOT' in r or ('尚未发布' in r and 'NOT' in n)
+          assert 'not independently proven' in n.lower() or 'not independently proven' in r.lower()
+          assert 'Termux' in n and 'DeepSeek' in n
+          assert 'cannot' in n.lower() or 'not' in n.lower()
+          # No root LICENSE is asserted for independently created files.
+          print('DSH_ORIGIN_AND_SECONDARY_MODIFICATION_NOTICE=PASS')
+          print('DSH_NOT_CLAIMING_ORIGINAL_PUBLISHER_OR_READY_V139=PASS')
+          print('DSH_UPSTREAM_THIRD_PARTY_LICENSE_SCOPE_NOT_BLANKET=PASS')
+          PY
+          echo 'DSH_ORIGIN_AND_SECONDARY_MODIFICATION_NOTICE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'DSH_ORIGINAL_SOURCE_BINARY_EQUALS_V138=NOT_PROVEN' >> "$GITHUB_STEP_SUMMARY"
+          echo 'DSH_PRODUCTION_P102_INTEGRATION=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'DSH_RELEASE_APK_COMPILED_SIGNED_OR_INSTALLED=NO' >> "$GITHUB_STEP_SUMMARY"
