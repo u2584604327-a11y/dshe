@@ -6,6 +6,7 @@ on:
       - 'host_candidate/p113_original_tool_pending_observation.mjs'
       - 'host_candidate/p113_original_tool_pending_observation.test.mjs'
       - 'host_candidate/p113_overlay_original_p101.py'
+      - 'host_candidate/p114_original_tool_dispatch_identifier_audit.py'
       - '.github/workflows/p113-original-tool-pending-session-link.yml'
 permissions:
   contents: read
@@ -46,6 +47,18 @@ jobs:
             3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 \
             .p113private/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk | sha256sum -c -
           echo 'P113_ORIGINAL_V138_SIGNED_APK_SHA256=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Audit exact v138 original AgentLoop executeToolCalls callsite without exposing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p114_original_tool_dispatch_identifier_audit.py \
+            --original .p113private/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee .p113private/p114-symbols.log
+          grep -Fxq 'P114_ORIGINAL_V138_ENGINE_SHA_LOCK=PASS' .p113private/p114-symbols.log
+          grep -Fxq 'P114_ORIGINAL_DISPATCH_IDENTIFIER_AUDIT=PASS' .p113private/p114-symbols.log
+          grep -Fxq 'P114_ORIGINAL_PENDING_CALL_TO_NATIVE_BINDER=NOT_WIRED' .p113private/p114-symbols.log
+          echo 'P114_ACTUAL_ORIGINAL_DISPATCH_CALLSITE_SYMBOLS=PASS_READONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P114_NATIVE_TOOLRUNTIME_PENDING_CALL_AUTHORITY=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
       - name: Extract exact original Cordis/AgentLoop/ToolRuntime/SessionStore closure into disposable directory
         shell: bash
         run: |
