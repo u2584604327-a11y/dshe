@@ -34,6 +34,14 @@ echo 'P102_REAL_BINDER_PREGRANT_NO_EXECUTION=PASS'
 COORDS=""
 UI_LAST_REASON="NOT_OBSERVED"
 for attempt in $(seq 1 15); do
+  # The accessibility dumper can briefly alter Activity focus. A stale
+  # enabled button from an earlier Binder session MUST NOT be clicked.
+  # Snapshot the native revoke/pending event counts before inspecting UI.
+  probe 'P102_PREAPPROVAL_REQUEST_GATE=PASS' || {
+    echo 'P102_PREAPPROVAL_MISSING_BEFORE_UI_DUMP=FAIL'; exit 1;
+  }
+  before_revoke="$(grep -Fc 'P102_NATIVE_BACKGROUND_REVOKE=PASS' .p102tmp/filtered-log.txt || true)"
+  before_pending="$(grep -Fc 'P102_REAL_BINDER_PENDING_NATIVE_APPROVAL=PASS' .p102tmp/filtered-log.txt || true)"
   if ! adb shell uiautomator dump /sdcard/p102-window.xml >/dev/null 2>&1; then
     UI_LAST_REASON="UI_DUMP_UNAVAILABLE"
   else
@@ -47,6 +55,10 @@ buttons=[n for n in root.iter() if n.attrib.get("content-desc")=="P102_TRUSTED_N
 if not buttons:raise SystemExit("P102_NATIVE_BUTTON_MISSING")
 if len(buttons)>1:raise SystemExit("P102_NATIVE_BUTTON_DUPLICATE_COUNT_"+str(len(buttons)))
 button=buttons[0]
+if button.attrib.get("package")!="com.dsh.p102.trustedtoolprobe":
+    raise SystemExit("P102_NATIVE_BUTTON_FOREIGN_PACKAGE")
+if button.attrib.get("clickable")!="true":
+    raise SystemExit("P102_NATIVE_BUTTON_NOT_CLICKABLE")
 if button.attrib.get("enabled")!="true":raise SystemExit("P102_NATIVE_BUTTON_NOT_ENABLED")
 bounds=button.attrib.get("bounds","")
 m=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",bounds)
@@ -56,8 +68,24 @@ if not(0<=a<c<=10000 and 0<=b<d<=10000):
     raise SystemExit("P102_NATIVE_BUTTON_RECT_INVALID")
 print((a+c)//2,(b+d)//2)
 ' 2> .p102tmp/ui-selection-reason.txt)"; then
-      UI_LAST_REASON="READY"
-      break
+      # Re-read native lifecycle markers AFTER the accessibility dump.
+      # If onStop/rebind changed the pending Binder session while the XML
+      # was captured, discard the coordinates and retry ONLY the read.
+      probe 'P102_PREAPPROVAL_REQUEST_GATE=PASS' || {
+        echo 'P102_PREAPPROVAL_LOST_AFTER_UI_DUMP=FAIL'; exit 1;
+      }
+      after_revoke="$(grep -Fc 'P102_NATIVE_BACKGROUND_REVOKE=PASS' .p102tmp/filtered-log.txt || true)"
+      after_pending="$(grep -Fc 'P102_REAL_BINDER_PENDING_NATIVE_APPROVAL=PASS' .p102tmp/filtered-log.txt || true)"
+      last_lifecycle="$(grep -E 'P102_(NATIVE_BACKGROUND_REVOKE|REAL_BINDER_PENDING_NATIVE_APPROVAL)=PASS' .p102tmp/filtered-log.txt | tail -n1 || true)"
+      if test "$before_revoke" != "$after_revoke" ||
+         test "$before_pending" != "$after_pending" ||
+         [[ "$last_lifecycle" != *'P102_REAL_BINDER_PENDING_NATIVE_APPROVAL=PASS'* ]]; then
+        UI_LAST_REASON="P102_UI_STALE_PENDING_OR_ACTIVITY_REVOKED"
+        COORDS=""
+      else
+        UI_LAST_REASON="READY"
+        break
+      fi
     else
       UI_LAST_REASON="$(head -n1 .p102tmp/ui-selection-reason.txt || true)"
       COORDS=""
