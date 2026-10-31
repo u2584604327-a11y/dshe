@@ -77,29 +77,6 @@ jobs:
       - name: Build ephemeral zero-permission real isolated Android Binder probe
         shell: bash
         run: bash host_candidate/p102_trusted_tool/emulator/build_emulator_only.sh
-      - name: Enable Android emulator hardware acceleration
-        shell: bash
-        run: if test -c /dev/kvm;then sudo chmod 666 /dev/kvm;fi
-      - name: Android35 real framework sendingUid native-click once/replay/background
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: default
-          arch: x86_64
-          profile: pixel_2
-          disable-animations: true
-          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
-          script: bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
-      - name: Android36 real framework isolated Messenger ACK and terminal regression
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 36
-          target: default
-          arch: x86_64
-          profile: pixel_2
-          disable-animations: true
-          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
-          script: bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
       - name: Verify standalone test APK identities and prepare phone artifact
         shell: bash
         run: |
@@ -151,17 +128,44 @@ jobs:
           echo 'P102_STANDALONE_ZERO_PERMISSION_APK=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P102_STANDALONE_DISPOSABLE_SIGNER_SHA256='"$cert" >> "$GITHUB_STEP_SUMMARY"
           echo 'P102_REAL_PHONE_INSTALLATION=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_ANDROID35_AND_36_NATIVE_UI_E2E=NOT_YET_CONFIRMED' >> "$GITHUB_STEP_SUMMARY"
           echo 'P102_ORIGINAL_DSH_AGENTLOOP_PRODUCTION=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload actual emulator-tested APK for optional Android phone lab
+      - name: Upload independently signed diagnostic APK after static safety gates
         uses: actions/upload-artifact@v4
         with:
-          name: P102-Standalone-Phone-Lab-${{ github.event.pull_request.head.sha }}
+          name: P102-Standalone-Phone-Diagnostic-Candidate-${{ github.event.pull_request.head.sha }}
           path: |
             .p102tmp/phone-upload/P102-Standalone-Binder-Lab-Android34plus.apk
             .p102tmp/phone-upload/SHA256SUMS.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
+      # Emulator E2E is a separate, stricter promotion gate AFTER a bounded
+      # phone diagnostic candidate exists. Artifact upload is not an E2E PASS.
+      # Do not treat a UI automation failure as permission to relax native gates.
+      - name: Enable Android emulator hardware acceleration
+        shell: bash
+        run: if test -c /dev/kvm;then sudo chmod 666 /dev/kvm;fi
+      - name: Android35 real framework sendingUid native-click once/replay/background
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
+      - name: Android36 real framework isolated Messenger ACK and terminal regression
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
       - name: Cleanup and forbid confusing candidate with original DSH
         if: always()
         shell: bash
@@ -172,5 +176,5 @@ jobs:
             echo 'P102_REAL_ANDROID_UID_E2E=CHECK_PRECEDING_STEP'
             echo 'P102_ENGINE_MANAGER_MAIN_ACTIVITY=UNCHANGED'
             echo 'P102_PRODUCTION_DSH_APK_SIGNING_RELEASE=NONE'
-            echo 'P102_DISPOSABLE_STANDALONE_PHONE_LAB_ARTIFACT=YES'
+            echo 'P102_DIAGNOSTIC_ARTIFACT=CHECK_EARLIER_UPLOAD_NOT_E2E_PASS'
           } >> "$GITHUB_STEP_SUMMARY"
