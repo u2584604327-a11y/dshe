@@ -87,15 +87,23 @@ export class P102OriginalToolBinderBoundary {
         return Object.freeze({value:'fixture-read-success'});
       })();
       const timeout=new Promise((_,reject)=>{
-        timer=setTimeout(()=>reject(Error('P102_NATIVE_RESULT_TIMEOUT_UNKNOWN_OUTCOME')),
-                         this.#deadlineMs);
+        timer=setTimeout(()=>{
+          // A deadline is a revocation boundary, not merely a rejected caller.
+          // Late verifier/bind completions must not start a native request.
+          this.#cancelled=true;
+          reject(Error('P102_NATIVE_RESULT_TIMEOUT_UNKNOWN_OUTCOME'));
+        },this.#deadlineMs);
       });
       const result=await Promise.race([run,timeout]);
       if(this.#cancelled)throw Error('P102_REVOKED');
       this.#state='COMPLETED';
       return result;
     }catch(error){
-      if(!this.#cancelled)this.#state='BLOCKED_NO_RETRY';
+      // A rejected/expired call must also invalidate its still-running async
+      // continuation. Preserve explicit foreground/background REVOKED state.
+      const explicitlyRevoked=this.#state==='REVOKED';
+      this.#cancelled=true;
+      if(!explicitlyRevoked)this.#state='BLOCKED_NO_RETRY';
       throw error;
     }finally{
       clearTimeout(timer);
