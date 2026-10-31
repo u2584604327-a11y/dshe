@@ -88,8 +88,15 @@ def inspect(apk:pathlib.Path):
                     value2=sm.group(1).decode("utf-8","replace")
                     if re.fullmatch(r"[A-Za-z][A-Za-z0-9_./:-]{1,80}",value2):
                         safe_literals.append(value2)
+                arg_match=re.match(
+                    rb"\\s*([A-Za-z_$][A-Za-z0-9_$]*(?:\\??\\.[A-Za-z_$][A-Za-z0-9_$]*){0,5})\\s*\\)",
+                    raw[m.end():m.end()+240])
+                includes_arg=None
+                if arg_match:
+                    includes_arg=arg_match.group(1).decode("utf-8","replace").replace("?.",".")
                 details.append({
                     "receiver":value,
+                    "includesArgument":includes_arg,
                     "offset":m.start(),
                     "nearestClasses":class_candidates[-6:],
                     "nearestAssignedClasses":assigned_class_candidates[-6:],
