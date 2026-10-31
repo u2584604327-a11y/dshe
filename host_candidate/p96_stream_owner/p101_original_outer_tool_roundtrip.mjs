@@ -247,7 +247,15 @@ try{
         inputModalities:['text'],systemPromptUpdate:'in-history',
         toolUpdate:'addition-only',defaultMaxTokens:128
       };
-      return {model,stream:async function*(){
+      return {model,stream:async function*(options){
+        const defs=Array.isArray(options?.tools)?options.tools:[];
+        log('P101_STREAM_OPTION_SHAPE',JSON.stringify({
+          keys:options&&typeof options==='object'?Object.keys(options).slice(0,30):[],
+          toolsType:Array.isArray(options?.tools)?'array':typeof options?.tools,
+          toolsCount:defs.length,
+          toolNames:defs.map(x=>String(x?.name??'UNKNOWN').slice(0,60)).slice(0,20),
+          messagesCount:Array.isArray(options?.messages)?options.messages.length:null
+        }));
         streamCalls++;
         if(streamCalls===1){
           yield {type:'block-start',index:0,blockType:'tool-call'};
@@ -498,6 +506,27 @@ try{
   log('P101_TOOL_NOTIFICATIONS',toolNotifications);
   const toolAppend=observedAppendAttempts.filter(x=>/tool/i.test(x.eventType));
   log('P101_ORIGINAL_TOOL_APPEND_META',JSON.stringify(toolAppend));
+  const assistantEvents=committedDelta.filter(x=>x?.type==='assistant/message');
+  log('P101_ASSISTANT_BLOCK_META',JSON.stringify(assistantEvents.map(x=>{
+    const m=x?.data?.message;
+    const blocks=Array.isArray(m?.content)?m.content:[];
+    return {
+      messageKeys:m&&typeof m==='object'?Object.keys(m).slice(0,30):[],
+      contentType:Array.isArray(m?.content)?'array':typeof m?.content,
+      blocks:blocks.map(b=>({
+        type:typeof b?.type==='string'?b.type:null,
+        name:typeof b?.name==='string'?b.name:null,
+        idType:typeof b?.id,
+        argumentType:typeof b?.arguments,
+        keys:b&&typeof b==='object'?Object.keys(b).slice(0,20):[]
+      })).slice(0,15),
+      streamType:Array.isArray(x?.data?.stream)?'array':typeof x?.data?.stream
+    };
+  })));
+  log('P101_TURN_END_REASONS',JSON.stringify(committedDelta.filter(x=>x?.type==='turn/end')
+    .map(x=>({kind:x?.data?.reason?.kind??null,keys:x?.data?.reason&&typeof x.data.reason==='object'
+      ?Object.keys(x.data.reason).slice(0,15):[]}))));
+
   const p101pass=committedUserEvent&&prepareCalls===2&&streamCalls===2&&
     toolExecutions===1&&toolNotifications===1&&networkAttempts===0&&
     workspaceAccesses===0&&saveSelectionCalls===0&&listenerArgShapePass;
