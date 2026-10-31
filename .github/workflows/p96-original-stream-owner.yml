@@ -252,15 +252,19 @@ jobs:
           echo 'P99_ORIGINAL_DIRECT_DEPENDENCY_BOOT_DIAGNOSTIC=PASS' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p99_session_controller_readiness.mjs \
             .p96private/agent-runtime/p99_session_controller_readiness.mjs
+          set +e
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
             timeout 22s node .p96private/agent-runtime/p99_session_controller_readiness.mjs \
-            > .p96private/p99-controller-ready.log
+            > .p96private/p99-controller-ready.log 2>&1
+          p99_ready_rc=$?
+          set -e
+          cat .p96private/p99-controller-ready.log
+          test "$p99_ready_rc" -eq 0
           grep -Fxq 'P99_CONTROLLER_READY_NO_PROMPT_NO_MODEL_NO_TOOL=PASS' \
             .p96private/p99-controller-ready.log
           grep -Fxq 'P99_CONTROLLER_READY_NETWORK_ATTEMPTS=0' \
             .p96private/p99-controller-ready.log
-          cat .p96private/p99-controller-ready.log
           echo 'P99_ORIGINAL_SESSION_CONTROLLER_READINESS_DIAGNOSTIC=PASS' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p96_original_agent_runtime_probe.mjs \
             .p96private/agent-runtime/p96_original_agent_runtime_probe.mjs
