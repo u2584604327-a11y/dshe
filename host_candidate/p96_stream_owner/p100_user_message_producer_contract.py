@@ -102,6 +102,78 @@ def safe_reference_origins(raw,pos,name):
         if len(out)>=5: break
     return out
 
+def split_call_args(raw,open_pos,max_scan=5000):
+    args=[]; start=open_pos+1; i=start
+    paren=1; brace=0; bracket=0; quote=None; escaped=False
+    limit=min(len(raw),open_pos+max_scan)
+    while i<limit:
+        ch=raw[i]
+        if quote is not None:
+            if escaped:
+                escaped=False
+            elif ch==92:
+                escaped=True
+            elif ch==quote:
+                quote=None
+            i+=1; continue
+        if ch in (34,39,96):
+            quote=ch; i+=1; continue
+        if ch==40:
+            paren+=1
+        elif ch==41:
+            paren-=1
+            if paren==0:
+                args.append(raw[start:i].strip())
+                return args
+        elif ch==123:
+            brace+=1
+        elif ch==125:
+            brace=max(0,brace-1)
+        elif ch==91:
+            bracket+=1
+        elif ch==93:
+            bracket=max(0,bracket-1)
+        elif ch==44 and paren==1 and brace==0 and bracket==0:
+            args.append(raw[start:i].strip()); start=i+1
+        i+=1
+    return []
+
+SAFE_EXPR_TOKEN=re.compile(
+    rb"[A-Za-z_$][A-Za-z0-9_$]{0,64}|\d+|===|!==|==|!=|<=|>=|\?\?|\?|\:|\.|\[|\]|\{|\}|['\"][A-Za-z0-9_./:-]{1,80}['\"]")
+
+def focus_field_tokens(expr,field):
+    key=field.encode("ascii")
+    pos=expr.find(key)
+    if pos<0: return []
+    colon=expr.find(b":",pos+len(key))
+    if colon<0 or colon-pos>120: return []
+    sample=expr[colon+1:colon+241]
+    return [m.group(0).decode("utf-8","replace")
+            for m in SAFE_EXPR_TOKEN.finditer(sample)][:60]
+
+def safe_expr_shape(expr):
+    s=expr.strip()
+    if not s: return {"kind":"empty"}
+    if s.startswith(b"{"):
+        keys=sorted(set(m.group(1).decode("utf-8","replace") for m in
+            re.finditer(rb"(?:^|[,\{])\s*([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*:",s)))[:40]
+        return {
+            "kind":"object",
+            "keys":keys,
+            "surfaceOpTokens":focus_field_tokens(s,"surfaceOp"),
+            "sourceEventSeqsTokens":focus_field_tokens(s,"sourceEventSeqs")
+        }
+    if s.startswith(b"["): return {"kind":"array"}
+    m=re.fullmatch(rb"['\"]([A-Za-z0-9_./:-]{1,80})['\"]",s)
+    if m: return {"kind":"literal","value":m.group(1).decode("utf-8","replace")}
+    m=re.match(rb"([A-Za-z_$][A-Za-z0-9_$]*(?:\??\.[A-Za-z_$][A-Za-z0-9_$]*){0,6})",s)
+    if m:
+        value=m.group(1).decode("utf-8","replace").replace("?.",".")
+        rest=s[m.end():].lstrip()
+        return {"kind":"call" if rest.startswith(b"(") else "reference","value":value}
+    return {"kind":"other","tokens":[m.group(0).decode("utf-8","replace")
+        for m in SAFE_EXPR_TOKEN.finditer(s[:300])][:50]}
+
 def safe_second_arg(segment):
     s=segment.lstrip()
     if not s.startswith(b","):
@@ -146,7 +218,10 @@ def inspect(apk):
         if index+1<len(matches):
             end=min(end,matches[index+1].start())
         segment=raw[m.end():end]
-        second_arg=safe_second_arg(segment)
+        open_pos=raw.find(b"(",m.start(),m.end())
+        call_args=split_call_args(raw,open_pos) if open_pos>=0 else []
+        call_arg_shapes=[safe_expr_shape(arg) for arg in call_args[:6]]
+        second_arg=call_arg_shapes[1] if len(call_arg_shapes)>1 else safe_second_arg(segment)
         origins=[]
         if second_arg.get("kind")=="reference":
             origins=safe_reference_origins(raw,m.start(),second_arg.get("value",""))
@@ -156,6 +231,8 @@ def inspect(apk):
             "nearestAssignedClasses":classes,
             "nearestMethodSignatures":methods,
             "secondArgOrigins":origins,
+            "callArgCount":len(call_args),
+            "callArgShapes":call_arg_shapes,
             "argumentShapes":{
                 "secondArg":second_arg,
                 "surfaceOp":safe_field_value(segment,"surfaceOp"),
