@@ -58,7 +58,7 @@ async function attach(label,Class,config={}){
   try{
     await Promise.race([
       ctx.plugin(Class,config),
-      new Promise((_,reject)=>setTimeout(()=>reject(new Error('PLUGIN_TIMEOUT')),1800))
+      new Promise((_,reject)=>setTimeout(()=>reject(new Error('PLUGIN_TIMEOUT')),650))
     ]);
     attached.push(label);
     log('PLUGIN_'+label,JSON.stringify({status:'ATTACHED'}));
