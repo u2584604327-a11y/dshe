@@ -7,7 +7,7 @@ from p96_original_engine_owner import SOURCE_BYTES, SOURCE_SHA, file_hash, requi
 
 ROOT="node_modules/@deepseek-ai/"
 TOKENS=(b"isReplacementSurfaceEvent",b"sourceEventSeqs")
-MAX_MEMBER=4_000_000
+MAX_MEMBER=12*1024*1024
 SAFE_LITERAL=re.compile(rb"""['"]([A-Za-z][A-Za-z0-9_./:-]{1,80})['"]""")
 FN_PATTERNS=(
     re.compile(rb"function\s+([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*\("),
