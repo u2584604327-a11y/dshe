@@ -368,6 +368,16 @@ jobs:
           cat .p96private/p101-runtime-contract.log
           echo 'P101_EXACT_ORIGINAL_TOOL_MODEL_CONTRACT=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
           echo 'P101_AUTOMATIC_TOOL_RESULT_CONTINUATION=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
+          # P101 precise original adapterCall.stream and return-key shape.
+          cp host_candidate/p96_stream_owner/p101_adapter_stream_contract.mjs \
+            .p96private/agent-runtime/p101_adapter_stream_contract.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 12s node .p96private/agent-runtime/p101_adapter_stream_contract.mjs \
+            > .p96private/p101-adapter-stream.log
+          grep -Fxq 'P101_ADAPTER_STREAM_REFLECTION_ONLY=PASS' .p96private/p101-adapter-stream.log
+          cat .p96private/p101-adapter-stream.log
+          echo 'P101_ADAPTER_STREAM_RETURN_SHAPE=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p96_original_agent_runtime_probe.mjs \
             .p96private/agent-runtime/p96_original_agent_runtime_probe.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
