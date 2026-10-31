@@ -4,6 +4,7 @@ on:
     types: [opened, synchronize]
     paths:
       - 'host_candidate/p108_original_host_epoch_patch.py'
+      - 'host_candidate/p108_original_host_gate_probe/P108GateProbe.java'
       - '.github/workflows/p108-original-host-epoch-compile.yml'
 permissions:
   contents: read
@@ -89,3 +90,18 @@ jobs:
           echo 'P108_PATCHED_ORIGINAL_HOST_KOTLIN_COMPILE=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'P108_ANY_SIGNED_OR_INSTALLED_APK=NO' >> "$GITHUB_STEP_SUMMARY"
           echo 'P108_V138_SOURCE_AND_SIGNING_EQUIVALENCE=NOT_PROVEN' >> "$GITHUB_STEP_SUMMARY"
+      - name: Execute real compiled Kotlin epoch and fail-closed JVM behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          class_path="$(find original/app/build -type f \
+            -path '*/com/dsh/android/P108OriginalOwnerEpochGate.class' \
+            -print -quit)"
+          test -s "$class_path"
+          classes="${class_path%/com/dsh/android/P108OriginalOwnerEpochGate.class}"
+          mkdir -p /tmp/p108-probe-classes
+          javac -d /tmp/p108-probe-classes \
+            changes/host_candidate/p108_original_host_gate_probe/P108GateProbe.java
+          java -cp "$classes:/tmp/p108-probe-classes" P108GateProbe
+          echo 'P108_ACTUAL_COMPILED_KOTLIN_LIFECYCLE_DENY_TEST=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P108_PRODUCTION_ORIGINAL_NODE_BINDER=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
