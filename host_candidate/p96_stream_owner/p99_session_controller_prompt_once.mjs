@@ -29,7 +29,7 @@ import http from 'node:http';
 import https from 'node:https';
 
 let networkAttempts=0,prepareCalls=0,workspaceAccesses=0;
-let selectionCalls=0,saveSelectionCalls=0;
+let selectionCalls=0,saveSelectionCalls=0,workspaceArchiveReads=0,workspaceArchiveSize=null;
 const deny=()=>{networkAttempts++;throw new Error('P99_NETWORK_DENIED');};
 globalThis.fetch=deny;
 net.Socket.prototype.connect=deny;
@@ -56,7 +56,17 @@ class P99AgentDefaultModelBoundary extends Service {
   }
 }
 class P99WorkspaceBoundary extends Service {
-  constructor(ctx){super(ctx,'workspaceRegistry');}
+  constructor(ctx){
+    super(ctx,'workspaceRegistry');
+    // Fresh isolated P99 workspace has no archived sessions. Test-only
+    // peripheral state; never a forged original session or surface event.
+    this._archivedSessionIds=Object.freeze([]);
+  }
+  get archivedSessionIds(){
+    workspaceArchiveReads++;
+    workspaceArchiveSize=this._archivedSessionIds.length;
+    return this._archivedSessionIds;
+  }
   _deny(){workspaceAccesses++;throw new Error('P99_WORKSPACE_BOUNDARY_ACCESSED');}
   get(){return this._deny();}
   list(){return this._deny();}
@@ -393,6 +403,8 @@ try{
   log('SAVE_SELECTION_CALLS',saveSelectionCalls);
   log('MODEL_PREPARE_CALLS',prepareCalls);
   log('WORKSPACE_ACCESSES',workspaceAccesses);
+  log('WORKSPACE_ARCHIVE_READS',workspaceArchiveReads);
+  log('WORKSPACE_ARCHIVE_IDS_COUNT',workspaceArchiveSize);
   log('NETWORK_ATTEMPTS',networkAttempts);
 
   const committedUserEvent=committedDelta.some(event=>{
