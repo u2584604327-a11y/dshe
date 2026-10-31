@@ -116,9 +116,6 @@ public final class P102TrustedToolGateTest {
     check(lost.gate.onTrustedNativeApproval("disconnect")==P102TrustedToolGate.Decision.REJECTED,
       "disconnect_late_approval_denied");
 
-    Lab failure=new Lab(){
-      // Intentional fixture failure is covered below with a direct gate.
-    };
     final List<P71ToolReplyOnce.Terminal> failedReplies=new ArrayList<>();
     P102TrustedToolGate rejectedExecutor=new P102TrustedToolGate(
       UID,SESSION,new Clock(),u->u==UID,(name,arguments)->false,failedReplies::add);
