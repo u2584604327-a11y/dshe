@@ -69,6 +69,38 @@ def window_meta(raw,pos,radius=2600):
         "mentionsSourceEventSeqs":b"sourceEventSeqs" in window,
     }
 
+def safe_reference_origins(raw,pos,name):
+    if not re.fullmatch(SAFE_NAME,name):
+        return []
+    window_start=max(0,pos-10000)
+    window=raw[window_start:pos]
+    key=re.escape(name.encode("ascii"))
+    chain=rb"([A-Za-z_$][A-Za-z0-9_$]*(?:\\??\\.[A-Za-z_$][A-Za-z0-9_$]*){0,6})"
+    rows=[]
+    patterns=[
+        ("decl-call",rb"(?:const|let|var)\\s+"+key+rb"\\s*=\\s*(?:await\\s+)?"+chain+rb"\\s*\\("),
+        ("assign-call",rb"\\b"+key+rb"\\s*=\\s*(?:await\\s+)?"+chain+rb"\\s*\\("),
+        ("decl-ref",rb"(?:const|let|var)\\s+"+key+rb"\\s*=\\s*"+chain),
+        ("assign-ref",rb"\\b"+key+rb"\\s*=\\s*"+chain),
+    ]
+    for kind,pat in patterns:
+        for m in re.finditer(pat,window):
+            value=m.group(1).decode("utf-8","replace").replace("?.",".")
+            rows.append({
+                "kind":kind,
+                "value":value,
+                "distance":pos-(window_start+m.start())
+            })
+    rows.sort(key=lambda row:row["distance"])
+    out=[]
+    seen=set()
+    for row in rows:
+        sig=(row["kind"],row["value"])
+        if sig in seen: continue
+        seen.add(sig); out.append(row)
+        if len(out)>=5: break
+    return out
+
 def safe_second_arg(segment):
     s=segment.lstrip()
     if not s.startswith(b","):
@@ -113,13 +145,18 @@ def inspect(apk):
         if index+1<len(matches):
             end=min(end,matches[index+1].start())
         segment=raw[m.end():end]
+        second_arg=safe_second_arg(segment)
+        origins=[]
+        if second_arg.get("kind")=="reference":
+            origins=safe_reference_origins(raw,m.start(),second_arg.get("value",""))
         appends.append({
             "eventType":m.group(1).decode("utf-8","replace"),
             "offset":m.start(),
             "nearestAssignedClasses":classes,
             "nearestMethodSignatures":methods,
+            "secondArgOrigins":origins,
             "argumentShapes":{
-                "secondArg":safe_second_arg(segment),
+                "secondArg":second_arg,
                 "surfaceOp":safe_field_value(segment,"surfaceOp"),
                 "sourceEventSeqs":safe_field_value(segment,"sourceEventSeqs"),
                 "message":safe_field_value(segment,"message"),
