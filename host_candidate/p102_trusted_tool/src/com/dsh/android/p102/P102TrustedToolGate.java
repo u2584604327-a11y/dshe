@@ -104,9 +104,9 @@ public final class P102TrustedToolGate {
     try{ok=executor.executeFixedRead(TOOL,FIXED_ARGS);}
     catch(RuntimeException ignored){ok=false;}
     if(ok&&!originalCallValid(originalSessionId,pendingCallId)){
-      pending.executorConfirmedFailure("ORIGINAL_TURN_STALE_AFTER_EXECUTION");
+      pending.executorDispatchedOutcomeUnknown("ORIGINAL_TURN_STALE_AFTER_EXECUTION");
     }else if(ok)pending.executorConfirmedSuccess();
-    else pending.executorConfirmedFailure("EXECUTOR_REJECTED");
+    else pending.executorDispatchedOutcomeUnknown("EXECUTOR_REJECTED");
     dead=true;
     return Decision.DISPATCHED;
   }
