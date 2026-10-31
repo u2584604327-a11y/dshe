@@ -1,0 +1,114 @@
+name: P110 original EngineManager actual Process generation (deny tools; no APK)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p110_original_engine_process_epoch_patch.py'
+      - '.github/workflows/p110-original-engine-process-epoch.yml'
+      - 'host_candidate/p109_original_native_port_source_patch.py'
+      - 'host_candidate/p108_original_host_epoch_patch.py'
+permissions:
+  contents: read
+jobs:
+  original-engine-process-owner-compile-and-lifecycle:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ORIGINAL_SHA: 4dddb12fd076d052e788a16638a658b7a447b669
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: changes
+      - uses: actions/checkout@v4
+        with:
+          repository: pht88888888/DSHAPP
+          ref: 4dddb12fd076d052e788a16638a658b7a447b669
+          persist-credentials: false
+          path: original
+      - name: Verify original MIT license and apply only exact source overlays
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original rev-parse HEAD)" = "$ORIGINAL_SHA"
+          cmp original/LICENSE changes/THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          python3 changes/host_candidate/p108_original_host_epoch_patch.py --upstream-dir original
+          python3 changes/host_candidate/p109_original_native_port_source_patch.py \
+            --upstream-dir original --changes-dir changes
+          python3 changes/host_candidate/p110_original_engine_process_epoch_patch.py \
+            --upstream-dir original
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          root=Path('original')
+          modified=subprocess.check_output(
+              ['git','-C','original','diff','--name-only'],text=True).splitlines()
+          added=subprocess.check_output(
+              ['git','-C','original','ls-files','--others','--exclude-standard'],
+              text=True).splitlines()
+          changed=set(modified+added)
+          expected={
+              'app/src/main/java/com/dsh/android/MainActivity.kt',
+              'app/src/main/java/com/dsh/android/EngineManager.kt',
+              'app/src/main/java/com/dsh/android/P108OriginalOwnerEpochGate.kt',
+              'app/src/main/java/com/dsh/android/P109OriginalToolHostBoundary.kt',
+              'app/src/main/java/com/dsh/android/p110/P110OriginalProcessEpoch.java',
+              'app/src/main/java/com/dsh/android/p71/P71ToolReplyOnce.java',
+              'app/src/main/java/com/dsh/android/p102/P102TrustedToolGate.java',
+              'app/src/main/java/com/dsh/android/p102/P102AndroidToolBinderPort.java',
+          }
+          assert changed==expected,('P110_UNAUTHORIZED_ORIGINAL_FILE_CHANGE',sorted(changed))
+          engine=(root/'app/src/main/java/com/dsh/android/EngineManager.kt').read_text()
+          activity=(root/'app/src/main/java/com/dsh/android/MainActivity.kt').read_text()
+          boundary=(root/'app/src/main/java/com/dsh/android/P109OriginalToolHostBoundary.kt').read_text()
+          assert engine.count('p110OriginalProcessEpoch.onProcessStarted(proc)')==1
+          assert engine.count('p110OriginalProcessEpoch.onAllProcessesStopped()')==1
+          assert engine.count('p110OriginalProcessEpoch.onProcessStopped(proc)')==1
+          assert engine.count('originalProcessEpochForNativeDiagnostics()')==1
+          assert activity.count('p108OriginalOwnerEpoch.observeEngineState')==1
+          assert activity.count('p109TrustedToolHost.onOriginalEngineStateChanged()')==1
+          assert 'false // Original still-live SessionStore' in boundary
+          assert 'false // No device tool execution' in boundary
+          assert 'onTrustedServiceBindingInitiated' not in boundary
+          assert 'trustedInbox()' not in boundary
+          assert 'override fun onBind(intent: Intent?): IBinder? = null' in (
+              root/'app/src/main/java/com/dsh/android/EngineService.kt').read_text()
+          print('P110_EXACT_REAL_ORIGINAL_PROCESS_SOURCE_BOUNDARY=PASS')
+          print('P110_UNVERIFIED_ORIGINAL_CALL_AND_EXECUTOR_DEFAULT_DENY=PASS')
+          print('P110_PRODUCTION_TOOLRUNTIME_TO_BINDER=NOT_WIRED')
+          PY
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Compile actual original Kotlin EngineManager and Java process owner
+        shell: bash
+        working-directory: original
+        run: |
+          set -euo pipefail
+          test ! -e keystore.properties
+          test ! -e dsh-release.jks
+          gradle --no-daemon --console=plain --max-workers=2 \
+            :app:compileSystemDebugKotlin :app:compileSystemDebugJavaWithJavac
+          echo 'P110_REAL_ORIGINAL_ENGINEMANAGER_KOTLIN_JAVA_COMPILE=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Execute compiled process identity, stale EOF, stop and reentry probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 changes/host_candidate/p110_original_engine_process_epoch_patch.py \
+            --upstream-dir original --selftest
+          echo 'P110_JAVA_PROCESS_OWNER_IDENTITY_AND_REVOCATION_PROBE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P110_ACTIVITY_EPOCH_NOT_ENGINE_PROCESS_IDENTITY=CONFIRMED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P110_ORIGINAL_SESSIONSTORE_PENDING_CALL_NATIVE_PROOF=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P110_NATIVE_APPROVAL_OR_TOOL_EXECUTION=DENIED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P110_PRODUCTION_WORKER_BINDER=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P110_SIGNED_APK_OR_DEVICE_INSTALL=NONE' >> "$GITHUB_STEP_SUMMARY"
