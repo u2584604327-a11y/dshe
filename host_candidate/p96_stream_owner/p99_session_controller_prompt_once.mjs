@@ -146,6 +146,9 @@ let promptError=null;
 const observedSessionEvents=[];
 const observedCommitAttempts=[];
 const observedAppendAttempts=[];
+const observedListenerTiming=[];
+let observerPhase='boot';
+let observedSessionIdentity=null;
 function safeObservedObject(value){
   if(!value||typeof value!=='object')return {type:typeof value};
   const meta={
@@ -220,6 +223,20 @@ try{
   if(typeof ctx.on==='function'){
     disposeSessionObserver=ctx.on('session/event',(...args)=>{
       observedSessionEvents.push(args.slice(0,5).map(safeObservedObject));
+      const [originSession,event]=args;
+      observedListenerTiming.push({
+        order:observedListenerTiming.length,
+        phase:observerPhase,
+        argCount:args.length,
+        sessionMatchesHandle:observedSessionIdentity===null?'not-yet-created':originSession===observedSessionIdentity,
+        originSessionType:typeof originSession,
+        eventType:typeof event?.type==='string'?event.type.slice(0,80):typeof event?.type,
+        eventSeq:typeof event?.seq==='number'?event.seq:null,
+        surfaceOp:typeof event?.surfaceOp==='string'?event.surfaceOp.slice(0,40):null,
+        sourceEventSeqsType:Array.isArray(event?.sourceEventSeqs)?'array':typeof event?.sourceEventSeqs,
+        sourceEventSeqsCount:Array.isArray(event?.sourceEventSeqs)?event.sourceEventSeqs.length:null,
+        stackFunctions:safeStackFunctions(new Error('P100_LISTENER_ONLY')).slice(0,6)
+      });
     });
   }
 
@@ -230,7 +247,10 @@ try{
     throw new Error('P99_SESSION_CONTROLLER_NOT_RESOLVED');
 
   // Exact original AgentLoop session.
+  observerPhase='creating-session';
   handle=await ctx.get('agentLoop').create('p99_session_controller_once');
+  observedSessionIdentity=handle.session;
+  observerPhase='session-created';
   const stored=ctx.get('sessions').get(handle.id);
   if(!stored||stored!==handle.session)
     throw new Error('P99_SESSION_STORE_HANDLE_MISMATCH');
@@ -323,6 +343,7 @@ try{
     clientTimeZone:'UTC'
   };
   try{
+    observerPhase='prompt-running';
     await Promise.race([
       controller.prompt(request,new AbortController().signal),
       new Promise((_,reject)=>setTimeout(()=>reject(new Error('P99_PROMPT_TIMEOUT')),2500))
@@ -333,6 +354,7 @@ try{
     log('PROMPT_ERROR_REASON',safeReason(e));
   }
 
+  observerPhase='prompt-settled';
   // Allow only already-scheduled in-memory state propagation.
   await new Promise(resolve=>setTimeout(resolve,30));
 
@@ -346,6 +368,11 @@ try{
     beforeRoles.filter(x=>x==='user').length;
 
   log('OBSERVED_SESSION_EVENT_META',JSON.stringify(observedSessionEvents.slice(-30)));
+  log('LISTENER_TIMING_META',JSON.stringify(observedListenerTiming.slice(-30)));
+  const listenerArgShapePass=observedListenerTiming.length>0&&
+    observedListenerTiming.every(record=>record.sessionMatchesHandle===true&&
+      record.argCount>=2&&typeof record.eventType==='string'&&record.eventSeq!==null);
+  log('LISTENER_ARGUMENT_SHAPE',listenerArgShapePass?'PASS':'FAIL');
   log('COMMIT_ATTEMPT_META',JSON.stringify(observedCommitAttempts.slice(-30)));
   log('APPEND_ATTEMPT_META',JSON.stringify(observedAppendAttempts.slice(-30)));
   log('AFTER_EVENTS',JSON.stringify(eventShape(afterEvents)));
