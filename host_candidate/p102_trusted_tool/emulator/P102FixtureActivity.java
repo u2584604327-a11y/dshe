@@ -36,7 +36,12 @@ public final class P102FixtureActivity extends Activity {
         int n=trustedExecCount.incrementAndGet();
         Log.i(TAG,"P102_TRUSTED_EXECUTION_COUNT="+n);
         return n==1;
-      });
+      },
+      // Emulator fixture only. Production MUST validate against the
+      // exact original live SessionStore/ToolRuntime, never this literal.
+      (originalSessionId,originalCallId)->
+        "p99_session_controller_once".equals(originalSessionId)&&
+        "call_p102_e2e".equals(originalCallId));
   private Messenger isolated;
   private boolean bound;
   private final ServiceConnection connection=new ServiceConnection(){
