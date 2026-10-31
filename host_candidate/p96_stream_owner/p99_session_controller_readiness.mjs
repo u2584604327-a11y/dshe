@@ -1,18 +1,22 @@
 /**
  * Exact original SessionController construction readiness probe.
- * Attaches only original service classes. No session turn/prompt/model/tool,
- * no browser/Android/user data/file write. Outbound network is fail-closed.
+ * Attaches exact original services wherever they can boot safely. Two clearly
+ * marked fail-closed boundary Services exist only to satisfy unused construction
+ * injection keys: agentDefaultModel and storageDomain. They throw if accessed.
+ * No session turn/prompt/model/tool/browser/Android/user data/file write.
  */
-import {Context} from '@deepseek-ai/cordis';
+import {Context,Service} from '@deepseek-ai/cordis';
 import {AgentRegistry} from '@deepseek-ai/dsh-agent';
 import {SessionStore} from '@deepseek-ai/dsh-session';
 import {LlmRuntime} from '@deepseek-ai/dsh-llm';
 import {SessionProjectionRegistry} from '@deepseek-ai/dsh-session-projection';
-import {AgentDefaultModelConfig} from '@deepseek-ai/dsh-agent-default-model';
 import {AttachmentStore} from '@deepseek-ai/dsh-attachment';
+import {CommandRuntime} from '@deepseek-ai/dsh-commands';
+import {HostConnectionService} from '@deepseek-ai/dsh-client-connection';
 import {FileUploads} from '@deepseek-ai/dsh-client-file-upload';
 import {FileSystem} from '@deepseek-ai/dsh-fs';
 import {SessionQueryEngine} from '@deepseek-ai/dsh-session-query';
+import {SessionPersistence} from '@deepseek-ai/dsh-session-persistence';
 import {TypertRegistry} from '@deepseek-ai/dsh-typert-registry';
 import {WorkspaceRegistry} from '@deepseek-ai/dsh-workspace';
 import {SessionController} from '@deepseek-ai/dsh-api-session-controller';
@@ -36,6 +40,19 @@ const safeReason=e=>String(e?.message||'').replace(/\/[A-Za-z0-9._/-]+/g,'<PATH>
   .replace(/(?:Bearer |sk-)[A-Za-z0-9._-]{8,}/g,'<REDACTED>').slice(0,180);
 const ctx=new Context();
 const attached=[];
+let adapterAccesses=0;
+
+class P99AgentDefaultModelBoundary extends Service {
+  constructor(innerCtx){super(innerCtx,'agentDefaultModel');}
+  currentSelection(){adapterAccesses++;throw new Error('P99_AGENT_DEFAULT_MODEL_BOUNDARY_ACCESSED');}
+  saveSelection(){adapterAccesses++;throw new Error('P99_AGENT_DEFAULT_MODEL_BOUNDARY_ACCESSED');}
+}
+class P99StorageDomainBoundary extends Service {
+  constructor(innerCtx){super(innerCtx,'storageDomain');}
+  open(){adapterAccesses++;throw new Error('P99_STORAGE_DOMAIN_BOUNDARY_ACCESSED');}
+  get(){adapterAccesses++;throw new Error('P99_STORAGE_DOMAIN_BOUNDARY_ACCESSED');}
+}
+
 
 async function attach(label,Class,config={}){
   try{
@@ -62,11 +79,13 @@ try{
   await attach('SESSIONS',SessionStore);
   await attach('LLM',LlmRuntime);
   await attach('SESSION_PROJECTIONS',SessionProjectionRegistry);
-  await attach('AGENT_DEFAULT_MODEL',AgentDefaultModelConfig);
+  await attach('AGENT_DEFAULT_MODEL_BOUNDARY',P99AgentDefaultModelBoundary);
   await attach('ATTACHMENTS',AttachmentStore);
   await attach('FS',FileSystem);
   await attach('SESSION_QUERY',SessionQueryEngine);
   await attach('TYPERT_REGISTRY',TypertRegistry);
+  await attach('COMMANDS',CommandRuntime);
+  await attach('CONNECTION',HostConnectionService,[]);
 
   try{
     const remote=await import('@deepseek-ai/dsh-api-remote-access');
@@ -81,6 +100,8 @@ try{
   }
 
   await attach('FILE_UPLOADS',FileUploads);
+  await attach('SESSION_PERSISTENCE',SessionPersistence);
+  await attach('STORAGE_DOMAIN_BOUNDARY',P99StorageDomainBoundary);
   await attach('WORKSPACE_REGISTRY',WorkspaceRegistry);
 
   const inject=Array.isArray(SessionController.inject)?SessionController.inject:[];
@@ -103,9 +124,10 @@ try{
   }else{
     log('SESSION_CONTROLLER_CONSTRUCTED','NOT_ATTEMPTED_MISSING_DEPENDENCIES');
   }
+  log('ADAPTER_ACCESSES',adapterAccesses);
   log('NETWORK_ATTEMPTS',networkAttempts);
   log('NO_PROMPT_NO_MODEL_NO_TOOL','PASS');
-  if(networkAttempts!==0)process.exitCode=2;
+  if(networkAttempts!==0||adapterAccesses!==0)process.exitCode=2;
 }finally{
   if(typeof ctx.dispose==='function')try{await ctx.dispose();}catch{}
 }
