@@ -390,6 +390,12 @@ jobs:
           grep -Fxq 'P98_ORIGINAL_SESSION_CREATED=NO' .p96private/p98-contract.log
           cat .p96private/p98-contract.log
           echo 'P98_EXACT_AGENT_SESSION_METHOD_CONTRACT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          python host_candidate/p96_stream_owner/p100_agentloop_includes_contract.py \
+            --original "$f" > .p96private/p100-includes.log
+          grep -Fxq 'P100_AGENTLOOP_SOURCE_EXPORTED=NO' .p96private/p100-includes.log
+          grep -Fxq 'P100_AGENTLOOP_INCLUDES_SCAN=PASS' .p96private/p100-includes.log
+          cat .p96private/p100-includes.log
+          echo 'P100_AGENTLOOP_INCLUDES_RECEIVER_INVENTORY=PASS' >> "$GITHUB_STEP_SUMMARY"
           python host_candidate/p96_stream_owner/p99_session_command_contract.py --original "$f" > .p96private/p99-command.log
           grep -Fxq 'P99_SESSION_COMMAND_CLASS_FOUND=PASS' .p96private/p99-command.log
           grep -Fxq 'P99_SESSION_COMMAND_SOURCE_EXPORTED=NO' .p96private/p99-command.log
