@@ -72,8 +72,8 @@ public final class P102TrustedToolGateTest {
     check(noApproval.executions.get()==1,"exactly_one_execution");
     check(noApproval.originalChecks==3,"original_call_checked_on_request_before_and_after_executor");
     check(noApproval.replies()==1&&noApproval.last().ok,"one_successful_terminal");
-    check(noApproval.last().dispatched&&!noApproval.last().retrySafe,
-      "success_is_not_retryable");
+    check(noApproval.last().dispatched&&!noApproval.last().outcomeUnknown&&
+      !noApproval.last().retrySafe,"success_is_confirmed_not_retryable");
     check(noApproval.gate.onTrustedNativeApproval("call-1")==
       P102TrustedToolGate.Decision.REJECTED,"approval_replay_denied");
     check(noApproval.replies()==1,"no_second_result");
@@ -136,6 +136,9 @@ public final class P102TrustedToolGateTest {
     check(staleAfterResult.size()==1&&!staleAfterResult.get(0).ok&&
       "ORIGINAL_TURN_STALE_AFTER_EXECUTION".equals(staleAfterResult.get(0).code),
       "post_execute_stale_cannot_report_success");
+    check(staleAfterResult.get(0).dispatched&&staleAfterResult.get(0).outcomeUnknown&&
+      !staleAfterResult.get(0).retrySafe,
+      "post_execute_stale_unknown_outcome_never_retry");
 
     Lab timeout=new Lab();
     check(timeout.request("timeout")==P102TrustedToolGate.Decision.PENDING_NATIVE_APPROVAL,
@@ -168,6 +171,27 @@ public final class P102TrustedToolGateTest {
     check(failedReplies.size()==1&&!failedReplies.get(0).ok&&
       "EXECUTOR_REJECTED".equals(failedReplies.get(0).code),
       "failed_executor_receipt_one");
+    check(failedReplies.get(0).dispatched&&failedReplies.get(0).outcomeUnknown&&
+      !failedReplies.get(0).retrySafe,
+      "executor_return_false_post_dispatch_unknown_no_retry");
+
+    final List<P71ToolReplyOnce.Terminal> thrownReplies=new ArrayList<>();
+    P102TrustedToolGate throwingExecutor=new P102TrustedToolGate(
+      UID,SESSION,new Clock(),u->u==UID,
+      (name,arguments)->{throw new IllegalStateException("synthetic_executor_exception");},
+      thrownReplies::add,(sessionId,callId)->ORIGINAL.equals(sessionId));
+    check(throwingExecutor.accept(UID,SESSION,ORIGINAL,"throw",P102TrustedToolGate.TOOL,
+      P102TrustedToolGate.FIXED_ARGS)==P102TrustedToolGate.Decision.PENDING_NATIVE_APPROVAL,
+      "throwing_executor_queued");
+    check(throwingExecutor.onTrustedNativeApproval("throw")==
+      P102TrustedToolGate.Decision.DISPATCHED,"throwing_executor_dispatched_once");
+    check(thrownReplies.size()==1&&"EXECUTOR_REJECTED".equals(thrownReplies.get(0).code)&&
+      thrownReplies.get(0).dispatched&&thrownReplies.get(0).outcomeUnknown&&
+      !thrownReplies.get(0).retrySafe,
+      "executor_throws_post_dispatch_unknown_no_retry");
+    check(throwingExecutor.onTrustedNativeApproval("throw")==
+      P102TrustedToolGate.Decision.REJECTED&&thrownReplies.size()==1,
+      "throwing_executor_no_replay_or_duplicate_terminal");
 
     Lab concurrent=new Lab();
     check(concurrent.request("race")==P102TrustedToolGate.Decision.PENDING_NATIVE_APPROVAL,
