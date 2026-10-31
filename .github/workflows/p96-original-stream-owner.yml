@@ -402,6 +402,14 @@ jobs:
           grep -Fxq 'P100_SURFACE_EVENT_SYMBOL_SCAN=PASS' .p96private/p100-surface-symbols.log
           cat .p96private/p100-surface-symbols.log
           echo 'P100_SURFACE_EVENT_SYMBOL_PROVENANCE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          python host_candidate/p96_stream_owner/p100_message_projection_registration.py \
+            --original "$f" > .p96private/p100-message-projection-callers.log
+          grep -Fxq 'P100_MESSAGE_PROJECTION_SOURCE_EXPORTED=NO' \
+            .p96private/p100-message-projection-callers.log
+          grep -Fxq 'P100_MESSAGE_PROJECTION_CALLER_SCAN=PASS' \
+            .p96private/p100-message-projection-callers.log
+          cat .p96private/p100-message-projection-callers.log
+          echo 'P100_MESSAGE_PROJECTION_REGISTRATION_CALLERS=PASS' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p100_session_surface_helper_contract.mjs \
             .p96private/agent-runtime/p100_session_surface_helper_contract.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
