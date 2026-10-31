@@ -84,6 +84,7 @@ def safe_reference_origins(raw,pos,name):
         ("assign-ref",rb"\b"+key+rb"\s*=\s*"+chain),
     ]
     for kind,pat in patterns:
+        re.compile(pat)
         for m in re.finditer(pat,window):
             value=m.group(1).decode("utf-8","replace").replace("?.",".")
             rows.append({
