@@ -398,6 +398,29 @@ jobs:
           grep -Fxq 'P101_ORIGINAL_CHUNK_DISCRIMINANTS=PASS' .p96private/p101-chunk-types.log
           cat .p96private/p101-chunk-types.log
           echo 'P101_ORIGINAL_CHUNK_TYPES=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          # Executable original in-memory chunk assembly (no side effects).
+          cp host_candidate/p96_stream_owner/p101_chunk_smoke.mjs \
+            .p96private/agent-runtime/p101_chunk_smoke.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 12s node .p96private/agent-runtime/p101_chunk_smoke.mjs \
+            > .p96private/p101-chunk-smoke.log 2>&1
+          cat .p96private/p101-chunk-smoke.log
+          grep -Fxq 'P101_CHUNK_SMOKE_ORIGINAL_BLOCK_ASSEMBLER_TOOL_CALL=PASS' .p96private/p101-chunk-smoke.log
+          echo 'P101_ORIGINAL_INMEMORY_TOOL_CHUNK_ASSEMBLY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          # New isolated original outer Controller.prompt, no network, no
+          # manual model call or synthetic session events. Fail CI unless
+          # original ToolRuntime executes once and original loop resumes.
+          cp host_candidate/p96_stream_owner/p101_original_outer_tool_roundtrip.mjs \
+            .p96private/agent-runtime/p101_original_outer_tool_roundtrip.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 25s node .p96private/agent-runtime/p101_original_outer_tool_roundtrip.mjs \
+            > .p96private/p101-outer-tool.log 2>&1
+          cat .p96private/p101-outer-tool.log
+          grep -Fxq 'P99_PROMPT_ONCE_P101_ORIGINAL_AUTOMATIC_TOOL_ROUNDTRIP=PASS' .p96private/p101-outer-tool.log
+          grep -Fxq 'P99_PROMPT_ONCE_P101_NO_NETWORK=PASS' .p96private/p101-outer-tool.log
+          echo 'P101_ORIGINAL_OUTER_TOOL_EXECUTION_AND_AUTO_CONTINUATION=PASS_ISOLATED_ONLY' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p96_original_agent_runtime_probe.mjs \
             .p96private/agent-runtime/p96_original_agent_runtime_probe.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
