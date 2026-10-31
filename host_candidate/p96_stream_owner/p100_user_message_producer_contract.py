@@ -69,18 +69,43 @@ def window_meta(raw,pos,radius=2600):
         "mentionsSourceEventSeqs":b"sourceEventSeqs" in window,
     }
 
+def safe_field_value(segment,field):
+    key=re.escape(field.encode("ascii"))
+    m=re.search(key+rb"\\s*:\\s*['\\\"]([A-Za-z0-9_./:-]{1,80})['\\\"]",segment)
+    if m:
+        return {"kind":"literal","value":m.group(1).decode("utf-8","replace")}
+    m=re.search(key+rb"\\s*:\\s*([A-Za-z_$][A-Za-z0-9_$]*(?:\\??\\.[A-Za-z_$][A-Za-z0-9_$]*){0,5})",segment)
+    if m:
+        return {"kind":"reference","value":m.group(1).decode("utf-8","replace").replace("?.",".")}
+    m=re.search(key+rb"\\s*:\\s*([\\[{])",segment)
+    if m:
+        return {"kind":"array" if m.group(1)==b"[" else "object"}
+    return {"kind":"absent"}
+
 def inspect(apk):
     raw=read_target(apk)
     appends=[]
     append_pat=re.compile(
         rb"(?:(?:this\.)?session|this\.session)\??\.append\s*\(\s*['\"]([A-Za-z0-9_./:-]{1,80})['\"]")
-    for m in append_pat.finditer(raw):
+    matches=list(append_pat.finditer(raw))
+    for index,m in enumerate(matches):
         classes,methods=owner_meta(raw,m.start())
+        end=min(len(raw),m.end()+1800)
+        if index+1<len(matches):
+            end=min(end,matches[index+1].start())
+        segment=raw[m.end():end]
         appends.append({
             "eventType":m.group(1).decode("utf-8","replace"),
             "offset":m.start(),
             "nearestAssignedClasses":classes,
             "nearestMethodSignatures":methods,
+            "argumentShapes":{
+                "surfaceOp":safe_field_value(segment,"surfaceOp"),
+                "sourceEventSeqs":safe_field_value(segment,"sourceEventSeqs"),
+                "message":safe_field_value(segment,"message"),
+                "source":safe_field_value(segment,"source"),
+                "reason":safe_field_value(segment,"reason"),
+            },
             "nearby":window_meta(raw,m.start(),1800),
         })
     user_rows=[]
