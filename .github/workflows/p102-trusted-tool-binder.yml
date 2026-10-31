@@ -90,6 +90,16 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
           script: bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
+      - name: Android36 real framework isolated Messenger ACK and terminal regression
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
       - name: Verify standalone test APK identities and prepare phone artifact
         shell: bash
         run: |
