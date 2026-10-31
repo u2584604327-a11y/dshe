@@ -15,15 +15,15 @@ const methods=klass=>{
 };
 function contract(label,name,fn){
   const src=Function.prototype.toString.call(fn);
-  const sig=src.match(/^[^(]*\\(([^)]{0,500})\\)/)?.[1]||'';
+  const sig=src.match(/^[^(]*\(([^)]{0,500})\)/)?.[1]||'';
   const params=sig.split(',').map(x=>x.trim()).filter(safe).slice(0,12);
-  const props=[...src.matchAll(/\\b(this|event|data|entry|session|plan|surface|input|options|message|source)\\??\\.([A-Za-z_$][A-Za-z0-9_$]{0,72})/g)]
+  const props=[...src.matchAll(/\b(this|event|data|entry|session|plan|surface|input|options|message|source)\??\.([A-Za-z_$][A-Za-z0-9_$]{0,72})/g)]
     .map(x=>x[1]+'.'+x[2]);
-  const calls=[...src.matchAll(/(?:this\\.)?([A-Za-z_$][A-Za-z0-9_$]{0,72})\\s*\\(/g)]
+  const calls=[...src.matchAll(/(?:this\.)?([A-Za-z_$][A-Za-z0-9_$]{0,72})\s*\(/g)]
     .map(x=>x[1]).filter(x=>!['if','for','while','switch','catch'].includes(x));
   const literals=[...src.matchAll(/['"]([A-Za-z][A-Za-z0-9_./:-]{1,72})['"]/g)]
     .map(x=>x[1]);
-  const provenance=[...src.matchAll(/\\b(sourceEventSeqs|surfaceOp|contentGeneration|applySurfacePlan|planSurfaceEvent|replaceGeneration|sourceEventSeq)\\b/g)]
+  const provenance=[...src.matchAll(/\b(sourceEventSeqs|surfaceOp|contentGeneration|applySurfacePlan|planSurfaceEvent|replaceGeneration|sourceEventSeq)\b/g)]
     .map(x=>x[1]);
   const result={
     label,name,arity:fn.length,params,
@@ -33,7 +33,7 @@ function contract(label,name,fn){
     provenanceIdentifiers:[...new Set(provenance)].slice(0,20),
     sourceSize:src.length
   };
-  process.stdout.write('P100_SURFACE_ORIGIN_METHOD='+JSON.stringify(result)+'\\n');
+  process.stdout.write('P100_SURFACE_ORIGIN_METHOD='+JSON.stringify(result)+'\n');
 }
 const choices=[
   ...Object.entries(SessionPkg).map(([n,v])=>['session',n,v]),
@@ -45,12 +45,12 @@ for(const [group,name,value] of choices){
   const ms=methods(value);
   const focus=ms.filter(n=>/^(constructor|append|commit|_processDelta|applySurfacePlan|planSurfaceEvent|_assertProjections|project|create|snapshotEvents|_state|addProjection|registerProjection)$/.test(n));
   if(!focus.length)continue;
-  process.stdout.write('P100_SURFACE_ORIGIN_CLASS='+JSON.stringify({group,name,methods:focus})+'\\n');
+  process.stdout.write('P100_SURFACE_ORIGIN_CLASS='+JSON.stringify({group,name,methods:focus})+'\n');
   for(const method of focus){
     const fn=Object.getOwnPropertyDescriptor(value.prototype,method)?.value;
     if(fn){contract(group+':'+name,method,fn);observed++;}
   }
 }
-process.stdout.write('P100_SURFACE_ORIGIN_METHOD_COUNT='+observed+'\\n');
-process.stdout.write('P100_SURFACE_ORIGIN_NO_MUTATION=PASS\\n');
-process.stdout.write('P100_SURFACE_ORIGIN_MODEL_AUTO_CALL=NOT_TESTED\\n');
+process.stdout.write('P100_SURFACE_ORIGIN_METHOD_COUNT='+observed+'\n');
+process.stdout.write('P100_SURFACE_ORIGIN_NO_MUTATION=PASS\n');
+process.stdout.write('P100_SURFACE_ORIGIN_MODEL_AUTO_CALL=NOT_TESTED\n');
