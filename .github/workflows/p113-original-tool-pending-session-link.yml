@@ -8,6 +8,7 @@ on:
       - 'host_candidate/p113_overlay_original_p101.py'
       - 'host_candidate/p114_original_tool_dispatch_identifier_audit.py'
       - 'host_candidate/p115_original_helper_ci_only_hook.py'
+      - 'host_candidate/p116_original_helper_hard_deny_ci.py'
       - '.github/workflows/p113-original-tool-pending-session-link.yml'
 permissions:
   contents: read
@@ -105,6 +106,28 @@ jobs:
           echo 'P113_NATIVE_INDEPENDENT_SESSION_CALL_PROOF=NOT_PROVEN' >> "$GITHUB_STEP_SUMMARY"
           echo 'P113_PRODUCTION_ANDROID_BINDER_ORIGINAL_TOOL=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
           echo 'P113_ORIGINAL_APK_OR_SIGNING_MODIFIED=NO' >> "$GITHUB_STEP_SUMMARY"
+      - name: Execute exact original helper hard deny with no tool body or result notification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p116_original_helper_hard_deny_ci.py \
+            --runtime-dir .p113private/agent-runtime \
+            --test-file .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            P116_ISOLATED_HARD_DENY=1 timeout 35s \
+            node .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs \
+            > .p113private/p116-deny.log 2>&1
+          for marker in \
+            'P99_PROMPT_ONCE_P116_ORIGINAL_HELPER_DENIED_BEFORE_OBSERVER=PASS' \
+            'P99_PROMPT_ONCE_P116_NO_ORIGINAL_TOOL_BODY=PASS' \
+            'P99_PROMPT_ONCE_P116_NO_ORIGINAL_RESULT_NOTIFY=PASS' \
+            'P99_PROMPT_ONCE_P116_NO_NETWORK=PASS' \
+            'P99_PROMPT_ONCE_P116_ANDROID_NATIVE_PERMISSION=NEVER_GRANTED'; do
+            grep -Fxq "$marker" .p113private/p116-deny.log
+          done
+          echo 'P116_ACTUAL_ORIGINAL_AGENTLOOP_UNVERIFIED_TOOL_DENIED_BEFORE_EXECUTION=PASS_CI_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P116_ANDROID_NATIVE_GRANT_OR_PRODUCTION_ORIGINAL_BINDER=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
       - name: Delete exact original runtime temporary bytes
         if: always()
         shell: bash
