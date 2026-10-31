@@ -1,0 +1,75 @@
+name: P102 isolated native tool Binder security contract (candidate only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p102_trusted_tool/**'
+      - 'host_candidate/p71_browser_runtime/src/com/dsh/android/p71/P71ToolReplyOnce.java'
+      - '.github/workflows/p102-trusted-tool-binder.yml'
+permissions:
+  contents: read
+jobs:
+  p102-native-binder-boundary:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - name: P102 Java8 host gate security and exact-once regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .p102tmp/classes
+          javac --release 8 -d .p102tmp/classes \
+            host_candidate/p71_browser_runtime/src/com/dsh/android/p71/P71ToolReplyOnce.java \
+            host_candidate/p102_trusted_tool/src/com/dsh/android/p102/P102TrustedToolGate.java \
+            host_candidate/p102_trusted_tool/test/com/dsh/android/p102/P102TrustedToolGateTest.java
+          java -cp .p102tmp/classes com.dsh.android.p102.P102TrustedToolGateTest \
+            | tee .p102tmp/jvm-gate.log
+          for gate in \
+            P102_PREAPPROVAL_DENY_AND_REPLAY=PASS \
+            P102_UID_SESSION_CANONICAL_TOOL_AND_TIMEOUT=PASS \
+            P102_ONE_TERMINAL_AND_CONCURRENT_NO_DUPLICATE=PASS \
+            P102_PRODUCTION_DSH_TOOL_BINDER_WIRED=NO \
+            P102_ANDROID_PHONE_E2E=NOT_TESTED; do
+            grep -Fxq "$gate" .p102tmp/jvm-gate.log
+          done
+          grep -Eq '^P102_JVM8_NATIVE_TOOL_TRUST_GATE=PASS checks=[0-9]+$' \
+            .p102tmp/jvm-gate.log
+          echo 'P102_NATIVE_SECURITY_JVM_GATE=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Compile actual Android35 Messenger/framework-UID adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          PLATFORM="$SDK/platforms/android-35/android.jar"
+          if test ! -f "$PLATFORM"; then
+            manager="$(command -v sdkmanager || true)"
+            if test -z "$manager";then
+              manager="$(find "$SDK/cmdline-tools" -name sdkmanager -type f -perm /111 2>/dev/null | head -n1 || true)"
+            fi
+            test -n "$manager"
+            "$manager" --sdk_root="$SDK" 'platforms;android-35'
+          fi
+          test -f "$PLATFORM"
+          javac -source 8 -target 8 -cp "$PLATFORM:.p102tmp/classes" \
+            -d .p102tmp/classes \
+            host_candidate/p102_trusted_tool/android/com/dsh/android/p102/P102AndroidToolBinderPort.java
+          test -f .p102tmp/classes/com/dsh/android/p102/P102AndroidToolBinderPort.class
+          echo 'P102_ANDROID35_MESSENGER_SOURCE_COMPILES=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Cleanup and forbid confusing candidate with original DSH
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p102tmp
+          {
+            echo 'P102_PRODUCTION_DSH_TOOL_TO_NATIVE_BINDER=NOT_WIRED'
+            echo 'P102_TRUE_ANDROID_FRAMEWORK_UID_E2E=NOT_TESTED'
+            echo 'P102_ENGINE_MANAGER_MAIN_ACTIVITY=UNCHANGED'
+            echo 'P102_NO_APK_NO_SIGNER_NO_RELEASE=YES'
+          } >> "$GITHUB_STEP_SUMMARY"
