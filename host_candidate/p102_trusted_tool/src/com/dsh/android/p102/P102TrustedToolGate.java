@@ -15,6 +15,10 @@ public final class P102TrustedToolGate {
   public interface IsolatedUidVerifier { boolean isIsolatedUid(int uid); }
   public interface TrustedExecutor { boolean executeFixedRead(String name,String canonicalArgs); }
   public interface TerminalSink { void onTerminal(P71ToolReplyOnce.Terminal terminal); }
+  /** Trusted host-only live original SessionStore/ToolRuntime ownership proof. */
+  public interface OriginalCallVerifier {
+    boolean isAcceptedCurrentToolCall(String originalSessionId,String originalCallId);
+  }
   public enum Decision { PENDING_NATIVE_APPROVAL, REJECTED, EXPIRED, DISPATCHED }
 
   public static final String TOOL="read_synthetic_fixture";
@@ -27,40 +31,55 @@ public final class P102TrustedToolGate {
   private final IsolatedUidVerifier verifier;
   private final TrustedExecutor executor;
   private final TerminalSink terminalSink;
+  private final OriginalCallVerifier originalCallVerifier;
   private boolean dead,requestSeen;
   private long acceptedAt;
   private P71ToolReplyOnce pending;
   private String pendingCallId;
+  private String originalSessionId;
 
   public P102TrustedToolGate(int binderSendingUid,String hostMintedSession,
       MonotonicClock monotonicClock,IsolatedUidVerifier uidVerifier,
-      TrustedExecutor trustedExecutor,TerminalSink sink){
+      TrustedExecutor trustedExecutor,TerminalSink sink,
+      OriginalCallVerifier trustedOriginalCallVerifier){
     if(binderSendingUid<0||hostMintedSession==null||
        !hostMintedSession.matches("[a-f0-9]{64}")||
        monotonicClock==null||uidVerifier==null||trustedExecutor==null||sink==null||
+       trustedOriginalCallVerifier==null||
        !uidVerifier.isIsolatedUid(binderSendingUid))
       throw new IllegalArgumentException("P102_HOST_AUTHENTICATED_BINDING_REQUIRED");
     uid=binderSendingUid;session=hostMintedSession;clock=monotonicClock;
     verifier=uidVerifier;executor=trustedExecutor;terminalSink=sink;
+    originalCallVerifier=trustedOriginalCallVerifier;
   }
 
   /** Only accepted from real Messenger REQUEST using framework sendingUid. */
   public synchronized Decision accept(int frameworkUid,String sessionToken,
-      String callId,String toolName,String canonicalArgs){
+      String originalSession,String callId,String toolName,String canonicalArgs){
     if(dead||requestSeen)return Decision.REJECTED;
     if(frameworkUid!=uid||!session.equals(sessionToken)||!verifier.isIsolatedUid(frameworkUid)){
       revoke();return Decision.REJECTED;
     }
     requestSeen=true; // malformed attempts cannot be retried as a fresh call.
-    if(callId==null||!callId.matches("[A-Za-z0-9_-]{1,96}")||
+    if(originalSession==null||!originalSession.matches("[A-Za-z0-9_-]{1,128}")||
+       callId==null||!callId.matches("[A-Za-z0-9_-]{1,96}")||
        !TOOL.equals(toolName)||!FIXED_ARGS.equals(canonicalArgs)){
       revoke();return Decision.REJECTED;
     }
+    if(!originalCallValid(originalSession,callId)){
+      revoke();return Decision.REJECTED;
+    }
+    originalSessionId=originalSession;
     pendingCallId=callId;
     acceptedAt=clock.elapsedRealtimeMs();
     if(acceptedAt<0){revoke();return Decision.REJECTED;}
     pending=new P71ToolReplyOnce(callId,terminalSink::onTerminal);
     return Decision.PENDING_NATIVE_APPROVAL;
+  }
+
+  private boolean originalCallValid(String sessionId,String callId){
+    try{return originalCallVerifier.isAcceptedCurrentToolCall(sessionId,callId);}
+    catch(RuntimeException invalid){return false;}
   }
 
   /**
@@ -74,11 +93,19 @@ public final class P102TrustedToolGate {
     if(now<acceptedAt||now-acceptedAt>APPROVAL_WINDOW_MS){
       pending.deadlineElapsed();dead=true;return Decision.EXPIRED;
     }
+    // Must re-check the live original turn after asynchronous native approval.
+    if(!originalCallValid(originalSessionId,pendingCallId)){
+      pending.executorConfirmedFailure("ORIGINAL_TURN_NOT_CURRENT");
+      dead=true;
+      return Decision.REJECTED;
+    }
     if(!pending.markDispatched())return Decision.REJECTED;
     boolean ok=false;
     try{ok=executor.executeFixedRead(TOOL,FIXED_ARGS);}
     catch(RuntimeException ignored){ok=false;}
-    if(ok)pending.executorConfirmedSuccess();
+    if(ok&&!originalCallValid(originalSessionId,pendingCallId)){
+      pending.executorConfirmedFailure("ORIGINAL_TURN_STALE_AFTER_EXECUTION");
+    }else if(ok)pending.executorConfirmedSuccess();
     else pending.executorConfirmedFailure("EXECUTOR_REJECTED");
     dead=true;
     return Decision.DISPATCHED;
