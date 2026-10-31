@@ -36,17 +36,44 @@ jobs:
           printf '%s  %s\n' \
             3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 "$f" \
             | sha256sum -c -
-          test -n "${ANDROID_HOME:-}"
-          verifier=$(find "$ANDROID_HOME/build-tools" -mindepth 2 -maxdepth 2 \
-            -type f -name apksigner -print | sort -V | tail -n 1)
-          test -n "$verifier" && test -x "$verifier"
-          "$verifier" verify --verbose --print-certs "$f" \
-            > .p102-cert-readonly/verification.txt
-          grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' \
-            .p102-cert-readonly/verification.txt
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          verifier=$(find "$sdk/build-tools" -mindepth 2 -maxdepth 2 \
+            -name apksigner -print 2>/dev/null | sort -V | tail -n 1 || true)
+          if test -z "$verifier" || test ! -x "$verifier"; then
+            manager="$(command -v sdkmanager || true)"
+            if test -z "$manager"; then
+              manager="$(find "$sdk/cmdline-tools" -name sdkmanager -type f -perm /111 2>/dev/null | head -n1 || true)"
+            fi
+            if test -z "$manager"; then
+              echo 'P102_SDK_MANAGER=UNAVAILABLE'
+              exit 1
+            fi
+            "$manager" --sdk_root="$sdk" 'build-tools;35.0.0'
+            verifier="$sdk/build-tools/35.0.0/apksigner"
+          fi
+          if test ! -x "$verifier"; then
+            echo 'P102_APKSIGNER=UNAVAILABLE'
+            exit 1
+          fi
+          echo 'P102_APKSIGNER=AVAILABLE'
+          if ! "$verifier" verify --verbose --print-certs "$f" \
+            > .p102-cert-readonly/verification.txt; then
+            echo 'P102_V138_APK_SIGNATURE_VERIFY=FAIL'
+            exit 1
+          fi
+          echo 'P102_V138_APK_SIGNATURE_VERIFY=PASS'
+          if ! grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' \
+            .p102-cert-readonly/verification.txt; then
+            echo 'P102_V138_APK_SIGNATURE_V2=NOT_CONFIRMED'
+            exit 1
+          fi
           cert=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' \
             .p102-cert-readonly/verification.txt | head -n 1 | tr '[:upper:]' '[:lower:]')
-          test "${#cert}" -eq 64
+          if test "${#cert}" -ne 64; then
+            echo 'P102_SIGNER_SHA256_PARSE=FAIL'
+            exit 1
+          fi
+          echo 'P102_V138_SIGNER_CERT_SHA256='"${cert}"
           case "$cert" in
             90072b7de43e96999be92d99869ce5e5b7639b5f2449417b99a1790831b60ff8)
               echo 'P102_V138_FIXED_MOD_TEST_SIGNER_MATCH=PASS'
