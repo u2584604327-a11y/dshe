@@ -28,10 +28,18 @@ for(const spec of packages){
       .map(([name,value])=>{
         const inject=Array.isArray(value.inject)?value.inject
           :value.inject&&typeof value.inject==='object'?Object.keys(value.inject):[];
+        const src=Function.prototype.toString.call(value);
+        const configFields=[...src.matchAll(/(?:config|options)\??\.([A-Za-z_$][A-Za-z0-9_$]{0,80})/g)]
+          .map(x=>x[1]).filter(safe);
+        const safeLiterals=[...src.matchAll(/['"]([A-Za-z_$][A-Za-z0-9_$-]{0,48})['"]/g)]
+          .map(x=>x[1]).filter(x=>safe(x.replace(/-/g,'_')));
         return {
           name,
           arity:value.length,
           inject:inject.filter(x=>typeof x==='string'&&safe(x)).slice(0,40),
+          staticKeys:Object.getOwnPropertyNames(value).filter(safe).slice(0,30),
+          configFields:[...new Set(configFields)].slice(0,30),
+          safeLiterals:[...new Set(safeLiterals)].slice(0,35),
           prototypeMethods:Object.getOwnPropertyNames(value.prototype||{})
             .filter(x=>x!=='constructor'&&safe(x)
               &&typeof Object.getOwnPropertyDescriptor(value.prototype,x)?.value==='function')
