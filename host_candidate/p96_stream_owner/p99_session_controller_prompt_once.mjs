@@ -77,6 +77,31 @@ function messageRoles(messages){
   if(!Array.isArray(messages))return [];
   return messages.slice(-20).map(m=>String(m?.role??'UNKNOWN').slice(0,40));
 }
+function safeEventMeta(event){
+  const data=event&&typeof event==='object'&&event.data&&typeof event.data==='object'
+    ?event.data:null;
+  const inserted=Array.isArray(data?.inserted)?data.inserted:[];
+  return {
+    type:String(event?.type??event?.event?.type??'UNKNOWN').slice(0,80),
+    topKeys:event&&typeof event==='object'
+      ?Object.keys(event).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,25):[],
+    dataKeys:data?Object.keys(data)
+      .filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,25):[],
+    target:typeof data?.target==='string'?data.target.slice(0,40):undefined,
+    insertedCount:inserted.length,
+    insertedRoles:inserted.map(x=>String(x?.role??'UNKNOWN').slice(0,40)),
+    insertedTypes:inserted.map(x=>String(x?.type??'UNKNOWN').slice(0,40))
+  };
+}
+function safeInboxMeta(inbox){
+  if(!inbox||typeof inbox!=='object')return {type:typeof inbox,keys:[]};
+  const out={type:'object',keys:Object.keys(inbox).slice(0,20)};
+  for(const key of ['next-turn','next-step']){
+    const items=Array.isArray(inbox[key])?inbox[key]:[];
+    out[key]={count:items.length,roles:items.map(x=>String(x?.role??'UNKNOWN').slice(0,40))};
+  }
+  return out;
+}
 
 const ctx=new Context();
 let handle=null,unregister=null;
@@ -179,6 +204,10 @@ try{
     beforeRoles.filter(x=>x==='user').length;
 
   log('AFTER_EVENTS',JSON.stringify(eventShape(afterEvents)));
+  const committedDelta=Array.isArray(afterEvents)&&Array.isArray(beforeEvents)
+    ?afterEvents.slice(beforeEvents.length):[];
+  log('COMMITTED_EVENT_META',JSON.stringify(committedDelta.map(safeEventMeta)));
+  log('INBOX_AFTER_META',JSON.stringify(safeInboxMeta(handle.inbox.current())));
   log('AFTER_MESSAGE_ROLES',JSON.stringify(afterRoles));
   log('EVENT_COUNT_DELTA',afterCount-beforeCount);
   log('USER_ROLE_DELTA',userDelta);
