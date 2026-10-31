@@ -69,6 +69,25 @@ def window_meta(raw,pos,radius=2600):
         "mentionsSourceEventSeqs":b"sourceEventSeqs" in window,
     }
 
+def safe_second_arg(segment):
+    s=segment.lstrip()
+    if not s.startswith(b","):
+        return {"kind":"missing-comma"}
+    s=s[1:].lstrip()
+    if not s:
+        return {"kind":"empty"}
+    if s.startswith(b"{"): return {"kind":"object"}
+    if s.startswith(b"["): return {"kind":"array"}
+    m=re.match(rb"['\"]([A-Za-z0-9_./:-]{1,80})['\"]",s)
+    if m:
+        return {"kind":"literal","value":m.group(1).decode("utf-8","replace")}
+    m=re.match(rb"([A-Za-z_$][A-Za-z0-9_$]*(?:\??\.[A-Za-z_$][A-Za-z0-9_$]*){0,5})",s)
+    if m:
+        value=m.group(1).decode("utf-8","replace").replace("?.",".")
+        rest=s[m.end():].lstrip()
+        return {"kind":"call" if rest.startswith(b"(") else "reference","value":value}
+    return {"kind":"other","firstByte":chr(s[0]) if 32<=s[0]<=126 else "NONASCII"}
+
 def safe_field_value(segment,field):
     key=re.escape(field.encode("ascii"))
     m=re.search(key+rb"\\s*:\\s*['\\\"]([A-Za-z0-9_./:-]{1,80})['\\\"]",segment)
@@ -100,6 +119,7 @@ def inspect(apk):
             "nearestAssignedClasses":classes,
             "nearestMethodSignatures":methods,
             "argumentShapes":{
+                "secondArg":safe_second_arg(segment),
                 "surfaceOp":safe_field_value(segment,"surfaceOp"),
                 "sourceEventSeqs":safe_field_value(segment,"sourceEventSeqs"),
                 "message":safe_field_value(segment,"message"),
