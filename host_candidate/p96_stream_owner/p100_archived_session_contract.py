@@ -7,7 +7,7 @@ credentials, full paths and source expressions are never emitted.
 import argparse, gzip, io, json, pathlib, re, tarfile, zipfile
 from p96_original_engine_owner import SOURCE_BYTES, SOURCE_SHA, file_hash, require, sha
 
-ROOT = "node_modules/@deepseek-ai/"
+ROOT = "node_modules/@deepseek-ai/dsh-api-session-controller/"
 MAX_MEMBER = 3_000_000
 FRAME_LINE = 2533
 IDENT = re.compile(r"^[A-Za-z_$][A-Za-z0-9_$]{0,80}$")
