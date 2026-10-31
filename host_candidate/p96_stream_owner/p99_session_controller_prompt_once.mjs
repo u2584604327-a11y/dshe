@@ -217,13 +217,21 @@ try{
   log('WORKSPACE_ACCESSES',workspaceAccesses);
   log('NETWORK_ATTEMPTS',networkAttempts);
 
-  const committed=afterCount>beforeCount && userDelta>=1;
-  log('REAL_SESSION_COMMITTED_USER_TURN',committed?'PASS':'FAIL');
+  const committedUserEvent=committedDelta.some(event=>{
+    const data=event&&typeof event==='object'&&event.data&&typeof event.data==='object'
+      ?event.data:null;
+    const inserted=Array.isArray(data?.inserted)?data.inserted:[];
+    return event?.type==='agent/inbox/spliced' &&
+      data?.target==='next-turn' &&
+      inserted.some(message=>message?.role==='user');
+  });
+  log('COMMITTED_USER_INBOX_EVENT',committedUserEvent?'PASS':'FAIL');
+  log('REAL_SESSION_COMMITTED_USER_TURN',committedUserEvent?'PASS':'FAIL');
   log('MODEL_WAKEUP_FAIL_CLOSED',prepareCalls<=1?'PASS':'FAIL');
   log('NO_NETWORK',networkAttempts===0?'PASS':'FAIL');
   log('WORKSPACE_UNUSED',workspaceAccesses===0?'PASS':'FAIL');
 
-  if(!committed||networkAttempts!==0||workspaceAccesses!==0||saveSelectionCalls!==0)
+  if(!committedUserEvent||networkAttempts!==0||workspaceAccesses!==0||saveSelectionCalls!==0)
     process.exitCode=2;
 }catch(e){
   log('HARNESS_RESULT','BLOCKED_'+String(e?.code||e?.name||'UNKNOWN').replace(/[^A-Za-z0-9_]/g,''));
