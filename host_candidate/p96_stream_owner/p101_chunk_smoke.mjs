@@ -18,6 +18,14 @@ try{
    try{a.push(chunk);}
    catch(e){log('FAILED_CHUNK_TYPE',chunk.type);throw e;}
  }
+ const envelope=a.assembled();
+ log('ASSEMBLED_ENVELOPE_META',JSON.stringify({
+   keys:envelope&&typeof envelope==='object'?Object.keys(envelope):[],
+   response:envelope?.response&&typeof envelope.response==='object'
+     ?{kind:envelope.response.kind,keys:Object.keys(envelope.response)}:envelope?.response,
+   finish:envelope?.finish&&typeof envelope.finish==='object'
+     ?{kind:envelope.finish.kind,keys:Object.keys(envelope.finish)}:envelope?.finish
+ }));
  const blocks=a.blocks();
  log('BLOCKS',JSON.stringify(Array.isArray(blocks)?blocks.map(x=>({
    type:x?.type,name:x?.name,id:x?.id,

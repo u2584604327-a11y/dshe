@@ -341,6 +341,18 @@ try{
       method:x,arity:proto[x].length,literals:safeLiterals(proto[x])
     })).filter(x=>/step|run|tool|dispatch|finish|call|execute|handle|turn|process/i.test(x.method)).slice(0,40):[];
   log('P101_ORIGINAL_AGENT_METHOD_META',JSON.stringify(protoRows(agentProto)));
+  const stepSource=Function.prototype.toString.call(agentProto.step);
+  const toolBranch=[...stepSource.matchAll(/['"]tool-call['"]/g)].slice(0,8).map(m=>{
+    const segment=stepSource.slice(Math.max(0,m.index-400),Math.min(stepSource.length,m.index+400));
+    const refs=[...segment.matchAll(/([A-Za-z_$][A-Za-z0-9_$]{0,64}(?:\??\.[A-Za-z_$][A-Za-z0-9_$]{0,64}){1,5})/g)]
+      .map(x=>x[1].replace(/\?\./g,'.'));
+    const identifiers=[...segment.matchAll(/\b([A-Za-z_$][A-Za-z0-9_$]{0,64})\b/g)]
+      .map(x=>x[1]);
+    return {propertyPaths:[...new Set(refs)].slice(0,65),
+      identifiers:[...new Set(identifiers)].slice(0,100),
+      comparisonOperators:[...segment.matchAll(/===|!==|==|!=/g)].map(x=>x[0]).slice(0,25)};
+  });
+  log('P101_ORIGINAL_STEP_TOOL_BRANCH_META',JSON.stringify(toolBranch));
   log('P101_ORIGINAL_DISPATCH_METHOD_META',JSON.stringify(protoRows(dispatchProto)));
   log('P101_DISPATCH_VALUE_SHAPE',JSON.stringify({
     type:typeof handle.dispatch,
