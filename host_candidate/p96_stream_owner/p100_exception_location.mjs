@@ -17,7 +17,8 @@ const packageLabel=url=>{
   if(url.includes('/@deepseek-ai/dsh-session/'))return 'dsh-session';
   if(url.includes('/@deepseek-ai/dsh-surface/'))return 'dsh-surface';
   if(url.includes('/@deepseek-ai/cordis/'))return 'cordis';
-  if(url.includes('/@deepseek-ai/'))return 'other-dsh-package';
+  const pkg=url.match(/\/@deepseek-ai\/([a-z][a-z0-9-]{0,70})\//);
+  if(pkg)return pkg[1];
   if(url.includes('/p99_session_controller_prompt_once.mjs'))return 'p99-probe';
   if(url.startsWith('node:'))return 'node-internal';
   return 'other';
