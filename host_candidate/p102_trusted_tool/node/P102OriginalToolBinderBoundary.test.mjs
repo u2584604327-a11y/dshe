@@ -104,6 +104,41 @@ test('unknown transport outcome times out and cannot re-arm',async()=>{
   await assert.rejects(boundary.execute(call()),/REPLAY_OR_CONCURRENT/);
   checks++;
 });
+test('deadline while original verifier is pending blocks any late native bind',async()=>{
+  let resolveOriginal;
+  const {boundary,metrics}=fixture({
+    verify:()=>new Promise(resolve=>{resolveOriginal=resolve;}),deadlineMs:30
+  });
+  const pending=boundary.execute(call());
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(typeof resolveOriginal,'function');
+  await assert.rejects(pending,/NATIVE_RESULT_TIMEOUT_UNKNOWN_OUTCOME/);
+  assert.equal(boundary.state,'BLOCKED_NO_RETRY');
+  assert.equal(metrics.revoke,1);
+  resolveOriginal(true);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(metrics.bind,0,'late original verifier must not bind');
+  assert.equal(metrics.request,0,'late original verifier must not dispatch');
+  checks++;
+});
+test('deadline while native bind is pending blocks late native request',async()=>{
+  let resolveBind,bindCalls=0;
+  const {boundary,metrics}=fixture({
+    transport:{bind:()=>{bindCalls++;return new Promise(resolve=>{resolveBind=resolve;});}},
+    deadlineMs:30
+  });
+  const pending=boundary.execute(call());
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(bindCalls,1);
+  assert.equal(typeof resolveBind,'function');
+  await assert.rejects(pending,/NATIVE_RESULT_TIMEOUT_UNKNOWN_OUTCOME/);
+  assert.equal(boundary.state,'BLOCKED_NO_RETRY');
+  assert.equal(metrics.revoke,1);
+  resolveBind({session:SESSION});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(metrics.request,0,'late bind must not start native tool execution');
+  checks++;
+});
 test('constructor rejects untrusted or incomplete adapters',()=>{
   for(const opts of [{},{transport:{}},{transport:{bind(){},request(){}}},
     {transport:{bind(){},request(){}},assertOriginalCall:()=>true,deadlineMs:10001}]){
