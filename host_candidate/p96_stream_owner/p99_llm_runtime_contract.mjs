@@ -93,6 +93,16 @@ for(const name of ['provider','context','reasoning']){
   localBindings[name]=[...normalizeSrc.matchAll(re)].map(m=>m[1]).slice(0,10);
 }
 process.stdout.write('P99_LLM_NORMALIZE_LOCAL_BINDINGS='+JSON.stringify(localBindings)+'\n');
+
+const errorPredicateTokens={};
+for(const code of ['INVALID_MODEL_INFO','INVALID_MODEL_CONTEXT','INVALID_MODEL_MAX_TOKENS','INVALID_MODEL_REASONING']){
+  const idx=normalizeSrc.indexOf(code);
+  if(idx<0){errorPredicateTokens[code]=[];continue;}
+  const window=normalizeSrc.slice(Math.max(0,idx-900),idx);
+  const tokenRe=/(resolved\.(?:provider|id|name|description|context|inputModalities|systemPromptUpdate|toolUpdate|defaultMaxTokens|reasoning)(?:\??\.[A-Za-z_$][A-Za-z0-9_$]{0,80})?|typeof|===|!==|==|!=|<=|>=|<|>|void|undefined|string|number|boolean|provider|model|context|reasoning|length|Array\.isArray|Number\.isInteger|Number\.isSafeInteger)/g;
+  errorPredicateTokens[code]=[...window.matchAll(tokenRe)].map(m=>m[1]).slice(-120);
+}
+process.stdout.write('P99_LLM_ERROR_PREDICATE_TOKENS='+JSON.stringify(errorPredicateTokens)+'\n');
 process.stdout.write('P99_LLM_RUNTIME_METHODS='+JSON.stringify(
   methods.map(name=>({name,arity:LlmRuntime.prototype[name].length})).slice(0,100))+'\n');
 for(const name of methods){
