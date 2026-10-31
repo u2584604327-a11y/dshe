@@ -263,9 +263,27 @@ try{
     sessionId:'p99_session_controller_once',
     agentOptions:{provider:'p99-local',model:'p99-model'}
   });
-  observedSessionIdentity=handle.session;
+  observedSessionIdentity=handle?.session;
   observerPhase='session-created';
-  const stored=ctx.get('sessions').get(handle.id);
+  const expectedSessionId='p99_session_controller_once';
+  const expectedStored=ctx.get('sessions').get(expectedSessionId);
+  const safeKeys=x=>x&&typeof x==='object'
+    ?Object.keys(x).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,35):[];
+  log('CONFIGURED_CREATION_META',JSON.stringify({
+    handleType:typeof handle,
+    handleKeys:safeKeys(handle),
+    handleIdType:typeof handle?.id,
+    handleIdEqualsRequested:handle?.id===expectedSessionId,
+    handleSessionType:typeof handle?.session,
+    handleAgentType:typeof handle?.agent,
+    handleAgentKeys:safeKeys(handle?.agent),
+    handleHandleKeys:safeKeys(handle?.handle),
+    storedByRequestedId:Boolean(expectedStored),
+    storedByRequestedMatchesHandleSession:expectedStored===handle?.session,
+    innerAgentSessionMatches:expectedStored===handle?.agent?.session
+  }));
+  const stored=handle?.id===expectedSessionId
+    ?ctx.get('sessions').get(handle.id):null;
   if(!stored||stored!==handle.session)
     throw new Error('P99_SESSION_STORE_HANDLE_MISMATCH');
 
