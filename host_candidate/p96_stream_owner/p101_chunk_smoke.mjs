@@ -10,7 +10,7 @@ const chunks=[
  {type:'block-start',index:0,blockType:'tool-call'},
  {type:'tool-call-delta',index:0,id:'call_p101_0001',
   name:'read_synthetic_fixture',argumentsDelta:'{"query":"fixture"}'},
- {type:'block-end',index:0},
+ {type:'block-end',index:0,block:{type:'toolCall',id:'call_p101_0001',name:'read_synthetic_fixture',arguments:{query:'fixture'}}},
  {type:'finish',reason:{kind:'tool-call'}}
 ];
 try{
