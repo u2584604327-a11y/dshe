@@ -151,7 +151,7 @@ function safeInboxMeta(inbox){
 }
 
 const ctx=new Context();
-let handle=null,unregister=null,disposeSessionObserver=null,originalSessionCommit=null,originalSessionAppend=null;
+let handle=null,configuredOwner=null,unregister=null,disposeSessionObserver=null,originalSessionCommit=null,originalSessionAppend=null;
 let promptError=null;
 const observedSessionEvents=[];
 const observedCommitAttempts=[];
@@ -259,10 +259,15 @@ try{
   // Exact original configured AgentLoop creation path: AgentOptions must
   // carry provider and model. No manual pi-ai/LlmRuntime call or fake event.
   observerPhase='creating-session';
-  handle=await ctx.get('agentLoop').createAgent(ctx,{
+  configuredOwner=await ctx.get('agentLoop').createAgent(ctx,{
     sessionId:'p99_session_controller_once',
     agentOptions:{provider:'p99-local',model:'p99-model'}
   });
+  // The exact original API returns {agent,dispose}; the actual ReactLoopAgent
+  // and its SessionStore-backed session are under .agent.
+  handle=configuredOwner?.agent;
+  if(!handle||typeof configuredOwner?.dispose!=='function')
+    throw new Error('P100_ORIGINAL_CREATE_AGENT_WRAPPER_CONTRACT_FAILED');
   observedSessionIdentity=handle?.session;
   observerPhase='session-created';
   const expectedSessionId='p99_session_controller_once';
@@ -270,6 +275,9 @@ try{
   const safeKeys=x=>x&&typeof x==='object'
     ?Object.keys(x).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,35):[];
   log('CONFIGURED_CREATION_META',JSON.stringify({
+    configuredOwnerType:typeof configuredOwner,
+    configuredOwnerKeys:safeKeys(configuredOwner),
+    configuredOwnerAgentMatchesHandle:configuredOwner?.agent===handle,
     handleType:typeof handle,
     handleKeys:safeKeys(handle),
     handleIdType:typeof handle?.id,
@@ -461,7 +469,9 @@ try{
   }
   if(typeof disposeSessionObserver==='function')try{disposeSessionObserver();}catch{}
   if(typeof unregister==='function')try{unregister();}catch{}
-  if(handle){
+  if(configuredOwner&&typeof configuredOwner.dispose==='function'){
+    try{await configuredOwner.dispose();}catch{}
+  }else if(handle){
     for(const op of ['close','dispose']){
       if(typeof handle[op]==='function'){try{await handle[op]();}catch{}break;}
     }
