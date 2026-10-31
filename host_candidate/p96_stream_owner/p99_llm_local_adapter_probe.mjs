@@ -49,6 +49,17 @@ try{
   };
   unregister=llm.registerAdapter(['p99-local'],adapter);
   log('REGISTERED',typeof unregister==='function'?'PASS':'YES_NONFUNCTION_DISPOSER');
+  const registration=llm.registration('p99-local');
+  const providerValue=registration?.provider;
+  log('REGISTRATION_PROVIDER_SHAPE',JSON.stringify({
+    type:Array.isArray(providerValue)?'array':typeof providerValue,
+    nullValue:providerValue===null,
+    keys:providerValue&&typeof providerValue==='object'
+      ?Object.keys(providerValue).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,70}$/.test(k)).slice(0,30):[],
+    primitive:['string','number','boolean'].includes(typeof providerValue)?providerValue:undefined,
+    id:typeof providerValue?.id==='string'?providerValue.id:undefined,
+    name:typeof providerValue?.name==='string'?providerValue.name:undefined
+  }));
   const signal=new AbortController().signal;
   const info=await llm.resolveModelInfo('p99-local','p99-model',signal);
   log('MODEL_INFO',JSON.stringify({
