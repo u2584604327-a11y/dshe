@@ -401,11 +401,15 @@ jobs:
           # Executable original in-memory chunk assembly (no side effects).
           cp host_candidate/p96_stream_owner/p101_chunk_smoke.mjs \
             .p96private/agent-runtime/p101_chunk_smoke.mjs
+          set +e
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
             timeout 12s node .p96private/agent-runtime/p101_chunk_smoke.mjs \
             > .p96private/p101-chunk-smoke.log 2>&1
+          p101_smoke_rc=$?
+          set -e
           cat .p96private/p101-chunk-smoke.log
+          test "$p101_smoke_rc" -eq 0
           grep -Fxq 'P101_CHUNK_SMOKE_ORIGINAL_BLOCK_ASSEMBLER_TOOL_CALL=PASS' .p96private/p101-chunk-smoke.log
           echo 'P101_ORIGINAL_INMEMORY_TOOL_CHUNK_ASSEMBLY=PASS' >> "$GITHUB_STEP_SUMMARY"
           # New isolated original outer Controller.prompt, no network, no
@@ -413,11 +417,15 @@ jobs:
           # original ToolRuntime executes once and original loop resumes.
           cp host_candidate/p96_stream_owner/p101_original_outer_tool_roundtrip.mjs \
             .p96private/agent-runtime/p101_original_outer_tool_roundtrip.mjs
+          set +e
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
             timeout 25s node .p96private/agent-runtime/p101_original_outer_tool_roundtrip.mjs \
             > .p96private/p101-outer-tool.log 2>&1
+          p101_outer_rc=$?
+          set -e
           cat .p96private/p101-outer-tool.log
+          test "$p101_outer_rc" -eq 0
           grep -Fxq 'P99_PROMPT_ONCE_P101_ORIGINAL_AUTOMATIC_TOOL_ROUNDTRIP=PASS' .p96private/p101-outer-tool.log
           grep -Fxq 'P99_PROMPT_ONCE_P101_NO_NETWORK=PASS' .p96private/p101-outer-tool.log
           echo 'P101_ORIGINAL_OUTER_TOOL_EXECUTION_AND_AUTO_CONTINUATION=PASS_ISOLATED_ONLY' >> "$GITHUB_STEP_SUMMARY"
