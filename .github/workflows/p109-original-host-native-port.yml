@@ -1,0 +1,98 @@
+name: P109 original host native Messenger source connection (compile-only, deny all)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p109_original_native_port_source_patch.py'
+      - '.github/workflows/p109-original-host-native-port.yml'
+      - 'host_candidate/p108_original_host_epoch_patch.py'
+      - 'host_candidate/p102_trusted_tool/android/com/dsh/android/p102/P102AndroidToolBinderPort.java'
+      - 'host_candidate/p102_trusted_tool/src/com/dsh/android/p102/P102TrustedToolGate.java'
+      - 'host_candidate/p71_browser_runtime/src/com/dsh/android/p71/P71ToolReplyOnce.java'
+permissions:
+  contents: read
+jobs:
+  compile-real-original-host-with-default-denied-native-port:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 19
+    env:
+      ORIGINAL_SHA: 4dddb12fd076d052e788a16638a658b7a447b669
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: changes
+      - uses: actions/checkout@v4
+        with:
+          repository: pht88888888/DSHAPP
+          ref: 4dddb12fd076d052e788a16638a658b7a447b669
+          persist-credentials: false
+          path: original
+      - name: Apply P108 and P109 exact source overlays with original MIT notice
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original rev-parse HEAD)" = "$ORIGINAL_SHA"
+          cmp original/LICENSE changes/THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          python3 changes/host_candidate/p108_original_host_epoch_patch.py --upstream-dir original
+          python3 changes/host_candidate/p109_original_native_port_source_patch.py \
+            --upstream-dir original --changes-dir changes
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          root=Path('original')
+          expected={
+            'app/src/main/java/com/dsh/android/MainActivity.kt',
+            'app/src/main/java/com/dsh/android/P108OriginalOwnerEpochGate.kt',
+            'app/src/main/java/com/dsh/android/P109OriginalToolHostBoundary.kt',
+            'app/src/main/java/com/dsh/android/p71/P71ToolReplyOnce.java',
+            'app/src/main/java/com/dsh/android/p102/P102TrustedToolGate.java',
+            'app/src/main/java/com/dsh/android/p102/P102AndroidToolBinderPort.java',
+          }
+          got={s[3:] for s in subprocess.check_output(
+             ['git','-C','original','status','--porcelain'],text=True).splitlines()}
+          assert got==expected,('P109_UNAUTHORIZED_ORIGINAL_CHANGE',sorted(got))
+          b=(root/'app/src/main/java/com/dsh/android/P109OriginalToolHostBoundary.kt').read_text()
+          activity=(root/'app/src/main/java/com/dsh/android/MainActivity.kt').read_text()
+          assert b.count('OriginalCallVerifier { _, _ ->')==1
+          assert b.count('TrustedExecutor { _, _ ->')==1
+          assert b.count('false // Original still-live SessionStore')==1
+          assert b.count('false // No device tool execution')==1
+          assert 'onTrustedServiceBindingInitiated' not in b
+          assert 'trustedInbox()' not in b
+          assert activity.count('p109TrustedToolHost.onOriginalEngineStateChanged()')==1
+          assert activity.count('p109TrustedToolHost.onOriginalActivityDestroyed()')==1
+          assert not (root/'app/src/main/java/com/dsh/android/p102/P102IsolatedWorker.java').exists()
+          assert 'override fun onBind(intent: Intent?): IBinder? = null' in (
+            root/'app/src/main/java/com/dsh/android/EngineService.kt').read_text()
+          print('P109_SOURCE_CONNECTION_ACTUAL_P102_PORT=PASS')
+          print('P109_ORIGINAL_SESSION_AND_EXECUTOR_HARD_DENY=PASS')
+          print('P109_WORKER_BINDER_PRODUCTION=NOT_WIRED')
+          PY
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Compile actual patched original Android Kotlin AND P102 Java native classes
+        shell: bash
+        working-directory: original
+        run: |
+          set -euo pipefail
+          test ! -e keystore.properties
+          test ! -e dsh-release.jks
+          gradle --no-daemon --console=plain --max-workers=2 \
+            :app:compileSystemDebugKotlin :app:compileSystemDebugJavaWithJavac
+          echo 'P109_ORIGINAL_ANDROID_HOST_KOTLIN_AND_P102_JAVA_COMPILE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P109_SESSIONSTORE_TOOLRUNTIME_PRODUCTION_CALL_OWNER=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P109_NATIVE_UI_OR_TOOL_EXECUTION=DENIED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P109_REAL_PRODUCTION_WORKER_BINDER=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P109_SIGNED_OR_INSTALLED_APK=NONE' >> "$GITHUB_STEP_SUMMARY"
