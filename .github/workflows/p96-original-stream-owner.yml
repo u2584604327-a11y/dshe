@@ -239,14 +239,18 @@ jobs:
           echo 'P99_PRINCIPAL_CONTRACT_NO_SIDE_EFFECT=PASS' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p99_llm_local_adapter_probe.mjs \
             .p96private/agent-runtime/p99_llm_local_adapter_probe.mjs
+          set +e
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
             timeout 12s node .p96private/agent-runtime/p99_llm_local_adapter_probe.mjs \
-            > .p96private/p99-local-llm.log
+            > .p96private/p99-local-llm.log 2>&1
+          p99_llm_rc=$?
+          set -e
+          cat .p96private/p99-local-llm.log
+          test "$p99_llm_rc" -eq 0
           grep -Fxq 'P99_LOCAL_LLM_RESOLVE_MODEL_INFO=PASS' .p96private/p99-local-llm.log
           grep -Fxq 'P99_LOCAL_LLM_PREPARE_CALLS=0' .p96private/p99-local-llm.log
           grep -Fxq 'P99_LOCAL_LLM_NETWORK_ATTEMPTS=0' .p96private/p99-local-llm.log
-          cat .p96private/p99-local-llm.log
           echo 'P99_LOCAL_LLM_RESOLVE_MODEL_INFO=PASS' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p99_original_session_services_boot.mjs \
             .p96private/agent-runtime/p99_original_session_services_boot.mjs
