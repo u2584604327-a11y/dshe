@@ -110,9 +110,13 @@ def scan_dex(blob):
                     code_off,cursor=uleb(blob,cursor)
                     check(index<method_count,'DEX_CLASS_METHOD_INDEX')
                     check(methods[index][0]==descriptor,'DEX_CLASS_METHOD_OWNER')
-                    if len(names)<60:
-                        names.append({'name':methods[index][1],
-                                      'has_code':code_off!=0})
+                    name=methods[index][1]
+                    if (len(names)<80 and name not in ('<init>','<clinit>') and
+                        re.search(r'onCreate|onBind|onDestroy|start|stop|engine|'
+                                  r'node|binder|service|attach|session|tool|'
+                                  r'init|run|process|connect|webview',
+                                  name,re.I)):
+                        names.append({'name':name,'has_code':code_off!=0})
         targets.append({'class':descriptor,'methods':names})
     return {'class_count':class_count,'method_count':method_count,
             'target_classes':targets}
