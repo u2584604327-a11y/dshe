@@ -59,12 +59,26 @@ def inspect(apk:pathlib.Path):
                     calls.append(cm.group(1).decode("utf-8","replace"))
                 class_candidates=[]
                 for xm in re.finditer(
-                    rb"class\\s+([A-Za-z_$][A-Za-z0-9_$]{0,64})",
-                    raw[max(0,m.start()-12000):m.start()]):
+                    rb"class\s+([A-Za-z_$][A-Za-z0-9_$]{0,64})",
+                    raw[:m.start()]):
                     class_candidates.append(xm.group(1).decode("utf-8","replace"))
+                assigned_class_candidates=[]
+                for xm in re.finditer(
+                    rb"(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*=\s*class\b",
+                    raw[:m.start()]):
+                    assigned_class_candidates.append(xm.group(1).decode("utf-8","replace"))
+                method_signatures=[]
+                for mm in re.finditer(
+                    rb"(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*\(([^()]{0,320})\)\s*\{",
+                    raw[max(0,m.start()-12000):m.start()]):
+                    name2=mm.group(1).decode("utf-8","replace")
+                    if name2 in ("if","for","while","switch","catch"): continue
+                    params2=[x.strip() for x in mm.group(2).decode("utf-8","replace").split(",")]
+                    params2=[x for x in params2 if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]{0,64}",x)]
+                    method_signatures.append({"name":name2,"params":params2[:12]})
                 event_type_literals=[]
                 for em in re.finditer(
-                    rb"event\\??\\.type\\s*(?:===|==|!==|!=)\\s*['\"]([A-Za-z0-9_./:-]{1,80})['\"]",
+                    rb"event\??\.type\s*(?:===|==|!==|!=)\s*['\"]([A-Za-z0-9_./:-]{1,80})['\"]",
                     window):
                     event_type_literals.append(em.group(1).decode("utf-8","replace"))
                 safe_literals=[]
@@ -77,7 +91,9 @@ def inspect(apk:pathlib.Path):
                 details.append({
                     "receiver":value,
                     "offset":m.start(),
-                    "nearestClasses":class_candidates[-4:],
+                    "nearestClasses":class_candidates[-6:],
+                    "nearestAssignedClasses":assigned_class_candidates[-6:],
+                    "nearestMethodSignatures":method_signatures[-8:],
                     "nearestMethods":method_candidates[-5:],
                     "nearbyEventTypeLiterals":sorted(set(event_type_literals))[:30],
                     "nearbySafeLiterals":sorted(set(safe_literals))[:50],
@@ -87,7 +103,7 @@ def inspect(apk:pathlib.Path):
             if receivers:
                 helper_imports=[]
                 for im in re.finditer(
-                    rb"import\\s*\\{([^}]{1,1800})\\}\\s*from\\s*['\"]([^'\"]{1,180})['\"]",
+                    rb"import\s*\{([^}]{1,1800})\}\s*from\s*['\"]([^'\"]{1,180})['\"]",
                     raw):
                     clause=im.group(1).decode("utf-8","replace")
                     module=im.group(2).decode("utf-8","replace")
@@ -103,7 +119,7 @@ def inspect(apk:pathlib.Path):
                         })
                 class_assignments=[]
                 for cm in re.finditer(
-                    rb"(?:const|let|var)\\s+([A-Za-z_$][A-Za-z0-9_$]{0,64})\\s*=\\s*class\\b",
+                    rb"(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*=\s*class\b",
                     raw[max(0,details[0]["offset"]-20000):details[0]["offset"]]):
                     class_assignments.append(cm.group(1).decode("utf-8","replace"))
                 rows.append({
