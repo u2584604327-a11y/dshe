@@ -46,13 +46,15 @@ jobs:
           checks={
             'original project credit': 'pht88888888/DSHAPP',
             'original MIT notice file': 'THIRD_PARTY_LICENSES/DSHAPP-MIT.txt',
-            'independent notice link': 'NOTICE.md',
             'third party author': 'pht88888888',
             'existing modified version': 'v138',
             'planned but unreleased version': 'v139',
           }
           for label,value in checks.items():
             assert value in r and value in n, 'DSH_ATTRIBUTION_MISSING_'+label.replace(' ','_').upper()
+          # README must link to NOTICE; requiring NOTICE to link to itself
+          # is an incorrect CI constraint, not a real attribution failure.
+          assert '[NOTICE' in r or '(NOTICE.md)' in r, 'DSH_ATTRIBUTION_MISSING_INDEPENDENT_NOTICE_LINK'
           assert '非官方' in r and '二次修改' in r
           assert 'unofficial' in n and 'independent' in n
           assert 'NOT' in n and 'NOT' in r or ('尚未发布' in r and 'NOT' in n)
