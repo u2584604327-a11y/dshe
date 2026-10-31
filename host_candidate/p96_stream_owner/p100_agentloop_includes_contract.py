@@ -57,10 +57,30 @@ def inspect(apk:pathlib.Path):
                     rb"(?:this\.)?([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*\(",
                     window):
                     calls.append(cm.group(1).decode("utf-8","replace"))
+                class_candidates=[]
+                for xm in re.finditer(
+                    rb"class\\s+([A-Za-z_$][A-Za-z0-9_$]{0,64})",
+                    raw[max(0,m.start()-12000):m.start()]):
+                    class_candidates.append(xm.group(1).decode("utf-8","replace"))
+                event_type_literals=[]
+                for em in re.finditer(
+                    rb"event\\??\\.type\\s*(?:===|==|!==|!=)\\s*['\"]([A-Za-z0-9_./:-]{1,80})['\"]",
+                    window):
+                    event_type_literals.append(em.group(1).decode("utf-8","replace"))
+                safe_literals=[]
+                for sm in re.finditer(
+                    rb"['\"]([A-Za-z][A-Za-z0-9_./:-]{1,80})['\"]",
+                    window):
+                    value2=sm.group(1).decode("utf-8","replace")
+                    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_./:-]{1,80}",value2):
+                        safe_literals.append(value2)
                 details.append({
                     "receiver":value,
                     "offset":m.start(),
+                    "nearestClasses":class_candidates[-4:],
                     "nearestMethods":method_candidates[-5:],
+                    "nearbyEventTypeLiterals":sorted(set(event_type_literals))[:30],
+                    "nearbySafeLiterals":sorted(set(safe_literals))[:50],
                     "nearbyPropertyRefs":sorted(set(prop_refs))[:60],
                     "nearbyCalls":sorted(set(calls))[:60],
                 })
