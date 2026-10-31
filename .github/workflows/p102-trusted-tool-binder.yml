@@ -98,17 +98,38 @@ jobs:
           BT="$SDK/build-tools/35.0.0"
           f=".p102tmp/p102-emulator-only.apk"
           test -s "$f"
-          "$BT/apksigner" verify --verbose --print-certs "$f" > .p102tmp/public-certificate.txt
-          grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' .p102tmp/public-certificate.txt
-          cert="$(sed -nE 's/^V2 Signer: certificate SHA-256 digest: ([A-Fa-f0-9]{64})$/\1/p' .p102tmp/public-certificate.txt | head -n 1 | tr '[:upper:]' '[:lower:]')"
-          test "${#cert}" -eq 64
-          test "$cert" != '90072b7de43e96999be92d99869ce5e5b7639b5f2449417b99a1790831b60ff8'
-          test "$cert" != 'ef6afe33330839ed6d6739fb4d4bb84d358fd7bec8c1116c97309f92d9d3f385'
-          "$BT/aapt" dump badging "$f" | grep -Fq "package: name='com.dsh.p102.trustedtoolprobe'"
-          if "$BT/aapt" dump permissions "$f" | grep -Fq 'uses-permission:';then
+          echo 'P102_STANDALONE_APK_FILE_PRESENT=PASS'
+          if ! "$BT/apksigner" verify --verbose --print-certs "$f" > .p102tmp/public-certificate.txt; then
+            echo 'P102_STANDALONE_APK_VERIFY=FAIL'; exit 1
+          fi
+          echo 'P102_STANDALONE_APK_VERIFY=PASS'
+          if ! grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' .p102tmp/public-certificate.txt; then
+            echo 'P102_STANDALONE_V2_SCHEME=FAIL'; exit 1
+          fi
+          echo 'P102_STANDALONE_V2_SCHEME=PASS'
+          cert="$(sed -nE 's/^.*certificate SHA-256 digest:[[:space:]]*([A-Fa-f0-9]{64})[[:space:]]*$/\1/p' .p102tmp/public-certificate.txt | head -n 1 | tr '[:upper:]' '[:lower:]')"
+          if test "${#cert}" -ne 64; then
+            echo 'P102_STANDALONE_CERT_DIGEST_PARSE=FAIL'
+            grep -i 'certificate.*sha-256' .p102tmp/public-certificate.txt | head -n 4 || true
+            exit 1
+          fi
+          echo 'P102_STANDALONE_CERT_DIGEST_PARSE=PASS'
+          if test "$cert" = '90072b7de43e96999be92d99869ce5e5b7639b5f2449417b99a1790831b60ff8' ||
+             test "$cert" = 'ef6afe33330839ed6d6739fb4d4bb84d358fd7bec8c1116c97309f92d9d3f385'; then
+            echo 'P102_STANDALONE_CERT_NOT_SEPARATE=FAIL'; exit 1
+          fi
+          echo 'P102_STANDALONE_CERT_NOT_DSH=PASS'
+          badge="$("$BT/aapt" dump badging "$f")"
+          case "$badge" in
+            *"package: name='com.dsh.p102.trustedtoolprobe'"*) echo 'P102_STANDALONE_PACKAGE=PASS';;
+            *) echo 'P102_STANDALONE_PACKAGE=FAIL'; exit 1;;
+          esac
+          "$BT/aapt" dump permissions "$f" > .p102tmp/public-permissions.txt
+          if grep -Fq 'uses-permission:' .p102tmp/public-permissions.txt;then
             echo 'P102_STANDALONE_APK_PERMISSIONS=FAIL'
             exit 1
           fi
+          echo 'P102_STANDALONE_APK_PERMISSIONS=ZERO'
           mkdir -p .p102tmp/phone-upload
           cp "$f" .p102tmp/phone-upload/P102-Standalone-Binder-Lab-Android34plus.apk
           (cd .p102tmp/phone-upload && sha256sum P102-Standalone-Binder-Lab-Android34plus.apk > SHA256SUMS.txt)
