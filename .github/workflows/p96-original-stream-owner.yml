@@ -388,6 +388,16 @@ jobs:
           grep -Fxq 'P101_ASSISTANT_CHUNK_REFLECTION_ONLY=PASS' .p96private/p101-assistant-chunks.log
           cat .p96private/p101-assistant-chunks.log
           echo 'P101_ASSISTANT_CHUNK_HELPERS=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          # Exact original normalized chunk type discriminants, no model/tool.
+          cp host_candidate/p96_stream_owner/p101_chunk_discriminants.mjs \
+            .p96private/agent-runtime/p101_chunk_discriminants.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 12s node .p96private/agent-runtime/p101_chunk_discriminants.mjs \
+            > .p96private/p101-chunk-types.log
+          grep -Fxq 'P101_ORIGINAL_CHUNK_DISCRIMINANTS=PASS' .p96private/p101-chunk-types.log
+          cat .p96private/p101-chunk-types.log
+          echo 'P101_ORIGINAL_CHUNK_TYPES=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
           cp host_candidate/p96_stream_owner/p96_original_agent_runtime_probe.mjs \
             .p96private/agent-runtime/p96_original_agent_runtime_probe.mjs
           env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
