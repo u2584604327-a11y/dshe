@@ -32,12 +32,20 @@ public final class P102IsolatedWorker extends Service {
             Log.e(TAG,"P102_AUTHENTICATED_INIT=FAIL");return;
           }
           hostUid=msg.sendingUid;host=msg.replyTo;
+          Log.i(TAG,"P102_WORKER_INIT_FROM_TRUSTED_HOST=PASS");
           Message hello=Message.obtain(null,P102AndroidToolBinderPort.HELLO);
           hello.replyTo=inbox;host.send(hello);
           return;
         }
-        if(host==null||msg.sendingUid!=hostUid)return;
+        if(host==null){
+          Log.e(TAG,"P102_WORKER_HOST_NOT_BOUND=FAIL");return;
+        }
+        if(msg.sendingUid!=hostUid){
+          // Observe UID mismatch, never weaken the authority check.
+          Log.e(TAG,"P102_WORKER_HOST_UID_MISMATCH=FAIL");return;
+        }
         if(msg.what==P102AndroidToolBinderPort.HELLO_REPLY){
+          Log.i(TAG,"P102_WORKER_HELLO_REPLY_RECEIVED=PASS");
           if(stage!=0)return;
           Bundle b=msg.getData();session=b.getString("session");
           if(session==null||!session.matches("[a-f0-9]{64}")||
@@ -47,6 +55,7 @@ public final class P102IsolatedWorker extends Service {
           stage=1;
           sendRequest();
         }else if(msg.what==P102AndroidToolBinderPort.REQUEST_ACK){
+          Log.i(TAG,"P102_WORKER_REQUEST_ACK_RECEIVED=YES");
           String status=msg.getData().getString("status","");
           if(stage==1){
             if(!"PENDING_NATIVE_APPROVAL".equals(status)){
@@ -65,7 +74,10 @@ public final class P102IsolatedWorker extends Service {
             Log.i(TAG,"P102_ORIGINAL_DSH_NODE_CONNECTED=NO");
           }
         }else if(msg.what==P102AndroidToolBinderPort.TOOL_TERMINAL){
-          if(stage!=2)return;
+          Log.i(TAG,"P102_WORKER_TERMINAL_FRAME_RECEIVED=YES");
+          if(stage!=2){
+            Log.e(TAG,"P102_TERMINAL_UNEXPECTED_STAGE=FAIL");return;
+          }
           Bundle b=msg.getData();
           if(!CALL.equals(b.getString("callId"))||
              !"SUCCESS".equals(b.getString("status"))||
