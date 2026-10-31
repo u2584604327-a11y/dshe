@@ -91,7 +91,20 @@ function safeEventMeta(event){
     insertedCount:inserted.length,
     insertedRoles:inserted.map(x=>String(x?.role??'UNKNOWN').slice(0,40)),
     insertedTypes:inserted.map(x=>String(x?.type??'UNKNOWN').slice(0,40)),
-    reason:typeof data?.reason==='string'?data.reason.slice(0,80):undefined,
+    reasonShape:{
+      type:Array.isArray(data?.reason)?'array':typeof data?.reason,
+      nullValue:data?.reason===null,
+      keys:data?.reason&&typeof data.reason==='object'
+        ?Object.keys(data.reason).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,20):[],
+      primitive:['string','number','boolean'].includes(typeof data?.reason)
+        ?String(data.reason).slice(0,80):undefined
+    },
+    turnShape:{
+      type:Array.isArray(data?.turn)?'array':typeof data?.turn,
+      nullValue:data?.turn===null,
+      primitive:['string','number','boolean'].includes(typeof data?.turn)
+        ?String(data.turn).slice(0,80):undefined
+    },
     turnKeys:data?.turn&&typeof data.turn==='object'
       ?Object.keys(data.turn).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,20):[]
   };
