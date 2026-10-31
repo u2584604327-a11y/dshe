@@ -1,0 +1,66 @@
+name: P105 public v91 tool assets vs exact modified v138 compatibility (read-only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p105_upstream_v91_asset_compat_readonly.py'
+      - '.github/workflows/p105-upstream-v91-assets.yml'
+permissions:
+  contents: read
+jobs:
+  public-version91-resource-identity-only:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      UPSTREAM_REVISION: 4dddb12fd076d052e788a16638a658b7a447b669
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read SHA-locked signed v138 APK and pinned public MIT source assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = 'u2584604327-a11y/dshe'
+          mkdir -p .p105/public .p105/apk
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo "$GH_REPO" \
+            --pattern 'DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk' \
+            --dir .p105/apk
+          printf '%s  %s\n' \
+            3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 \
+            .p105/apk/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk | sha256sum -c -
+          for name in browser-tool.zip browser-pane.zip logs-tool.zip dsh-fetch-guard.mjs; do
+            url="https://raw.githubusercontent.com/pht88888888/DSHAPP/${UPSTREAM_REVISION}/app/src/main/assets/$name"
+            code="$(curl -sSL --retry 2 --max-time 35 --max-filesize 8000000 \
+              -w '%{http_code}' "$url" -o ".p105/public/$name")"
+            case "$code" in
+              200) test -s ".p105/public/$name";;
+              404) rm -f ".p105/public/$name";;
+              *) echo "P105_PINNED_SOURCE_FETCH_ERROR=$code"; exit 1;;
+            esac
+          done
+          python3 host_candidate/p105_upstream_v91_asset_compat_readonly.py \
+            --apk .p105/apk/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --public-assets .p105/public | tee .p105/report.txt
+          grep -Fqx 'P105_PUBLIC_SOURCE_BINARY_EQUIVALENCE=NOT_PROVEN' .p105/report.txt
+          grep -Fqx 'P105_ORIGINAL_AGENTLOOP_BINDER_PRODUCTION=NOT_WIRED' .p105/report.txt
+          grep -Fqx 'P105_V138_APK_OR_USER_DATA_MODIFIED=NO' .p105/report.txt
+          {
+            echo 'P105_PINNED_VERSION91_PUBLIC_TOOL_ASSET_COMPARISON=PASS'
+            echo 'P105_V138_APK_SHA256=PASS'
+            echo 'P105_PUBLIC_SOURCE_V138_WHOLE_BINARY=NOT_PROVEN'
+            echo 'P105_APK_BUILD_OR_SIGNING=NONE'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove temporary public source and signed binary copies
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p105
+          test ! -e .p105
