@@ -20,8 +20,15 @@ and trigger the original AgentLoop's automatic continuation.
 turn validator are *not* implemented by the original DSH EngineManager,
 MainActivity or Android Node process in this repository. JS alone cannot
 authenticate Binder Message.sendingUid, native approval, the installed app's
-live SessionStore, or result durability. The Android P102 port currently
-binds a native host session but does not yet bind original sessionId.
+live SessionStore, or result durability. The Android P102 port now requires a **second, separate originalSessionId**
+plus tool callId in every worker REQUEST. A trusted-host OriginalCallVerifier
+must independently prove current SessionStore/ToolRuntime ownership when the
+request arrives, before native UI approval dispatch, and after executor return.
+A native host may never trust the worker's own asserted sessionId without that
+verification. In this repo only the disposable Android emulator fixture provides
+an explicitly fixed synthetic verifier; **no production original SessionStore
+or EngineManager callback supplies it yet**. Source-level parity and the
+emulator's fixed callback do not establish real DSH production provenance.
 Source-level parity checks do not constitute a Binder end-to-end run.
 
 Stop conditions for production: exact editable original host/Node ToolRuntime
