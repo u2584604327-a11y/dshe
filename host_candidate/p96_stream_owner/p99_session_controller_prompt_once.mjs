@@ -90,7 +90,10 @@ function safeEventMeta(event){
     target:typeof data?.target==='string'?data.target.slice(0,40):undefined,
     insertedCount:inserted.length,
     insertedRoles:inserted.map(x=>String(x?.role??'UNKNOWN').slice(0,40)),
-    insertedTypes:inserted.map(x=>String(x?.type??'UNKNOWN').slice(0,40))
+    insertedTypes:inserted.map(x=>String(x?.type??'UNKNOWN').slice(0,40)),
+    reason:typeof data?.reason==='string'?data.reason.slice(0,80):undefined,
+    turnKeys:data?.turn&&typeof data.turn==='object'
+      ?Object.keys(data.turn).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,64}$/.test(k)).slice(0,20):[]
   };
 }
 function safeInboxMeta(inbox){
@@ -208,6 +211,12 @@ try{
     ?afterEvents.slice(beforeEvents.length):[];
   log('COMMITTED_EVENT_META',JSON.stringify(committedDelta.map(safeEventMeta)));
   log('INBOX_AFTER_META',JSON.stringify(safeInboxMeta(handle.inbox.current())));
+  log('PHASE_META',JSON.stringify({
+    kind:typeof handle.phase?.kind==='string'?handle.phase.kind:null,
+    keys:handle.phase&&typeof handle.phase==='object'?Object.keys(handle.phase).slice(0,20):[],
+    lastTurnKeys:handle.phase?.lastTurn&&typeof handle.phase.lastTurn==='object'
+      ?Object.keys(handle.phase.lastTurn).slice(0,20):[]
+  }));
   log('AFTER_MESSAGE_ROLES',JSON.stringify(afterRoles));
   log('EVENT_COUNT_DELTA',afterCount-beforeCount);
   log('USER_ROLE_DELTA',userDelta);
