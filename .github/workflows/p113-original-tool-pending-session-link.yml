@@ -119,6 +119,8 @@ jobs:
             node .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs \
             > .p113private/p116-deny.log 2>&1
           for marker in \
+            'P99_PROMPT_ONCE_P116_REAL_ORIGINAL_HELPER_ENTRY_SEEN_ONCE=PASS' \
+            'P99_PROMPT_ONCE_P116_REAL_ORIGINAL_CALL_ID_BEFORE_DENY=PASS' \
             'P99_PROMPT_ONCE_P116_ORIGINAL_HELPER_DENIED_BEFORE_OBSERVER=PASS' \
             'P99_PROMPT_ONCE_P116_NO_ORIGINAL_TOOL_BODY=PASS' \
             'P99_PROMPT_ONCE_P116_NO_ORIGINAL_RESULT_NOTIFY=PASS' \
@@ -126,7 +128,12 @@ jobs:
             'P99_PROMPT_ONCE_P116_ANDROID_NATIVE_PERMISSION=NEVER_GRANTED'; do
             grep -Fxq "$marker" .p113private/p116-deny.log
           done
+          # Explicitly report whether the original agent completed its turn
+          # or took the error/abort path. Neither is silently called success.
+          grep -E '^P99_PROMPT_ONCE_(HARNESS_RESULT|P101_COMPLETED_TURN_ONCE|P101_TOOL_EXECUTIONS|P101_TOOL_NOTIFICATIONS|P116_)' \
+            .p113private/p116-deny.log | sed -E 's/^(.{0,200}).*/\1/' || true
           echo 'P116_ACTUAL_ORIGINAL_AGENTLOOP_UNVERIFIED_TOOL_DENIED_BEFORE_EXECUTION=PASS_CI_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P116_DENIED_TURN_TERMINAL_BEHAVIOR=REQUIRES_SEPARATE_VERIFICATION' >> "$GITHUB_STEP_SUMMARY"
           echo 'P116_ANDROID_NATIVE_GRANT_OR_PRODUCTION_ORIGINAL_BINDER=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
       - name: Delete exact original runtime temporary bytes
         if: always()
