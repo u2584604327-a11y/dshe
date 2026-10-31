@@ -30,6 +30,15 @@ try{
     providerInfo(provider){return {id:provider,name:'P99 Local Fixture'};},
     providerRetryPolicy(){return undefined;},
     async resolveModel(model){
+      log('RESOLVE_MODEL_INPUT_SHAPE',JSON.stringify({
+        type:Array.isArray(model)?'array':typeof model,
+        nullValue:model===null,
+        keys:model&&typeof model==='object'
+          ?Object.keys(model).filter(k=>/^[A-Za-z_$][A-Za-z0-9_$]{0,70}$/.test(k)).slice(0,30):[],
+        primitive:['string','number','boolean'].includes(typeof model)?model:undefined,
+        id:typeof model?.id==='string'?model.id:undefined,
+        model:typeof model?.model==='string'?model.model:undefined
+      }));
       return {
         provider:'p99-local',
         id:model,
