@@ -32,16 +32,45 @@ def inspect(apk:pathlib.Path):
             raw=f.read(MAX_MEMBER+1)
             require(len(raw)==item.size,"SHORT_SOURCE")
             receivers=[]
+            details=[]
             for m in RECEIVER.finditer(raw):
                 value=m.group(1).decode("utf-8","replace").replace("?.",".")
-                if re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$.]{0,120}",value):
-                    receivers.append(value)
+                if not re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$.]{0,120}",value):
+                    continue
+                receivers.append(value)
+                lo=max(0,m.start()-1800)
+                hi=min(len(raw),m.end()+1000)
+                window=raw[lo:hi]
+                method_candidates=[]
+                for mm in re.finditer(
+                    rb"(?:async\\s+)?([A-Za-z_$][A-Za-z0-9_$]{0,64})\\s*\\([^()]{0,320}\\)\\s*\\{",
+                    raw[lo:m.start()]):
+                    method_candidates.append(mm.group(1).decode("utf-8","replace"))
+                prop_refs=[]
+                for pm in re.finditer(
+                    rb"\\b(event|message|entry|item|decision|session|this)\\??\\.([A-Za-z_$][A-Za-z0-9_$]{0,64})",
+                    window):
+                    prop_refs.append(
+                        pm.group(1).decode("utf-8","replace")+"."+pm.group(2).decode("utf-8","replace"))
+                calls=[]
+                for cm in re.finditer(
+                    rb"(?:this\\.)?([A-Za-z_$][A-Za-z0-9_$]{0,64})\\s*\\(",
+                    window):
+                    calls.append(cm.group(1).decode("utf-8","replace"))
+                details.append({
+                    "receiver":value,
+                    "offset":m.start(),
+                    "nearestMethods":method_candidates[-5:],
+                    "nearbyPropertyRefs":sorted(set(prop_refs))[:60],
+                    "nearbyCalls":sorted(set(calls))[:60],
+                })
             if receivers:
                 rows.append({
                     "path":name,
                     "sha12":sha(raw)[:12],
                     "includesReceivers":sorted(set(receivers))[:80],
                     "occurrences":len(receivers),
+                    "details":details[:20],
                 })
     print("P100_AGENTLOOP_INCLUDES_RECEIVER_INVENTORY="+json.dumps(rows,sort_keys=True))
     print("P100_AGENTLOOP_SOURCE_EXPORTED=NO")
