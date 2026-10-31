@@ -308,6 +308,9 @@ jobs:
           grep -Fxq 'P99_PROMPT_ONCE_LOCAL_MODEL_RESOLVED=PASS' .p96private/p99-prompt-once.log
           grep -Fxq 'P99_PROMPT_ONCE_REAL_SESSION_COMMITTED_USER_TURN=PASS' .p96private/p99-prompt-once.log
           grep -Eq '^P99_PROMPT_ONCE_APPEND_ATTEMPT_META=\[' .p96private/p99-prompt-once.log
+          grep -Eq '^P99_PROMPT_ONCE_LISTENER_TIMING_META=\[' .p96private/p99-prompt-once.log
+          grep -Fxq 'P99_PROMPT_ONCE_LISTENER_ARGUMENT_SHAPE=PASS' .p96private/p99-prompt-once.log
+          echo 'P100_ORIGINAL_SESSION_LISTENER_ARGUMENTS=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
           echo 'P100_ORIGINAL_SESSION_APPEND_OBSERVER=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
           grep -Fxq 'P99_PROMPT_ONCE_NO_NETWORK=PASS' .p96private/p99-prompt-once.log
           grep -Fxq 'P99_PROMPT_ONCE_WORKSPACE_UNUSED=PASS' .p96private/p99-prompt-once.log
