@@ -67,7 +67,8 @@ export class P102OriginalToolBinderBoundary {
            !/^[a-f0-9]{64}$/.test(binding.session))
           throw Error('P102_NATIVE_HOST_SESSION_INVALID');
         const request=Object.freeze({
-          session:binding.session,callId,toolName,arguments:canonicalArgs
+          session:binding.session,originalSessionId:sessionId,
+          callId,toolName,arguments:canonicalArgs
         });
         const terminal=await this.#transport.request(request);
         if(this.#cancelled)throw Error('P102_REVOKED');
