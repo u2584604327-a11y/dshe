@@ -19,11 +19,14 @@ public final class P102TrustedToolGateTest {
   }
   static final String SESSION="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
   static final int UID=99055;
+  static final String ORIGINAL="p99_session_controller_once";
   static final class Lab {
     final Clock clock=new Clock();
     final AtomicInteger executions=new AtomicInteger();
     final List<P71ToolReplyOnce.Terminal> replies=new ArrayList<>();
     final P102TrustedToolGate gate;
+    boolean originalActive=true;
+    int originalChecks;
     Lab(){
       gate=new P102TrustedToolGate(UID,SESSION,clock,u->u==UID,
         (name,args)->{
@@ -31,10 +34,12 @@ public final class P102TrustedToolGateTest {
              !P102TrustedToolGate.FIXED_ARGS.equals(args))
             throw new AssertionError("P102_NOT_FIXED_EXECUTION");
           executions.incrementAndGet();return true;
-        },r->{synchronized(replies){replies.add(r);}});
+        },r->{synchronized(replies){replies.add(r);}},
+        (sessionId,callId)->{originalChecks++;return originalActive&&ORIGINAL.equals(sessionId)&&
+          callId!=null&&callId.matches("[A-Za-z0-9_-]{1,96}");});
     }
     P102TrustedToolGate.Decision request(String call){
-      return gate.accept(UID,SESSION,call,P102TrustedToolGate.TOOL,
+      return gate.accept(UID,SESSION,ORIGINAL,call,P102TrustedToolGate.TOOL,
         P102TrustedToolGate.FIXED_ARGS);
     }
     int replies(){synchronized(replies){return replies.size();}}
@@ -45,11 +50,11 @@ public final class P102TrustedToolGateTest {
   public static void main(String[] args)throws Exception{
     boolean bad=false;
     try{new P102TrustedToolGate(UID,SESSION,new Clock(),u->false,
-        (n,a)->true,r->{});}catch(IllegalArgumentException ex){bad=true;}
+        (n,a)->true,r->{},(sessionId,callId)->true);}catch(IllegalArgumentException ex){bad=true;}
     check(bad,"must_be_isolated_uid");
     bad=false;
     try{new P102TrustedToolGate(UID,"caller-chosen-session",new Clock(),u->true,
-        (n,a)->true,r->{});}catch(IllegalArgumentException ex){bad=true;}
+        (n,a)->true,r->{},(sessionId,callId)->true);}catch(IllegalArgumentException ex){bad=true;}
     check(bad,"must_be_host_minted_session_shape");
 
     Lab noApproval=new Lab();
@@ -65,6 +70,7 @@ public final class P102TrustedToolGateTest {
     check(noApproval.gate.onTrustedNativeApproval("call-1")==
       P102TrustedToolGate.Decision.DISPATCHED,"native_approval_dispatches_once");
     check(noApproval.executions.get()==1,"exactly_one_execution");
+    check(noApproval.originalChecks==3,"original_call_checked_on_request_before_and_after_executor");
     check(noApproval.replies()==1&&noApproval.last().ok,"one_successful_terminal");
     check(noApproval.last().dispatched&&!noApproval.last().retrySafe,
       "success_is_not_retryable");
@@ -73,29 +79,63 @@ public final class P102TrustedToolGateTest {
     check(noApproval.replies()==1,"no_second_result");
 
     Lab wrongUid=new Lab();
-    check(wrongUid.gate.accept(UID+1,SESSION,"caller",P102TrustedToolGate.TOOL,
+    check(wrongUid.gate.accept(UID+1,SESSION,ORIGINAL,"caller",P102TrustedToolGate.TOOL,
       P102TrustedToolGate.FIXED_ARGS)==P102TrustedToolGate.Decision.REJECTED,
       "spoofed_uid_denied");
     check(wrongUid.gate.isTerminal(),"spoofed_uid_revokes_binding");
     check(wrongUid.executions.get()==0,"spoofed_uid_no_effect");
 
     Lab wrongSession=new Lab();
-    check(wrongSession.gate.accept(UID,SESSION.substring(0,63)+"0","caller",
+    check(wrongSession.gate.accept(UID,SESSION.substring(0,63)+"0",ORIGINAL,"caller",
       P102TrustedToolGate.TOOL,P102TrustedToolGate.FIXED_ARGS)==
       P102TrustedToolGate.Decision.REJECTED,"wrong_session_denied");
     check(wrongSession.executions.get()==0,"wrong_session_no_effect");
 
     Lab unknownTool=new Lab();
-    check(unknownTool.gate.accept(UID,SESSION,"call","write_file",
+    check(unknownTool.gate.accept(UID,SESSION,ORIGINAL,"call","write_file",
       P102TrustedToolGate.FIXED_ARGS)==P102TrustedToolGate.Decision.REJECTED,
       "arbitrary_tool_not_allowed");
     check(unknownTool.request("again")==P102TrustedToolGate.Decision.REJECTED,
       "invalid_tool_burns_attempt");
     Lab badArgs=new Lab();
-    check(badArgs.gate.accept(UID,SESSION,"call",P102TrustedToolGate.TOOL,
+    check(badArgs.gate.accept(UID,SESSION,ORIGINAL,"call",P102TrustedToolGate.TOOL,
       "{\"query\":\"/data/user/0\"}")==P102TrustedToolGate.Decision.REJECTED,
       "noncanonical_args_denied");
     check(badArgs.executions.get()==0,"noncanonical_args_no_execute");
+
+    Lab unknownOriginal=new Lab();
+    check(unknownOriginal.gate.accept(UID,SESSION,"unrelated","call",
+      P102TrustedToolGate.TOOL,P102TrustedToolGate.FIXED_ARGS)==
+      P102TrustedToolGate.Decision.REJECTED,"unverified_original_session_denied");
+    check(unknownOriginal.executions.get()==0,"unverified_original_no_execution");
+    check(unknownOriginal.gate.isTerminal(),"unverified_original_binding_revoked");
+
+    Lab staleBeforeApproval=new Lab();
+    check(staleBeforeApproval.request("stale")==P102TrustedToolGate.Decision.PENDING_NATIVE_APPROVAL,
+      "stale_accepted_while_live");
+    staleBeforeApproval.originalActive=false;
+    check(staleBeforeApproval.gate.onTrustedNativeApproval("stale")==
+      P102TrustedToolGate.Decision.REJECTED,"stale_original_denied_at_click");
+    check(staleBeforeApproval.executions.get()==0,"stale_original_no_execution");
+    check(staleBeforeApproval.replies()==1&&!staleBeforeApproval.last().ok&&
+      "ORIGINAL_TURN_NOT_CURRENT".equals(staleBeforeApproval.last().code),
+      "stale_original_one_denied_terminal");
+
+    final boolean[] afterExecutionActive={true};
+    final List<P71ToolReplyOnce.Terminal> staleAfterResult=new ArrayList<>();
+    P102TrustedToolGate postExecuteStale=new P102TrustedToolGate(
+      UID,SESSION,new Clock(),u->u==UID,
+      (name,arguments)->{afterExecutionActive[0]=false;return true;},
+      staleAfterResult::add,
+      (sessionId,callId)->afterExecutionActive[0]&&ORIGINAL.equals(sessionId));
+    check(postExecuteStale.accept(UID,SESSION,ORIGINAL,"after",P102TrustedToolGate.TOOL,
+      P102TrustedToolGate.FIXED_ARGS)==P102TrustedToolGate.Decision.PENDING_NATIVE_APPROVAL,
+      "post_execute_stale_initially_valid");
+    check(postExecuteStale.onTrustedNativeApproval("after")==
+      P102TrustedToolGate.Decision.DISPATCHED,"post_execute_stale_one_attempt");
+    check(staleAfterResult.size()==1&&!staleAfterResult.get(0).ok&&
+      "ORIGINAL_TURN_STALE_AFTER_EXECUTION".equals(staleAfterResult.get(0).code),
+      "post_execute_stale_cannot_report_success");
 
     Lab timeout=new Lab();
     check(timeout.request("timeout")==P102TrustedToolGate.Decision.PENDING_NATIVE_APPROVAL,
@@ -118,8 +158,9 @@ public final class P102TrustedToolGateTest {
 
     final List<P71ToolReplyOnce.Terminal> failedReplies=new ArrayList<>();
     P102TrustedToolGate rejectedExecutor=new P102TrustedToolGate(
-      UID,SESSION,new Clock(),u->u==UID,(name,arguments)->false,failedReplies::add);
-    check(rejectedExecutor.accept(UID,SESSION,"fail",P102TrustedToolGate.TOOL,
+      UID,SESSION,new Clock(),u->u==UID,(name,arguments)->false,failedReplies::add,
+      (sessionId,callId)->ORIGINAL.equals(sessionId));
+    check(rejectedExecutor.accept(UID,SESSION,ORIGINAL,"fail",P102TrustedToolGate.TOOL,
       P102TrustedToolGate.FIXED_ARGS)==P102TrustedToolGate.Decision.PENDING_NATIVE_APPROVAL,
       "failed_executor_queued");
     check(rejectedExecutor.onTrustedNativeApproval("fail")==
@@ -144,6 +185,7 @@ public final class P102TrustedToolGateTest {
     System.out.println("P102_PREAPPROVAL_DENY_AND_REPLAY=PASS");
     System.out.println("P102_UID_SESSION_CANONICAL_TOOL_AND_TIMEOUT=PASS");
     System.out.println("P102_ONE_TERMINAL_AND_CONCURRENT_NO_DUPLICATE=PASS");
+    System.out.println("P102_ORIGINAL_SESSION_TRUSTED_PROVENANCE_RECHECK=PASS");
     System.out.println("P102_PRODUCTION_DSH_TOOL_BINDER_WIRED=NO");
     System.out.println("P102_ANDROID_PHONE_E2E=NOT_TESTED");
   }
