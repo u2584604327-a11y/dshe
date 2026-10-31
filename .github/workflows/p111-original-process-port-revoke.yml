@@ -1,0 +1,118 @@
+name: P111 real original Process epoch to native port revocation (deny tools; no APK)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p111_original_process_bound_native_port_patch.py'
+      - '.github/workflows/p111-original-process-port-revoke.yml'
+      - 'host_candidate/p110_original_engine_process_epoch_patch.py'
+      - 'host_candidate/p109_original_native_port_source_patch.py'
+      - 'host_candidate/p108_original_host_epoch_patch.py'
+permissions:
+  contents: read
+jobs:
+  source-level-engine-process-identity-to-native-revoke:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ORIGINAL_SHA: 4dddb12fd076d052e788a16638a658b7a447b669
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: changes
+      - uses: actions/checkout@v4
+        with:
+          repository: pht88888888/DSHAPP
+          ref: 4dddb12fd076d052e788a16638a658b7a447b669
+          persist-credentials: false
+          path: original
+      - name: Apply exact P108-P111 patches to disposable original MIT host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original rev-parse HEAD)" = "$ORIGINAL_SHA"
+          cmp original/LICENSE changes/THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          python3 changes/host_candidate/p108_original_host_epoch_patch.py --upstream-dir original
+          python3 changes/host_candidate/p109_original_native_port_source_patch.py \
+            --upstream-dir original --changes-dir changes
+          python3 changes/host_candidate/p110_original_engine_process_epoch_patch.py \
+            --upstream-dir original
+          python3 changes/host_candidate/p111_original_process_bound_native_port_patch.py \
+            --upstream-dir original
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          root=Path('original')
+          modified=subprocess.check_output(
+              ['git','-C','original','diff','--name-only'],text=True).splitlines()
+          added=subprocess.check_output(
+              ['git','-C','original','ls-files','--others','--exclude-standard'],
+              text=True).splitlines()
+          changed=set(modified+added)
+          expected={
+              'app/src/main/java/com/dsh/android/MainActivity.kt',
+              'app/src/main/java/com/dsh/android/EngineManager.kt',
+              'app/src/main/java/com/dsh/android/P108OriginalOwnerEpochGate.kt',
+              'app/src/main/java/com/dsh/android/P109OriginalToolHostBoundary.kt',
+              'app/src/main/java/com/dsh/android/p110/P110OriginalProcessEpoch.java',
+              'app/src/main/java/com/dsh/android/p111/P111NativeProcessSnapshot.java',
+              'app/src/main/java/com/dsh/android/p71/P71ToolReplyOnce.java',
+              'app/src/main/java/com/dsh/android/p102/P102TrustedToolGate.java',
+              'app/src/main/java/com/dsh/android/p102/P102AndroidToolBinderPort.java',
+          }
+          assert changed==expected,('P111_UNAUTHORIZED_ORIGINAL_FILE_CHANGE',sorted(changed))
+          a=(root/'app/src/main/java/com/dsh/android/MainActivity.kt').read_text()
+          b=(root/'app/src/main/java/com/dsh/android/P109OriginalToolHostBoundary.kt').read_text()
+          eng=(root/'app/src/main/java/com/dsh/android/EngineManager.kt').read_text()
+          assert a.count('engine.originalProcessEpochForNativeDiagnostics()')==1
+          assert 'onOriginalEngineStateChanged()' not in a
+          assert 'p111ProcessSnapshot.observe(hostProcessEpoch)' in b
+          assert 'p111ProcessSnapshot.destroy()' in b
+          assert 'false // Original still-live SessionStore' in b
+          assert 'false // No device tool execution' in b
+          assert 'onTrustedServiceBindingInitiated' not in b
+          assert 'trustedInbox()' not in b
+          assert eng.count('p110OriginalProcessEpoch.onProcessStarted(proc)')==1
+          assert 'override fun onBind(intent: Intent?): IBinder? = null' in (
+              root/'app/src/main/java/com/dsh/android/EngineService.kt').read_text()
+          print('P111_EXACT_ORIGINAL_ENGINE_PROCESS_NATIVE_PORT_SCOPE=PASS')
+          print('P111_UNVERIFIED_SESSIONSTORE_TOOLRUNTIME_DENY=PASS')
+          print('P111_NATIVE_UI_EXECUTOR_DEFAULT_DENY=PASS')
+          print('P111_NEW_BINDER_SERVICE=NO')
+          PY
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Compile actually patched original Kotlin and native Java
+        shell: bash
+        working-directory: original
+        run: |
+          set -euo pipefail
+          test ! -e keystore.properties
+          test ! -e dsh-release.jks
+          gradle --no-daemon --console=plain --max-workers=2 \
+            :app:compileSystemDebugKotlin :app:compileSystemDebugJavaWithJavac
+          echo 'P111_PATCHED_ORIGINAL_KOTLIN_JAVA_COMPILE=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Execute bounded original process epoch and native port revocation probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 changes/host_candidate/p110_original_engine_process_epoch_patch.py \
+            --upstream-dir original --selftest
+          python3 changes/host_candidate/p111_original_process_bound_native_port_patch.py \
+            --upstream-dir original --selftest
+          echo 'P111_ORIGINAL_PROCESS_GENERATION_TO_NATIVE_REVOKE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P111_ORIGINAL_CALL_OWNERSHIP_PROVEN=NO' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P111_TRUSTED_NATIVE_EXECUTION=DENIED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P111_OFFICIAL_SIGNED_APK_BUILD_OR_INSTALL=NONE' >> "$GITHUB_STEP_SUMMARY"

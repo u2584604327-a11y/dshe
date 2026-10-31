@@ -1,0 +1,39 @@
+name: P102 Node to trusted Android tool boundary (candidate only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p102_trusted_tool/node/**'
+      - 'host_candidate/p102_trusted_tool/src/**'
+      - 'host_candidate/p102_trusted_tool/android/**'
+      - '.github/workflows/p102-node-tool-boundary.yml'
+permissions:
+  contents: read
+jobs:
+  p102-node-tool-boundary:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - name: Fail-closed Node-to-native protocol and Android source parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test host_candidate/p102_trusted_tool/node/P102OriginalToolBinderBoundary.test.mjs \
+            | tee /tmp/p102-node-gate.log
+          grep -Fq 'P102_NODE_TO_BINDER_CANDIDATE_GATE=PASS cases=26' /tmp/p102-node-gate.log
+          grep -Fq 'P102_ORIGINAL_SESSION_NATIVE_PROVENANCE_CONTRACT=PASS' /tmp/p102-node-gate.log
+          grep -Fq 'P102_ORIGINAL_TOOLRUNTIME_PRODUCTION_HOOK=NOT_WIRED' /tmp/p102-node-gate.log
+          grep -Fq 'P102_REAL_DSH_NODE_TO_ANDROID_BINDER=NOT_TESTED' /tmp/p102-node-gate.log
+          grep -Fq 'P102_NO_NETWORK_NO_DEVICE_SIDE_EFFECTS=PASS' /tmp/p102-node-gate.log
+          {
+            echo 'P102_NODE_ORIGINAL_CALL_ID_NATIVE_FRAME_PARITY=PASS_CANDIDATE'
+            echo 'P102_ORIGINAL_DSH_TOOLRUNTIME_TO_BINDER=NOT_WIRED'
+            echo 'P102_NO_ORIGINAL_APK_OR_SIGNER_OR_RELEASE=YES'
+          } >> "$GITHUB_STEP_SUMMARY"

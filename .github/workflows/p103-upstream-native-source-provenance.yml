@@ -1,0 +1,118 @@
+name: P103 pinned upstream MIT native host source provenance (read-only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/P103_UPSTREAM_NATIVE_SOURCE_PROVENANCE.md'
+      - '.github/workflows/p103-upstream-native-source-provenance.yml'
+      - 'host_candidate/p102_binary_host_probe/p102_exact_apk_host_methods.py'
+permissions:
+  contents: read
+jobs:
+  exact-public-source-to-signed-v138-identifier-check:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      UPSTREAM_REPO: pht88888888/DSHAPP
+      UPSTREAM_SHA: 4dddb12fd076d052e788a16638a658b7a447b669
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fetch only pinned public Kotlin declarations and MIT license as data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .p103/original .p103/apk
+          for name in \
+            EngineManager.kt MainActivity.kt BrowserBridge.kt \
+            app-build.gradle.kts AndroidManifest.xml LICENSE; do
+            case "$name" in
+              EngineManager.kt|MainActivity.kt)
+                src="app/src/main/java/com/dsh/android/$name";;
+              BrowserBridge.kt)
+                src="app/src/main/java/com/dsh/android/browser/$name";;
+              app-build.gradle.kts) src="app/build.gradle.kts";;
+              AndroidManifest.xml) src="app/src/main/AndroidManifest.xml";;
+              LICENSE) src="LICENSE";;
+            esac
+            curl -fsSL --retry 2 --max-time 35 --max-filesize 900000 \
+              "https://raw.githubusercontent.com/${UPSTREAM_REPO}/${UPSTREAM_SHA}/$src" \
+              -o ".p103/original/$name"
+            test -s ".p103/original/$name"
+          done
+          echo 'P103_PINNED_PUBLIC_UPSTREAM_FILES_FETCHED=PASS'
+      - name: Verify exact already-signed v138 APK identity and original DEX declarations
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = "u2584604327-a11y/dshe"
+          trap 'rm -rf .p103' EXIT
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo "$GH_REPO" \
+            --pattern 'DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk' \
+            --dir .p103/apk
+          f=.p103/apk/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          printf '%s  %s\n' \
+            3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 "$f" \
+            | sha256sum -c -
+          python3 - <<'PY'
+          import pathlib, subprocess, json, re, sys
+          home=pathlib.Path('.p103/original')
+          t={x.name:x.read_text(encoding='utf-8') for x in home.iterdir() if x.is_file()}
+          checks={
+            'LICENSE': ['MIT License','Copyright (c) 2026 pht88888888'],
+            'EngineManager.kt':['class EngineManager','private fun ensureBrowserTool()',
+                                'private fun ensureNodePty()','private fun writeBrowserToolPatch()',
+                                'browser-tool.zip'],
+            'MainActivity.kt':['class MainActivity','private fun bootEngine()',
+                               'private fun observeEngine()',
+                               'private fun installBrowserBridge()'],
+            'BrowserBridge.kt':['object BrowserBridge','browser-cmd.json',
+                                'browser-result.json','fun start(home: File, host:'],
+            'app-build.gradle.kts':['applicationId = "com.dsh.android"',
+                                    'versionCode = 91','versionName = "0.4.1"'],
+            'AndroidManifest.xml':['android:name=".MainActivity"',
+                                  'android:name=".EngineService"']
+          }
+          for name,patterns in checks.items():
+            assert all(p in t[name] for p in patterns),f'P103_UPSTREAM_SOURCE_DECLARATION_CHANGED_{name}'
+          assert re.search(r'android:name="\.EngineService"\s+android:exported="false"',t['AndroidManifest.xml'])
+          a=subprocess.run([sys.executable,
+              'host_candidate/p102_binary_host_probe/p102_exact_apk_host_methods.py',
+              '--original','.p103/apk/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk'],
+              check=True,capture_output=True,text=True,timeout=90)
+          lines=a.stdout.splitlines()
+          assert 'P102_EXACT_SIGNED_V138_APK_SOURCE_SHA=PASS' in lines
+          assert 'P102_MAIN_ACTIVITY_DEFINED=YES' in lines
+          marker='P102_DEX_HOST_METHOD_METADATA='
+          raw=next(x[len(marker):] for x in lines if x.startswith(marker))
+          dex=json.loads(raw)['dex']
+          classes={c['class']:{m['name'] for m in c['methods']}
+                   for d in dex for c in d['target_classes']}
+          m=classes.get('Lcom/dsh/android/MainActivity;',set())
+          e=classes.get('Lcom/dsh/android/EngineManager;',set())
+          assert {'bootEngine','observeEngine'}.issubset(m),'P103_V138_MAIN_METHODS_CHANGED'
+          assert {'ensureBrowserTool','ensureNodePty'}.issubset(e),'P103_V138_ENGINE_METHODS_CHANGED'
+          print('P103_UPSTREAM_MIT_LICENSE=PASS')
+          print('P103_PINNED_SOURCE_DECLARATION_MATCHES_V138_DEX_IDENTIFIERS=PASS')
+          print('P103_SOURCE_UPSTREAM_VERSIONCODE=91')
+          print('P103_SIGNED_V138_VERSIONCODE=138')
+          print('P103_UPSTREAM_BINARY_IDENTICAL_TO_SIGNED_V138=NOT_PROVEN')
+          print('P103_REAL_PRODUCTION_TOOLRUNTIME_NATIVE_BINDER=NOT_WIRED')
+          print('P103_ORIGINAL_DSH_APK_MODIFIED_OR_SIGNED=NO')
+          PY
+          {
+            echo 'P103_UPSTREAM_MIT_LICENSE=PASS'
+            echo 'P103_SOURCE_TO_SIGNED_V138_IDENTIFIERS=PASS_LIMITED'
+            echo 'P103_SOURCE_VERSIONCODE_91_VS_SIGNED_APK_138=DRIFT'
+            echo 'P103_NATIVE_SOURCE_BINARY_EQUIVALENCE=NOT_PROVEN'
+            echo 'P103_P102_PRODUCTION_TOOL_BINDER=NOT_WIRED'
+            echo 'P103_APK_BUILD_INSTALL_OR_RELEASE=NONE'
+          } >> "$GITHUB_STEP_SUMMARY"

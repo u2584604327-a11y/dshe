@@ -1,0 +1,203 @@
+name: P102 isolated native tool Binder security contract (candidate only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p102_trusted_tool/**'
+      - 'host_candidate/p71_browser_runtime/src/com/dsh/android/p71/P71ToolReplyOnce.java'
+      - '.github/workflows/p102-trusted-tool-binder.yml'
+permissions:
+  contents: read
+jobs:
+  p102-native-binder-boundary:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - name: P102 Java8 host gate security and exact-once regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .p102tmp/classes
+          javac --release 8 -d .p102tmp/classes \
+            host_candidate/p71_browser_runtime/src/com/dsh/android/p71/P71ToolReplyOnce.java \
+            host_candidate/p102_trusted_tool/src/com/dsh/android/p102/P102TrustedToolGate.java \
+            host_candidate/p102_trusted_tool/test/com/dsh/android/p102/P102TrustedToolGateTest.java
+          java -cp .p102tmp/classes com.dsh.android.p102.P102TrustedToolGateTest \
+            | tee .p102tmp/jvm-gate.log
+          for gate in \
+            P102_PREAPPROVAL_DENY_AND_REPLAY=PASS \
+            P102_UID_SESSION_CANONICAL_TOOL_AND_TIMEOUT=PASS \
+            P102_ONE_TERMINAL_AND_CONCURRENT_NO_DUPLICATE=PASS \
+            P102_ORIGINAL_SESSION_TRUSTED_PROVENANCE_RECHECK=PASS \
+            P102_PRODUCTION_DSH_TOOL_BINDER_WIRED=NO \
+            P102_ANDROID_PHONE_E2E=NOT_TESTED; do
+            grep -Fxq "$gate" .p102tmp/jvm-gate.log
+          done
+          grep -Eq '^P102_JVM8_NATIVE_TOOL_TRUST_GATE=PASS checks=[0-9]+$' \
+            .p102tmp/jvm-gate.log
+          echo 'P102_NATIVE_SECURITY_JVM_GATE=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Assert user phone diagnostic script is read-only and never deletes an APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          script=Path('host_candidate/p102_trusted_tool/emulator/P102_Phone_ReadOnly_Check.ps1').read_text(encoding='utf-8')
+          # Examine only live (non-comment) script lines. Reject any package,
+          # log-buffer or filesystem modification, including indirect aliases.
+          active='\n'.join(x for x in script.splitlines() if not x.lstrip().startswith('#'))
+          forbidden=[
+            r'\b(?:adb|AdbPath)\s+(?:uninstall|install|push|pull|reboot|root|remount|sync)\b',
+            r'\bshell\s+(?:rm|rmdir|pm\s+clear|am\s+force-stop|cmd\s+package\s+uninstall)\b',
+            r'\b(?:Remove-Item|Clear-Content|Set-Content|Out-File|del|erase|rmdir)\b',
+            r'\blogcat\s+-c\b',
+            r'\b(?:shell\s+input|shell\s+monkey|shell\s+am\s+start)\b',
+          ]
+          assert not any(re.search(p,active,re.I) for p in forbidden),'P102_PHONE_SCRIPT_HAS_SIDE_EFFECTS'
+          for needed in ('pm list packages','P102_TOOL_BINDER:V','logcat -b all -d','Read-Host','P102_DIAGNOSTIC_ONLY=YES'):
+            assert needed in active,'P102_PHONE_SCRIPT_MISSING_READONLY_GATE'
+          print('P102_PHONE_READONLY_NO_UNINSTALL_DELETE_OR_LAUNCH=PASS')
+          PY
+      - name: Compile actual Android35 Messenger/framework-UID adapter
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          PLATFORM="$SDK/platforms/android-35/android.jar"
+          if test ! -f "$PLATFORM"; then
+            manager="$(command -v sdkmanager || true)"
+            if test -z "$manager";then
+              manager="$(find "$SDK/cmdline-tools" -name sdkmanager -type f -perm /111 2>/dev/null | head -n1 || true)"
+            fi
+            test -n "$manager"
+            "$manager" --sdk_root="$SDK" 'platforms;android-35'
+          fi
+          test -f "$PLATFORM"
+          javac -source 8 -target 8 -cp "$PLATFORM:.p102tmp/classes" \
+            -d .p102tmp/classes \
+            host_candidate/p102_trusted_tool/android/com/dsh/android/p102/P102AndroidToolBinderPort.java
+          test -f .p102tmp/classes/com/dsh/android/p102/P102AndroidToolBinderPort.class
+          echo 'P102_ANDROID35_MESSENGER_SOURCE_COMPILES=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Android35 disposable emulator build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          manager="$(command -v sdkmanager || true)"
+          if test -z "$manager";then
+            manager="$(find "$SDK/cmdline-tools" -name sdkmanager -type f -perm /111 2>/dev/null | head -n1 || true)"
+          fi
+          test -n "$manager"
+          "$manager" --sdk_root="$SDK" 'build-tools;35.0.0' 'platforms;android-35'
+      - name: Build ephemeral zero-permission real isolated Android Binder probe
+        shell: bash
+        run: bash host_candidate/p102_trusted_tool/emulator/build_emulator_only.sh
+      - name: Verify standalone test APK identities and prepare phone artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          BT="$SDK/build-tools/35.0.0"
+          f=".p102tmp/p102-emulator-only.apk"
+          test -s "$f"
+          echo 'P102_STANDALONE_APK_FILE_PRESENT=PASS'
+          if ! "$BT/apksigner" verify --verbose --print-certs "$f" > .p102tmp/public-certificate.txt; then
+            echo 'P102_STANDALONE_APK_VERIFY=FAIL'; exit 1
+          fi
+          echo 'P102_STANDALONE_APK_VERIFY=PASS'
+          # Android 34+ accepts APK Signature Scheme v2 or v3; reject v1-only.
+          if ! grep -Eq '^Verified using v(2|3|3\.1) scheme \(APK Signature Scheme v(2|3|3\.1)\): true$' .p102tmp/public-certificate.txt; then
+            echo 'P102_STANDALONE_MODERN_SIGNATURE_SCHEME=FAIL'
+            grep '^Verified using' .p102tmp/public-certificate.txt | head -n 6 || true
+            exit 1
+          fi
+          echo 'P102_STANDALONE_MODERN_SIGNATURE_SCHEME=PASS'
+          cert="$(sed -nE 's/^.*certificate SHA-256 digest:[[:space:]]*([A-Fa-f0-9]{64})[[:space:]]*$/\1/p' .p102tmp/public-certificate.txt | head -n 1 | tr '[:upper:]' '[:lower:]')"
+          if test "${#cert}" -ne 64; then
+            echo 'P102_STANDALONE_CERT_DIGEST_PARSE=FAIL'
+            grep -i 'certificate.*sha-256' .p102tmp/public-certificate.txt | head -n 4 || true
+            exit 1
+          fi
+          echo 'P102_STANDALONE_CERT_DIGEST_PARSE=PASS'
+          if test "$cert" = '90072b7de43e96999be92d99869ce5e5b7639b5f2449417b99a1790831b60ff8' ||
+             test "$cert" = 'ef6afe33330839ed6d6739fb4d4bb84d358fd7bec8c1116c97309f92d9d3f385'; then
+            echo 'P102_STANDALONE_CERT_NOT_SEPARATE=FAIL'; exit 1
+          fi
+          echo 'P102_STANDALONE_CERT_NOT_DSH=PASS'
+          badge="$("$BT/aapt" dump badging "$f")"
+          case "$badge" in
+            *"package: name='com.dsh.p102.trustedtoolprobe'"*) echo 'P102_STANDALONE_PACKAGE=PASS';;
+            *) echo 'P102_STANDALONE_PACKAGE=FAIL'; exit 1;;
+          esac
+          "$BT/aapt" dump permissions "$f" > .p102tmp/public-permissions.txt
+          if grep -Fq 'uses-permission:' .p102tmp/public-permissions.txt;then
+            echo 'P102_STANDALONE_APK_PERMISSIONS=FAIL'
+            exit 1
+          fi
+          echo 'P102_STANDALONE_APK_PERMISSIONS=ZERO'
+          mkdir -p .p102tmp/phone-upload
+          cp "$f" .p102tmp/phone-upload/P102-Standalone-Binder-Lab-Android34plus.apk
+          (cd .p102tmp/phone-upload && sha256sum P102-Standalone-Binder-Lab-Android34plus.apk > SHA256SUMS.txt)
+          echo 'P102_STANDALONE_PACKAGE_DIFFERENT_FROM_DSH=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_STANDALONE_TEST_SIGNATURE_DISTINCT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_STANDALONE_ZERO_PERMISSION_APK=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_STANDALONE_DISPOSABLE_SIGNER_SHA256='"$cert" >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_REAL_PHONE_INSTALLATION=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_ANDROID35_AND_36_NATIVE_UI_E2E=NOT_YET_CONFIRMED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P102_ORIGINAL_DSH_AGENTLOOP_PRODUCTION=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload independently signed diagnostic APK after static safety gates
+        uses: actions/upload-artifact@v4
+        with:
+          name: P102-Standalone-Phone-Diagnostic-Candidate-${{ github.event.pull_request.head.sha }}
+          path: |
+            .p102tmp/phone-upload/P102-Standalone-Binder-Lab-Android34plus.apk
+            .p102tmp/phone-upload/SHA256SUMS.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      # Emulator E2E is a separate, stricter promotion gate AFTER a bounded
+      # phone diagnostic candidate exists. Artifact upload is not an E2E PASS.
+      # Do not treat a UI automation failure as permission to relax native gates.
+      - name: Enable Android emulator hardware acceleration
+        shell: bash
+        run: if test -c /dev/kvm;then sudo chmod 666 /dev/kvm;fi
+      - name: Android35 real framework sendingUid native-click once/replay/background
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
+      - name: Android36 real framework isolated Messenger ACK and terminal regression
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
+      - name: Cleanup and forbid confusing candidate with original DSH
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p102tmp
+          {
+            echo 'P102_PRODUCTION_DSH_TOOL_TO_NATIVE_BINDER=NOT_WIRED'
+            echo 'P102_REAL_ANDROID_UID_E2E=CHECK_PRECEDING_STEP'
+            echo 'P102_ENGINE_MANAGER_MAIN_ACTIVITY=UNCHANGED'
+            echo 'P102_PRODUCTION_DSH_APK_SIGNING_RELEASE=NONE'
+            echo 'P102_DIAGNOSTIC_ARTIFACT=CHECK_EARLIER_UPLOAD_NOT_E2E_PASS'
+          } >> "$GITHUB_STEP_SUMMARY"

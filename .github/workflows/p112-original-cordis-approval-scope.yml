@@ -1,0 +1,69 @@
+name: P112 original Cordis approval scope advisory (unit + pinned source; no APK)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p112_original_cordis_approval_observer.mjs'
+      - 'host_candidate/p112_original_cordis_approval_observer.test.mjs'
+      - '.github/workflows/p112-original-cordis-approval-scope.yml'
+permissions:
+  contents: read
+jobs:
+  pinned-official-approval-contract-and-no-grant:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: changes
+      - uses: actions/checkout@v4
+        with:
+          repository: pht88888888/DSHAPP
+          ref: 4dddb12fd076d052e788a16638a658b7a447b669
+          persist-credentials: false
+          path: original
+      - name: Verify pinned original MIT license and exact approval event contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original rev-parse HEAD)" = '4dddb12fd076d052e788a16638a658b7a447b669'
+          cmp original/LICENSE changes/THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          upstream=Path('original/remote-plugin/desktop/lib/index.js').read_text(encoding='utf-8')
+          assert "'approval/request'" in upstream
+          assert "'@deepseek-ai/dsh-scope'" in upstream
+          assert 'carrierKeyOf' in upstream
+          assert 'request.agent.session.id' in upstream
+          assert 'request.callId' in upstream
+          assert "ctx.on(" in upstream
+          assert 'allowed-once' in upstream and 'unavailable' in upstream
+          candidate=Path('changes/host_candidate/p112_original_cordis_approval_observer.mjs').read_text()
+          assert "return next(); // NEVER intercept/answer/allow." in candidate
+          assert 'nativeAuthorization:false' in candidate
+          assert 'exactPendingToolRuntimeCall:false' in candidate
+          assert "ctx.on('approval/request'" in candidate
+          assert 'current!==session' in candidate
+          print('P112_PINNED_ORIGINAL_CORDIS_APPROVAL_SCOPE_CONTRACT=PASS')
+          print('P112_ADVISORY_ONLY_NO_NATIVE_AUTHORIZATION=PASS')
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run bounded denial and one-shot waterfall delegation tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test changes/host_candidate/p112_original_cordis_approval_observer.test.mjs
+          echo 'P112_ADVISORY_SCOPE_UNIT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P112_UNTRUSTED_SESSION_AND_CALL_CLAIMS_DENIED=PASS_UNIT' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P112_OFFICIAL_APPROVAL_WATERFALL_NOT_HIJACKED=PASS_UNIT' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P112_REAL_ORIGINAL_AGENT_RUNTIME_HOOK_INSTALLED=NO' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P112_ANDROID_NATIVE_INDEPENDENT_PENDING_CALL_PROOF=NOT_PROVEN' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P112_ORIGINAL_NODE_TO_ANDROID_BINDER_PRODUCTION=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P112_SIGNED_OR_INSTALLED_APK=NONE' >> "$GITHUB_STEP_SUMMARY"

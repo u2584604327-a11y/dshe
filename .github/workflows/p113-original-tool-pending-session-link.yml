@@ -1,0 +1,151 @@
+name: P113 actual original AgentLoop ToolRuntime pending and SessionStore committed link (isolated)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p113_original_tool_pending_observation.mjs'
+      - 'host_candidate/p113_original_tool_pending_observation.test.mjs'
+      - 'host_candidate/p113_overlay_original_p101.py'
+      - 'host_candidate/p114_original_tool_dispatch_identifier_audit.py'
+      - 'host_candidate/p115_original_helper_ci_only_hook.py'
+      - 'host_candidate/p116_original_helper_hard_deny_ci.py'
+      - 'host_candidate/p117_original_helper_scope_probe_ci.py'
+      - '.github/workflows/p113-original-tool-pending-session-link.yml'
+permissions:
+  contents: read
+jobs:
+  original-source-locked-toolruntime-to-committed-session:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Unit gate forbids stale, spoofed or duplicate original call linkage
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test host_candidate/p113_original_tool_pending_observation.test.mjs
+          echo 'P113_ISOLATED_PENDING_OBSERVER_NEGATIVE_TESTS=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Download exact signed modified v138 as read-only original engine fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = 'u2584604327-a11y/dshe'
+          mkdir -p .p113private
+          gh release download dsh-baseline-v135dsh-baseline-v135 --repo "$GH_REPO" \
+            --pattern 'DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk' \
+            --dir .p113private
+          printf '%s  %s\n' \
+            3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 \
+            .p113private/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk | sha256sum -c -
+          echo 'P113_ORIGINAL_V138_SIGNED_APK_SHA256=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Audit exact v138 original AgentLoop executeToolCalls callsite without exposing source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p114_original_tool_dispatch_identifier_audit.py \
+            --original .p113private/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee .p113private/p114-symbols.log
+          grep -Fxq 'P114_ORIGINAL_V138_ENGINE_SHA_LOCK=PASS' .p113private/p114-symbols.log
+          grep -Fxq 'P114_ORIGINAL_DISPATCH_IDENTIFIER_AUDIT=PASS' .p113private/p114-symbols.log
+          grep -Fxq 'P114_ORIGINAL_PENDING_CALL_TO_NATIVE_BINDER=NOT_WIRED' .p113private/p114-symbols.log
+          echo 'P114_ACTUAL_ORIGINAL_DISPATCH_CALLSITE_SYMBOLS=PASS_READONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P114_NATIVE_TOOLRUNTIME_PENDING_CALL_AUTHORITY=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+      - name: Extract exact original Cordis/AgentLoop/ToolRuntime/SessionStore closure into disposable directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p96_stream_owner/p96_extract_original_agent_runtime.py \
+            --original .p113private/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --out .p113private/agent-runtime
+          test -f .p113private/agent-runtime/node_modules/@deepseek-ai/dsh-tools/package.json
+          test -f .p113private/agent-runtime/node_modules/@deepseek-ai/dsh-session/package.json
+          cp host_candidate/p113_original_tool_pending_observation.mjs \
+            .p113private/agent-runtime/p113_original_tool_pending_observation.mjs
+          python3 host_candidate/p113_overlay_original_p101.py \
+            --source host_candidate/p96_stream_owner/p101_original_outer_tool_roundtrip.mjs \
+            --destination .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs
+          python3 host_candidate/p115_original_helper_ci_only_hook.py \
+            --runtime-dir .p113private/agent-runtime \
+            --test-file .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs
+          python3 host_candidate/p117_original_helper_scope_probe_ci.py \
+            --runtime-dir .p113private/agent-runtime \
+            --test-file .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs
+      - name: Run ACTUAL original outer prompt to ToolRuntime to committed session result and continuation
+        shell: bash
+        run: |
+          set -euo pipefail
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 40s node .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs \
+            | tee .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P101_ORIGINAL_AUTOMATIC_TOOL_ROUNDTRIP=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P101_NO_NETWORK=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P113_REAL_ORIGINAL_AGENTLOOP_BYPASSES_TOOLRUNTIME_EXECUTE=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P113_OBSERVED_TOOLRUNTIME_EXECUTE_METHOD_CALLS=0' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P113_ORIGINAL_SESSION_STORE_RESULT_LINK=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P113_ORIGINAL_SESSION_STORE_SAME_OBJECT=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P113_NATIVE_TOOL_AUTHORIZATION=NO' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P113_NATIVE_INDEPENDENT_PENDING_CALL_PROOF=NOT_PROVEN' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P115_REAL_ORIGINAL_AGENTLOOP_EXECUTE_TOOLCALLS_ENTRY=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P115_REAL_ORIGINAL_HELPER_CALL_COUNT=1' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P115_ORIGINAL_CALL_ID_MATCHED_BEFORE_TOOL_BODY=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P115_ANDROID_NATIVE_CALL_ATTESTATION=NOT_PROVEN' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P117_ACTUAL_ORIGINAL_HELPER_SCOPE_AND_SIGNAL=PASS' .p113private/p113-evidence.log
+          grep -Fxq 'P99_PROMPT_ONCE_P117_NATIVE_INDEPENDENT_SCOPE_PROOF=NOT_PROVEN' .p113private/p113-evidence.log
+          echo 'P117_ORIGINAL_HELPER_SCOPE_AND_SIGNAL_PREBODY=PASS_CI_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P117_ANDROID_NATIVE_INDEPENDENT_SCOPE_OR_CALL_PROOF=NOT_PROVEN' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P115_ACTUAL_ORIGINAL_AGENTLOOP_EXECUTE_TOOLCALLS_PENDING_ENTRY=PASS_CI_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P115_NATIVE_SESSION_CALL_PROOF_OR_PRODUCTION_BINDER=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P113_REAL_ORIGINAL_AGENTLOOP_DISPATCH_BYPASSES_TOOLS_EXECUTE=CONFIRMED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P113_ORIGINAL_SESSION_RESULT_LINKED=PASS_ISOLATED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P113_ORIGINAL_PENDING_TOOL_AUTHORITY_INTERCEPTED=NO' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P113_NATIVE_INDEPENDENT_SESSION_CALL_PROOF=NOT_PROVEN' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P113_PRODUCTION_ANDROID_BINDER_ORIGINAL_TOOL=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P113_ORIGINAL_APK_OR_SIGNING_MODIFIED=NO' >> "$GITHUB_STEP_SUMMARY"
+      - name: Execute exact original helper hard deny with no tool body or result notification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p116_original_helper_hard_deny_ci.py \
+            --runtime-dir .p113private/agent-runtime \
+            --test-file .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            P116_ISOLATED_HARD_DENY=1 timeout 35s \
+            node .p113private/agent-runtime/p113_original_outer_pending_roundtrip.mjs \
+            > .p113private/p116-deny.log 2>&1
+          for marker in \
+            'P99_PROMPT_ONCE_P116_REAL_ORIGINAL_HELPER_ENTRY_SEEN_ONCE=PASS' \
+            'P99_PROMPT_ONCE_P116_REAL_ORIGINAL_CALL_ID_BEFORE_DENY=PASS' \
+            'P99_PROMPT_ONCE_P116_ORIGINAL_HELPER_DENIED_BEFORE_OBSERVER=PASS' \
+            'P99_PROMPT_ONCE_P116_NO_ORIGINAL_TOOL_BODY=PASS' \
+            'P99_PROMPT_ONCE_P116_NO_ORIGINAL_RESULT_NOTIFY=PASS' \
+            'P99_PROMPT_ONCE_P116_NO_NETWORK=PASS' \
+            'P99_PROMPT_ONCE_P116_ANDROID_NATIVE_PERMISSION=NEVER_GRANTED'; do
+            grep -Fxq "$marker" .p113private/p116-deny.log
+          done
+          # Explicitly report whether the original agent completed its turn
+          # or took the error/abort path. Neither is silently called success.
+          grep -E '^P99_PROMPT_ONCE_(HARNESS_RESULT|P101_COMPLETED_TURN_ONCE|P101_TOOL_EXECUTIONS|P101_TOOL_NOTIFICATIONS|P116_)' \
+            .p113private/p116-deny.log | sed -E 's/^(.{0,200}).*/\1/' || true
+          echo 'P116_ACTUAL_ORIGINAL_AGENTLOOP_UNVERIFIED_TOOL_DENIED_BEFORE_EXECUTION=PASS_CI_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P116_DENIED_TURN_TERMINAL_BEHAVIOR=REQUIRES_SEPARATE_VERIFICATION' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P116_ANDROID_NATIVE_GRANT_OR_PRODUCTION_ORIGINAL_BINDER=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+      - name: Delete exact original runtime temporary bytes
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p113private
+          echo 'P113_PRIVATE_ENGINE_BYTES_EXPORTED_OR_UPLOADED=NO' >> "$GITHUB_STEP_SUMMARY"
