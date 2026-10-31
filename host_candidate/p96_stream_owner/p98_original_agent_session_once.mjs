@@ -103,9 +103,12 @@ try{
      };
      const calls=[...source.matchAll(/(?:this\.)?([A-Za-z_$][A-Za-z0-9_$]{0,64})\s*\(/g)]
        .map(x=>x[1]).filter(x=>!['if','for','while','switch','catch'].includes(x));
+     const includesReceivers=[...source.matchAll(/([A-Za-z_$][A-Za-z0-9_$]*(?:\??\.[A-Za-z_$][A-Za-z0-9_$]*){0,5})\??\.includes\s*\(/g)]
+       .map(x=>x[1]).filter(x=>/^[A-Za-z_$][A-Za-z0-9_$.?]{0,100}$/.test(x));
      return {name,arity:method.length,parameters,
        referencedFields:[...new Set(fields)].slice(0,45),
        calledIdentifiers:[...new Set(calls)].slice(0,45),
+       includesReceivers:[...new Set(includesReceivers)].slice(0,25),
        safeLiterals:[...new Set(safeLiterals)],
        sendTargetExpression:sendMatch?cleanExpr(sendMatch[1]):null,
        sendWakeupExpression:sendMatch?cleanExpr(sendMatch[2]):null,
