@@ -14,7 +14,10 @@ const chunks=[
  {type:'finish',reason:{kind:'tool-call'}}
 ];
 try{
- for(const chunk of chunks)a.push(chunk);
+ for(const chunk of chunks){
+   try{a.push(chunk);}
+   catch(e){log('FAILED_CHUNK_TYPE',chunk.type);throw e;}
+ }
  const blocks=a.blocks;
  log('BLOCKS',JSON.stringify(Array.isArray(blocks)?blocks.map(x=>({
    type:x?.type,name:x?.name,id:x?.id,

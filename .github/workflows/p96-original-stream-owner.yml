@@ -398,6 +398,15 @@ jobs:
           grep -Fxq 'P101_ORIGINAL_CHUNK_DISCRIMINANTS=PASS' .p96private/p101-chunk-types.log
           cat .p96private/p101-chunk-types.log
           echo 'P101_ORIGINAL_CHUNK_TYPES=PASS_DIAGNOSTIC_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          # Inspect original case-local fields before executing a chunk.
+          cp host_candidate/p96_stream_owner/p101_chunk_case_fields.mjs \
+            .p96private/agent-runtime/p101_chunk_case_fields.mjs
+          env -u GH_TOKEN -u GITHUB_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            -u ACTIONS_ID_TOKEN_REQUEST_URL -u SSH_AUTH_SOCK \
+            timeout 12s node .p96private/agent-runtime/p101_chunk_case_fields.mjs \
+            > .p96private/p101-case-fields.log
+          grep -Fxq 'P101_BLOCK_ASSEMBLER_CASE_FIELDS_REFLECTION=PASS' .p96private/p101-case-fields.log
+          cat .p96private/p101-case-fields.log
           # Executable original in-memory chunk assembly (no side effects).
           cp host_candidate/p96_stream_owner/p101_chunk_smoke.mjs \
             .p96private/agent-runtime/p101_chunk_smoke.mjs
