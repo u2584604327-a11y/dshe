@@ -11,8 +11,8 @@ ROOT = "node_modules/@deepseek-ai/"
 MAX_MEMBER = 3_000_000
 FRAME_LINE = 2533
 IDENT = re.compile(r"^[A-Za-z_$][A-Za-z0-9_$]{0,80}$")
-INCLUDES = re.compile(r"([A-Za-z_$][A-Za-z0-9_$]*(?:(?:\\?\\.|\\.)[A-Za-z_$][A-Za-z0-9_$]*){0,7})(\\?\\.|\\.)includes\\s*\\(")
-FUNCTION = re.compile(r"\\b(?:function\\s+)?underArchivedSession\\s*\\(([^()]{0,400})\\)")
+INCLUDES = re.compile(r"([A-Za-z_$][A-Za-z0-9_$]*(?:(?:\?\.|\.)[A-Za-z_$][A-Za-z0-9_$]*){0,7})(\?\.|\.)includes\s*\(")
+FUNCTION = re.compile(r"\b(?:function\s+)?underArchivedSession\s*\(([^()]{0,400})\)")
 
 def inspect(apk: pathlib.Path):
     require(apk.stat().st_size == SOURCE_BYTES, "APK_SIZE_DRIFT")
@@ -40,7 +40,7 @@ def inspect(apk: pathlib.Path):
             pkg = item.name.split("/")[2]
             package = pkg if IDENT.fullmatch(pkg) else "UNKNOWN"
             mentions = [source.count("\n", 0, m.start()) + 1
-                        for m in re.finditer(r"\\bunderArchivedSession\\b", source)]
+                        for m in re.finditer(r"\bunderArchivedSession\b", source)]
             if not any(abs(line - FRAME_LINE) <= 150 for line in mentions):
                 continue
             signatures = []
