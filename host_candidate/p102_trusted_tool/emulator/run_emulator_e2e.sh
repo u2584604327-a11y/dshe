@@ -8,6 +8,8 @@ adb install -r .p102tmp/p102-emulator-only.apk
 adb logcat -c
 adb shell am force-stop com.dsh.p102.trustedtoolprobe || true
 adb shell am start -n com.dsh.p102.trustedtoolprobe/.P102FixtureActivity
+# Source pure lab-native consent gate; never approves on its own.
+source "$(dirname "$0")/p102_native_focus_gate.sh"
 probe(){
   adb logcat -d -v brief -s P102_TOOL_BINDER:I AndroidRuntime:E '*:S' \
     | sed -E 's/(session|grant|token)=[^ ]+/\1=[REDACTED]/g' \
@@ -86,8 +88,19 @@ print((a+c)//2,(b+d)//2)
         UI_LAST_REASON="P102_UI_STALE_PENDING_OR_ACTIVITY_REVOKED"
         COORDS=""
       else
-        UI_LAST_REASON="READY"
-        break
+        # P161: after uiautomator returns, wait for Activity native focus to
+        # recover. A stale coordinate must never be tapped during onStop
+        # revoke/rebind or before a fresh exact pending Binder request.
+        sleep 1
+        probe 'P102_PREAPPROVAL_REQUEST_GATE=PASS' || {
+          echo 'P102_PREAPPROVAL_LOST_DURING_FOCUS_SETTLE=FAIL'; exit 1;
+        }
+        if p102_native_focus_gate .p102tmp/filtered-log.txt "$after_revoke" "$after_pending"; then
+          UI_LAST_REASON="READY"
+          break
+        fi
+        UI_LAST_REASON="P102_NATIVE_FOCUS_OR_PENDING_UNSTABLE"
+        COORDS=""
       fi
     else
       UI_LAST_REASON="$(head -n1 .p102tmp/ui-selection-reason.txt || true)"
@@ -155,7 +168,17 @@ print("P102_UI_DIAG_ENABLED_APPROVAL_NODES="+str(len(enabled)))
   exit 1
 fi
 read -r X Y <<< "$COORDS"
+# P161 final read-only, same-generation gate immediately before the ONE tap.
+# If focus changed again, hard fail. Never blind-click or reattempt approval.
+probe 'P102_PREAPPROVAL_REQUEST_GATE=PASS' || {
+  echo P161_PRECLICK_PENDING_LOST=FAIL; exit 1;
+}
+if ! p102_native_focus_gate .p102tmp/filtered-log.txt "$after_revoke" "$after_pending";then
+  echo P161_PRECLICK_FOCUS_OR_BINDER_GENERATION_STALE=FAIL
+  exit 1
+fi
 echo 'P102_NATIVE_ENABLED_BUTTON_IDENTIFIED=PASS'
+echo 'P161_NATIVE_FOCUS_AND_PENDING_GENERATION_VERIFIED_BEFORE_CLICK=PASS'
 adb shell input tap "$X" "$Y"
 for i in $(seq 1 35);do
   if probe 'P102_REAL_BINDER_NATIVE_TOOL_E2E=PASS';then break;fi

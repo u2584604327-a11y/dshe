@@ -122,6 +122,12 @@ public final class P102FixtureActivity extends Activity {
     if(!bound)Log.e(TAG,"P102_REAL_SERVICE_BIND=FAIL");
     else Log.i(TAG,"P102_NATIVE_FOREGROUND_BIND=PASS");
   }
+  @Override public void onWindowFocusChanged(boolean hasFocus){
+    super.onWindowFocusChanged(hasFocus);
+    // Android framework callback, not derived from synthetic UI dump.
+    // Log no tokens, session IDs, button text or private app content.
+    Log.i(TAG,"P102_NATIVE_WINDOW_FOCUS="+(hasFocus?"YES":"NO"));
+  }
   @Override protected void onStop(){
     // Never retain an approved or pending slot while the Activity is hidden.
     port.onTrustedUiBackground();
