@@ -17,6 +17,7 @@ import com.dsh.android.p48.P48HostProcessProbe;
 import com.dsh.p37.P37RemoteProcess;
 import com.dsh.android.p150.P150OriginalCoroutineObserver;
 import com.dsh.android.p151.P151OriginalEngineStateSampler;
+import com.dsh.android.p152.P152TermuxReadOnly;
 
 /**
  * P43 temporary exported test entry exists ONLY in the throwaway emulator APK.
@@ -91,6 +92,7 @@ public final class P43ProbeActivity extends Activity {
           P151OriginalEngineStateSampler.Sample sample=
               P151OriginalEngineStateSampler.sample();
           log("P151_ORIGINAL_ENGINE_AT_"+t+"S="+sample.safeLine());
+          log("P152_TERMUX_METADATA_AT_"+t+"S="+P152TermuxReadOnly.safeSnapshot(getApplicationContext()));
           if(t==40){
             log(P150OriginalCoroutineObserver.observedOriginal()>0?
               "P151_REAL_COROUTINE_REACHED_PRELAUNCH=OBSERVED":
