@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.charset.CodingErrorAction;
 import java.security.MessageDigest;
 import java.util.HashMap;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -32,8 +33,14 @@ public final class P77TarAudit {
     public final int members,addons;
     public final long bytes;
     public final String treeSha256;
-    private Result(int m,int a,long b,String h){
+    private final Set<String> canonicalMembers;
+    private Result(int m,int a,long b,String h,Set<String> names){
       members=m;addons=a;bytes=b;treeSha256=h;
+      canonicalMembers=Collections.unmodifiableSet(names);
+    }
+    /** Isolated worker only; never enumerate original member names to host. */
+    public boolean hasOriginalMember(String canonical){
+      return isExactOriginal() && canonical!=null && canonicalMembers.contains(canonical);
     }
     public boolean isExactOriginal(){
       return members==EXPECTED_MEMBERS && addons==EXPECTED_ADDONS &&
@@ -248,7 +255,7 @@ public final class P77TarAudit {
       }
       if(longName!=null||!pending.isEmpty())
         throw new IOException("P77_DANGLING_EXTENDED_HEADER");
-      Result complete=new Result(members,addons,total,hex(root.digest()));
+      Result complete=new Result(members,addons,total,hex(root.digest()),seen);
       if(selectedModule!=null)selectedModule.sealOriginal(complete);
       if(broker!=null)broker.sealOriginal(complete);
       if(boot!=null)boot.sealOriginal(complete);

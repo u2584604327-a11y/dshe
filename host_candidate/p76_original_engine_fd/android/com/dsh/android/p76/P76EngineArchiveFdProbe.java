@@ -14,6 +14,7 @@ import com.dsh.android.p77.P77TarAudit;
 import com.dsh.android.p78.P78ModuleSlot;
 import com.dsh.android.p144.P144ScopedSourceBroker;
 import com.dsh.android.p145.P145ExactBootEntry;
+import com.dsh.android.p146.P146DirectImports;
 import java.util.Arrays;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -75,6 +76,7 @@ public final class P76EngineArchiveFdProbe {
            !b.getBoolean("p78_bounded_module_read_verified",false) ||
            !b.getBoolean("p144_two_readonly_resources_verified",false) ||
            !b.getBoolean("p145_exact_cli_entry_verified",false) ||
+           !b.getBoolean("p146_original_cli_hints_classified",false) ||
            b.getLong("bytes",-1)!=expectedBytes[0] ||
            expectedSha[0]==null || !expectedSha[0].equals(b.getString("sha256"))) {
           terminal[0]=true;listener.fail("P76_REPLY_UID_SESSION_OR_HASH_MISMATCH");return;
@@ -88,6 +90,8 @@ public final class P76EngineArchiveFdProbe {
         listener.report("P144_PRODUCTION_NODE_RESOLUTION=NOT_WIRED");
         listener.report("P145_PINNED_ORIGINAL_ENTRY_AND_PACKAGE_ISOLATED=PASS");
         listener.report("P145_ORIGINAL_NODE_IMPORT_OR_EXECUTION=NOT_WIRED");
+        listener.report("P146_ORIGINAL_CLI_DIRECT_IMPORT_HINT_SCAN=PASS");
+        listener.report("P146_COMPLETE_RUNTIME_IMPORT_GRAPH=NOT_PROVEN");
         listener.report("P76_ISOLATED_SOURCE_ARCHIVE_NOT_EXECUTED=YES");
         listener.report("P76_PRODUCTION_NODE_MODULE_LOADING_READY=NOT_WIRED");
         if("com.dsh.android".equals(host.getPackageName())) {
@@ -230,6 +234,10 @@ public final class P76EngineArchiveFdProbe {
            !realEntryHash.equals(hex(sha().digest(realEntry))) ||
            !realPackageHash.equals(hex(sha().digest(realPackage))))
           throw new IOException("P145_ORIGINAL_ENTRY_HASH_OR_REPLAY_FAILED");
+        P146DirectImports.Summary hints=
+            P146DirectImports.classifyOriginal(realEntry,original);
+        if(!hints.consistent())throw new IOException("P146_STATIC_HINTS_INCONSISTENT");
+        // Only bounded counters in isolated UID; never send paths/source via Binder.
         // Both brokers clear source on close. No bytes/paths leave isolated UID.
         }
         byte[] js=module.takeOnce(session,module.opaqueId());
@@ -249,6 +257,7 @@ public final class P76EngineArchiveFdProbe {
         b.putBoolean("p78_bounded_module_read_verified",true);
         b.putBoolean("p144_two_readonly_resources_verified",true);
         b.putBoolean("p145_exact_cli_entry_verified",true);
+        b.putBoolean("p146_original_cli_hints_classified",true);
         Message ack=Message.obtain(null,ACK);ack.setData(b);reply.send(ack);
       }catch(Exception failure){
         // Never send an unverified success; no private archive bytes or paths
