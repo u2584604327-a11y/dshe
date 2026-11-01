@@ -20,8 +20,11 @@ on:
 permissions:
   contents: read
 concurrency:
+  # P151 passive original-engine observation needs >40s after Binder HELLO.
+  # Unrelated same-PR OGNET source pushes must not cancel active emulator evidence.
+  # Stale-HEAD results remain non-admissible for release; never auto-deploy.
   group: p143-original-fd-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   verified-original-package-archive-fd:
     if: >-
