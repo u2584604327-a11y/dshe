@@ -28,6 +28,9 @@ case "$command" in
     else exit 52;fi
     case "${P155_MOCK_CASE:-ok}" in
       mismatch) printf '%064d  fixture\n' 0 ;;
+      denied_open) echo 'sha256sum: Permission denied' >&2; exit 1 ;;
+      missing_open) echo 'sha256sum: No such file or directory' >&2; exit 1 ;;
+      missing_hash_tool) echo 'sha256sum: inaccessible or not found' >&2; exit 127 ;;
       *) sha256sum "$file" ;;
     esac ;;
   *) exit 53 ;;
@@ -38,7 +41,7 @@ export PATH="$tmp/bin:$PATH" P155_MOCK_STAGE="$tmp/stage"
 export P155_MOCK_CASE=ok
 result="$(p155_check_guest_libs "$tmp/stage")"
 grep -Fq 'P155_GUEST_LIBZ_AND_CARES_SHELL_READ=PASS_NO_LOADER_CLAIM' <<< "$result"
-for scenario in absent denied mismatch;do
+for scenario in absent denied mismatch denied_open missing_open missing_hash_tool;do
   export P155_MOCK_CASE="$scenario"
   set +e
   result="$(p155_check_guest_libs "$tmp/stage")"
@@ -48,6 +51,9 @@ for scenario in absent denied mismatch;do
     absent) [[ "$rc" == 1 && "$result" == *'ABSENT'* ]] ;;
     denied) [[ "$rc" == 1 && "$result" == *'UNREADABLE'* ]] ;;
     mismatch) [[ "$rc" == 2 && "$result" == *'SHA_MISMATCH'* ]] ;;
+    denied_open) [[ "$rc" == 1 && "$result" == *'OPEN_PERMISSION_DENIED'* ]] ;;
+    missing_open) [[ "$rc" == 1 && "$result" == *'OPEN_PATH_NOT_VISIBLE'* ]] ;;
+    missing_hash_tool) [[ "$rc" == 1 && "$result" == *'HASH_COMMAND_NOT_AVAILABLE'* ]] ;;
   esac
 done
 echo P155_GUEST_LIB_MOCK_PASS_AND_NEGATIVES=PASS

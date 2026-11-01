@@ -24,9 +24,28 @@ p155_check_guest_libs() {
         echo "P155_GUEST_$soname=UNVERIFIED_TRANSPORT"
         return 1 ;;
     esac
-    observed="$(timeout 6s adb -s emulator-5554 shell "sha256sum '$guestlib/$soname'" 2>/dev/null | awk '{print $1}' || true)"
+    # Do not print raw guest stderr (the guest path and context are fixed).
+    # Metadata readability is not proof that sha256sum can open the file.
+    local raw_output raw_status rc
+    if raw_output="$(timeout 6s adb -s emulator-5554 shell "sha256sum '$guestlib/$soname'" 2>&1)"; then
+      rc=0
+    else
+      rc=$?
+    fi
+    if (( rc != 0 )); then
+      case "$raw_output" in
+        *"Permission denied"*|*"avc: denied"*) raw_status=OPEN_PERMISSION_DENIED ;;
+        *"No such file or directory"*) raw_status=OPEN_PATH_NOT_VISIBLE ;;
+        *"inaccessible or not found"*|*"sha256sum: not found"*) raw_status=HASH_COMMAND_NOT_AVAILABLE ;;
+        *) if (( rc == 124 ));then raw_status=ADB_HASH_TIMEOUT;
+           else raw_status=HASH_COMMAND_FAILED_UNCLASSIFIED;fi ;;
+      esac
+      echo "P155_GUEST_$soname=$raw_status"
+      return 1
+    fi
+    observed="${raw_output%%[[:space:]]*}"
     if [[ ! "$observed" =~ ^[[:xdigit:]]{64}$ ]]; then
-      echo "P155_GUEST_$soname=SHA_UNAVAILABLE"
+      echo "P155_GUEST_$soname=HASH_OUTPUT_UNVERIFIED"
       return 1
     fi
     if [[ "$expected" != "$observed" ]]; then
