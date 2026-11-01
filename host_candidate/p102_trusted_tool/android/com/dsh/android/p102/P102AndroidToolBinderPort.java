@@ -169,10 +169,21 @@ public final class P102AndroidToolBinderPort {
     }catch(RuntimeException malformed){revoke();}
   }
   /** No remote IPC dispatches this method; only trusted Activity button. */
-  public synchronized boolean onTrustedNativeUiApprove(String callId){
-    if(gate==null)return false;
-    P102TrustedToolGate.Decision decision=gate.onTrustedNativeApproval(callId);
-    if(decision==P102TrustedToolGate.Decision.EXPIRED)revoke();
+  public boolean onTrustedNativeUiApprove(String callId){
+    // The caller must run on a worker; never execute a device operation on UI.
+    if(Looper.myLooper()==Looper.getMainLooper()){
+      Log.e("P102_TOOL_BINDER","P102_MAIN_THREAD_EXECUTION_REJECTED");
+      return false;
+    }
+    final P102TrustedToolGate current;
+    synchronized(this){current=gate;}
+    if(current==null)return false;
+    // Deliberately release the port monitor before entering the gate.
+    // A blocked executor must not block Activity.onStop or Binder revocation.
+    P102TrustedToolGate.Decision decision=current.onTrustedNativeApproval(callId);
+    if(decision==P102TrustedToolGate.Decision.EXPIRED){
+      synchronized(this){if(gate==current)revoke();}
+    }
     return decision==P102TrustedToolGate.Decision.DISPATCHED;
   }
   /** Actual terminal result is only sent after the trusted executor has run. */
