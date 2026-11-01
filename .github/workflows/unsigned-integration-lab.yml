@@ -259,6 +259,16 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
           script: bash host_candidate/run_emulator_smoke.sh out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk
+      - name: Android36 original-host P120 isolated Binder UID and legacy P13 regressions
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/run_emulator_smoke.sh out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk
       - name: Destroy transient APK and state remaining blockers
         if: always()
         shell: bash
