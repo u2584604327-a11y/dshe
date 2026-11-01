@@ -123,7 +123,7 @@ created=YES
 adb push "$stage/lib/." "$guestlib/" >/dev/null
 adb push "$stage/bin/node" "$remote/bin/node" >/dev/null
 adb push "$hosttmp/absolute-runpath" "$remote/bin/absolute-runpath" >/dev/null
-adb shell "chmod 755 '$guestroot' '$guestroot/files' '$guestroot/files/usr' '$guestlib' '$remote' '$remote/bin' '$remote/bin/node'; chmod 644 '$guestlib'/*" >/dev/null
+adb shell "chmod 755 '$guestroot' '$guestroot/files' '$guestroot/files/usr' '$guestlib' '$remote' '$remote/bin' '$remote/bin/node' '$remote/bin/absolute-runpath'; chmod 644 '$guestlib'/*" >/dev/null
 # Require matching original ELF and representative original library on Android.
 test "$(adb shell "sha256sum '$remote/bin/node'" | tr -d '\r' | awk '{print $1}')" = "$node_sha"
 test "$(adb shell "sha256sum '$guestlib/libcares.so'" | tr -d '\r' | awk '{print $1}')" = "$cares_sha"
