@@ -105,6 +105,7 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p43_original_service/android/com/dsh/android/p43/P46WorkerBundle.java \
   "$P74_P47_GATE_SOURCE" \
   host_candidate/p149_prelaunch_witness/src/com/dsh/android/p149/P149OriginalBuilderWitness.java \
+  host_candidate/p150_original_coroutine/src/com/dsh/android/p150/P150OriginalCoroutineObserver.java \
   host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java \
   host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48FixedIsolatedChild.java \
   host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48HostProcessProbe.java \
@@ -204,6 +205,7 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p43/P46HostBroker;',
                   'Lcom/dsh/android/p43/P46WorkerBundle;',
                   'Lcom/dsh/android/p47/P47LaunchGate;',
+                  'Lcom/dsh/android/p150/P150OriginalCoroutineObserver;',
                   'Lcom/dsh/android/p149/P149OriginalBuilderWitness;',
                   'Lcom/dsh/p37/P37RemoteProcess;',
                   'Lcom/dsh/android/p48/P48FixedIsolatedChild;',

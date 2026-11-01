@@ -10,6 +10,7 @@ on:
       - 'host_candidate/p146_cli_import_hints/**'
       - 'host_candidate/p147_relative_candidate_lease/**'
       - 'host_candidate/p149_prelaunch_witness/**'
+      - 'host_candidate/p150_original_coroutine/**'
       - 'host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java'
       - 'host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java'
       - 'host_candidate/p77_engine_tar_audit/src/com/dsh/android/p77/P77TarAudit.java'
@@ -52,13 +53,17 @@ jobs:
           grep -Fq 'P146DirectImports.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           grep -Fq 'P147ScopedCandidateLease.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           grep -Fq 'P149OriginalBuilderWitness.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          grep -Fq 'P150OriginalCoroutineObserver.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           grep -Fq 'P149OriginalBuilderWitness.observeWithoutLaunch' host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java
           mkdir -p .p149classes
           javac --release 8 -d .p149classes \
             host_candidate/p149_prelaunch_witness/src/com/dsh/android/p149/P149OriginalBuilderWitness.java \
+            host_candidate/p150_original_coroutine/src/com/dsh/android/p150/P150OriginalCoroutineObserver.java \
+            host_candidate/p150_original_coroutine/test/com/dsh/android/p150/P150OriginTest.java \
             host_candidate/p149_prelaunch_witness/test/com/dsh/android/p149/P149WitnessTest.java \
             host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java
           java -cp .p149classes com.dsh.android.p149.P149WitnessTest
+          java -cp .p149classes com.dsh.android.p150.P150OriginTest
           rm -rf .p149classes
           mkdir -p .p146classes
           javac --release 8 -d .p146classes \
@@ -126,6 +131,8 @@ jobs:
           echo P146_FULL_RUNTIME_DEPENDENCY_GRAPH=NOT_PROVEN >> "$GITHUB_STEP_SUMMARY"
           echo P147_SECOND_PASS_VERIFIED_SOURCE=CHECK_EMULATOR_JOB >> "$GITHUB_STEP_SUMMARY"
           echo P149_P47_ORIGINAL_MAIN_DEX_WITNESS_SYNTHETIC=CHECK_EMULATOR_JOB >> "$GITHUB_STEP_SUMMARY"
+          echo P150_COROUTINE_STACK=CHECK_ANDROID_LOGCAT_NOT_ASSUMED_PASS >> "$GITHUB_STEP_SUMMARY"
+          echo P150_NATIVE_IDENTITY_PROVEN=NO >> "$GITHUB_STEP_SUMMARY"
           echo P149_ORIGINAL_ENGINEMANAGER_PRODUCTION_PARAMETERS=NOT_PROVEN >> "$GITHUB_STEP_SUMMARY"
           echo P147_ACTUAL_DEPENDENCY_CLOSURE=NOT_PROVEN >> "$GITHUB_STEP_SUMMARY"
           echo P145_PRODUCTION_ENGINE_MANAGER_HANDOFF=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"

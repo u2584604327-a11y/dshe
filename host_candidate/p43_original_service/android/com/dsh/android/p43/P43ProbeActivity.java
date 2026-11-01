@@ -15,6 +15,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
 import com.dsh.android.p48.P48HostProcessProbe;
 import com.dsh.p37.P37RemoteProcess;
+import com.dsh.android.p150.P150OriginalCoroutineObserver;
 
 /**
  * P43 temporary exported test entry exists ONLY in the throwaway emulator APK.
@@ -81,6 +82,12 @@ public final class P43ProbeActivity extends Activity {
         fail("P46_CONTENT_ADDRESSED_BUNDLE_REJECTED");return;
       }
       received=true;
+      main.postDelayed(()->{
+        log(P150OriginalCoroutineObserver.observedOriginal()>0 ?
+          "P150_ACTUAL_ENGINE_COROUTINE_STACK=OBSERVED" :
+          "P150_ACTUAL_ENGINE_COROUTINE_STACK=NOT_OBSERVED");
+        log("P150_ORIGINAL_COROUTINE_STACK_IS_NOT_OS_ATTESTATION=YES");
+      },5000);
       log("P46_ORIGINAL_DSH_CONTENT_ADDRESSED_BUNDLE_FD=PASS");
       log("P46_TWO_FIXTURES_HASH_AND_BYTE_BOUNDS=PASS");
       log("P46_REAL_NODE_SCRIPT_EXECUTED=NO");
@@ -248,6 +255,7 @@ public final class P43ProbeActivity extends Activity {
   private boolean assertExactBridgeFailClosed() {
     File canary=new File(getCacheDir(),"p47-no-host-fallback-canary");
     if(canary.exists() && !canary.delete())return false;
+    final int beforeSynthetic=P150OriginalCoroutineObserver.observedOther();
     ProcessBuilder candidate=new ProcessBuilder(
         "/system/bin/sh","-c","echo P47_UNAUTHORIZED > "+canary.getAbsolutePath());
     candidate.directory(getCacheDir());
@@ -267,6 +275,8 @@ public final class P43ProbeActivity extends Activity {
         return false;
     }catch(Exception invalid){return false;}
     if(canary.exists()){canary.delete();return false;}
+    if(P150OriginalCoroutineObserver.observedOther()!=beforeSynthetic+1)return false;
+    log("P150_SYNTHETIC_BRIDGE_CALL_NOT_CONFUSED_WITH_ORIGINAL=PASS");
     log("P47_REAL_ORIGINAL_MAIN_DEX_ENGINE_BRIDGE_DENIES_HOST_START=PASS");
     log("P47_NO_HOST_PROCESSBUILDER_FALLBACK=PASS");
     log("P149_P43_SYNTHETIC_BUILDER_THROUGH_PINNED_MAIN_DEX_BRIDGE=PASS");

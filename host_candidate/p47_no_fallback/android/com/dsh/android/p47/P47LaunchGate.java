@@ -1,6 +1,7 @@
 package com.dsh.android.p47;
 import java.io.File;
 import com.dsh.android.p149.P149OriginalBuilderWitness;
+import com.dsh.android.p150.P150OriginalCoroutineObserver;
 import java.io.IOException;
 import java.lang.ProcessBuilder;
 import java.util.List;
@@ -53,6 +54,7 @@ public final class P47LaunchGate {
     Shape shape=categorize(builder);
     if(shape.argvCount<1 || shape.argvCount>128)
       throw new IOException("P47_INVALID_ORIGINAL_LAUNCH_SHAPE");
+    P150OriginalCoroutineObserver.recordFromP47();
     P149OriginalBuilderWitness.observeWithoutLaunch(builder,3);
     throw new IOException("P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK");
   }
