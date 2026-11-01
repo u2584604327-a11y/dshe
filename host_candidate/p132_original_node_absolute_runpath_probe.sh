@@ -153,6 +153,22 @@ elif (( reattach_status != 0 ));then
   exit 1
 fi
 echo P132_NODE_TEST_UID=ANDROID_ADB_SHELL_2000_NOT_ISOLATED
+# P155: verify that the exact pinned source copies remain visible, readable
+# and byte-identical from the post-unroot unprivileged shell. Success does
+# not prove guest linker/Native Bridge namespace resolution.
+source "$(dirname "$0")/p155_original_guest_lib_visibility.sh"
+set +e
+p155_check_guest_libs "$stage"
+guest_lib_status=$?
+set -e
+if (( guest_lib_status == 1 )); then
+  echo P132_EXACT_ORIGINAL_NODE_VERSION_IN_SHELL=NOT_ATTEMPTED_GUEST_LIB_INACCESSIBLE
+  echo P132_LIBRARY_VISIBILITY=BLOCKED_BEFORE_EXECUTION
+  exit 0
+elif (( guest_lib_status != 0 )); then
+  echo P132_LIBRARY_PROVENANCE=INVALID_DENIED
+  exit 1
+fi
 # Separate synthetic control with EXACT same immutable absolute RUNPATH as original Node.
 # This runs under Android shell UID 2000, not root and not the original app.
 set +e
