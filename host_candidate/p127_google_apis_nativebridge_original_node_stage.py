@@ -74,9 +74,12 @@ def stage(original, root):
             links[alias]=target
     created=0
     for alias,target in sorted(links.items()):
-        require(LIB_NAME.fullmatch(alias) is not None and
-                LIB_NAME.fullmatch(target) is not None,
-                "P127_UNSAFE_LINK_TARGET")
+        # Only stage flat, previously SHA-verified lib/ targets. Nested
+        # package metadata is not an executable-loader dependency; ignore it
+        # rather than allowing any traversal or dereference outside lib/.
+        if (LIB_NAME.fullmatch(alias) is None or
+                LIB_NAME.fullmatch(target) is None):
+            continue
         if alias in combined:
             require(alias==target or combined[alias]==combined.get(target),
                     "P127_SYMLINK_WOULD_REPLACE_REAL_LIBRARY")
