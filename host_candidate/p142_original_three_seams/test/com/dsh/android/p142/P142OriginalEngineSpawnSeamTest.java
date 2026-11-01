@@ -50,6 +50,9 @@ public final class P142OriginalEngineSpawnSeamTest {
     mustDeny(fake,3,"P142_MAIN_DYNAMIC_PORT_SHAPE_DRIFT");
     fake.command().set(7,"0");
     fake.command().set(4,"--eval");
+    mustDeny(fake,3,"P142_MAIN_DYNAMIC_PORT_SHAPE_DRIFT");
+    fake.command().set(4,"--patch");
+    fake.command().set(8,"--eval");
     mustDeny(fake,3,"P142_UNKNOWN_ORIGINAL_ENGINE_ARGUMENT");
     ProcessBuilder injected=make(NODE,JS,"--profile","web","--patch",
                                  "../relative", "--no-open");
