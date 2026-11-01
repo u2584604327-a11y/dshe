@@ -55,8 +55,16 @@ if ! grep -Fq "$pkg" "$root/list.txt"; then
   exit 0
 fi
 report P136_API35_ARM64_SYSTEM_IMAGE=LISTED
+# P137: no unrequested or broad SDK license acceptance. Exactly one 'y'
+# is allowed only after manual workflow_dispatch + exact acknowledgment.
+answer="$(bash host_candidate/p137_manual_sdk_license_gate.sh choice)"
+case "$answer" in
+  y) report P137_SDK_IMAGE_LICENSE_ACK=EXPLICIT_MANUAL_WORKFLOW_DISPATCH ;;
+  n) report P137_SDK_IMAGE_LICENSE_ACK=NOT_GIVEN_NO_AUTO_ACCEPT ;;
+  *) report P137_SDK_IMAGE_LICENSE_ACK=INVALID_STOP; exit 1 ;;
+esac
 set +e
-timeout 210s "$manager" --sdk_root="$sdk" --install "$pkg" > "$root/install.txt" 2>&1
+printf '%s\n' "$answer" | timeout 210s "$manager" --sdk_root="$sdk" --install "$pkg" > "$root/install.txt" 2>&1
 installed=$?
 set -e
 if test "$installed" != 0; then
@@ -81,12 +89,7 @@ if ! test -d "$image_dir"; then
     install_class=PROGRESS_REPORTED_BUT_NO_IMAGE
   fi
   report "P136_ARM64_IMAGE_INSTALL_LOG_CLASS=$install_class"
-  # Non-secret SDK-only diagnostic, capped to 8 lines, with untrusted characters removed.
-  echo P136_ANDROID_SDK_INSTALL_DIAGNOSTIC_START
-  grep -Ei 'Warning|Error|Install|package|Download|SDK' "$root/install.txt" \
-    | tail -n 8 | cut -c 1-180 \
-    | tr -cd '[:alnum:] .;:/_()+|,\n=-' || true
-  echo P136_ANDROID_SDK_INSTALL_DIAGNOSTIC_END
+  # Do not echo SDK license terms or raw install logs into public CI.
   report P136_ANDROID_ARM64_BOOT=NOT_TESTED
   exit 0
 fi
