@@ -31,7 +31,17 @@ _start:
  mov x8, #93
  svc #0
 ASM
-for t in clang ld.lld readelf sha256sum; do command -v "$t" >/dev/null; done
+ndk="${ANDROID_NDK_HOME:-}"
+ndkbin="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
+if test -z "$ndk" || ! test -x "$ndkbin/clang" || ! test -x "$ndkbin/ld.lld"; then
+  echo P130_PINNED_ANDROID_NDK_COMPILER=UNAVAILABLE
+  exit 1
+fi
+export PATH="$ndkbin:$PATH"
+for t in clang ld.lld readelf sha256sum; do
+  if ! command -v "$t" >/dev/null; then echo "P130_HOST_TOOL_MISSING=$t"; exit 1; fi
+done
+echo P130_COMPILER_SOURCE=ANDROID_NDK_LLVM
 clang --target=aarch64-linux-android35 -fuse-ld=lld -nostdlib -static -Wl,-e,_start -DP130_STATIC "$root/probe.S" -o "$root/arm64-static"
 clang --target=aarch64-linux-android35 -fuse-ld=lld -nostdlib -pie -Wl,-e,_start -Wl,--dynamic-linker=/system/bin/linker64 "$root/probe.S" -o "$root/arm64-dynamic"
 for f in "$root/arm64-static" "$root/arm64-dynamic"; do
