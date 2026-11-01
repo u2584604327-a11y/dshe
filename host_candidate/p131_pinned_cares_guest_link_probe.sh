@@ -13,7 +13,9 @@ adb() { command adb -s emulator-5554 "$@"; }
 cleanup() { if test "$safe" = YES; then adb shell "rm -rf '$remote'" >/dev/null 2>&1 || true; fi; rm -rf -- "$tmp"; }
 trap cleanup EXIT
 readelf -h "$stage/lib/libcares.so" | grep -Eq 'Machine:[[:space:]]*AArch64'
-readelf --dyn-syms --wide "$stage/lib/libcares.so" | grep -Eq '[[:space:]]ares_version(@@?[^[:space:]]+)?([[:space:]]|$)' || { echo P131_ARES_EXPORT=NOT_FOUND; exit 1; }
+readelf --dyn-syms --wide "$stage/lib/libcares.so" > "$tmp/cares-dynsym.txt"
+grep -Eq '[[:space:]]ares_version(@@?[^[:space:]]+)?([[:space:]]|$)' "$tmp/cares-dynsym.txt" || { echo P131_ARES_EXPORT=NOT_FOUND; exit 1; }
+echo P131_ARES_EXPORT=PASS_DETERMINISTIC_NO_PIPE
 soname="$(readelf -d "$stage/lib/libcares.so" | sed -n 's/.*(SONAME).*Shared library: \[\([^]]*\)\].*/\1/p' | head -1)"
 test -n "$soname" || soname=libcares.so
 case "$soname" in libcares.so|libcares.so.[0-9]|libcares.so.[0-9][0-9]) ;; *) echo P131_CARES_SONAME=UNSAFE; exit 1 ;; esac
