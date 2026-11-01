@@ -14,6 +14,9 @@ import android.widget.Button;
 import com.dsh.android.p102.P102AndroidToolBinderPort;
 import com.dsh.android.p102.P102TrustedToolGate;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Disposable Android35 emulator ONLY. No original DSH APK or signature.
@@ -22,6 +25,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class P102FixtureActivity extends Activity {
   private static final String TAG="P102_TOOL_BINDER";
   private final AtomicInteger trustedExecCount=new AtomicInteger();
+  // Dedicated worker. The trusted button only schedules after disabling itself.
+  // No executor body is ever run on Activity/UI or under the Binder port lock.
+  private final ExecutorService approvalWorker=Executors.newSingleThreadExecutor(task->{
+    Thread thread=new Thread(task,"P102-native-approval-worker");
+    thread.setDaemon(true);
+    return thread;
+  });
   private String pendingCallId;
   private Button approveButton;
   private final P102AndroidToolBinderPort port=new P102AndroidToolBinderPort(
@@ -77,12 +87,25 @@ public final class P102FixtureActivity extends Activity {
     approveButton.setContentDescription("P102_TRUSTED_NATIVE_APPROVAL");
     setContentView(approveButton);
     approveButton.setOnClickListener(v->{
-      boolean dispatched=port.onTrustedNativeUiApprove(pendingCallId);
-      Log.i(TAG,"P102_NATIVE_UI_APPROVAL_DISPATCH="+(dispatched?"YES":"NO"));
+      final String approvedId=pendingCallId;
       approveButton.setEnabled(false);
-      approveButton.setText(dispatched
-        ? "Native approval dispatched\nInspect P102_TOOL_BINDER logs for terminal/replay"
-        : "Native approval rejected\nNo tool was approved");
+      approveButton.setText("Native approval accepted\nChecking trusted worker");
+      try{
+        approvalWorker.execute(()->{
+          final boolean dispatched=port.onTrustedNativeUiApprove(approvedId);
+          Log.i(TAG,"P102_NATIVE_UI_APPROVAL_DISPATCH="+(dispatched?"YES":"NO"));
+          runOnUiThread(()->{
+            if(isFinishing()||isDestroyed())return;
+            approveButton.setText(dispatched
+              ? "Native approval dispatched\nInspect P102_TOOL_BINDER logs for terminal/replay"
+              : "Native approval rejected\nNo tool was approved");
+          });
+        });
+      }catch(RejectedExecutionException stopped){
+        Log.e(TAG,"P102_NATIVE_APPROVAL_WORKER_NOT_AVAILABLE");
+        port.onTrustedUiBackground();
+        approveButton.setText("Native approval rejected\nWorker unavailable");
+      }
     });
   }
   @Override protected void onResume(){
@@ -116,6 +139,7 @@ public final class P102FixtureActivity extends Activity {
     port.onWorkerDisconnected();
     if(bound)unbindService(connection);
     bound=false;isolated=null;
+    approvalWorker.shutdown();
     super.onDestroy();
   }
 }
