@@ -27,13 +27,15 @@ def stage(original, root):
             node_links=node_pack.read("LINKS.txt").decode()
             node_libs={name.removeprefix("lib/"):node_pack.read(name)
                        for name in node_names
-                       if name.startswith("lib/") and not name.endswith("/")}
+                       if name.startswith("lib/") and not name.endswith("/") and
+                       "/" not in name.removeprefix("lib/")}
         with zipfile.ZipFile(io.BytesIO(apk.read(BOOTSTRAP))) as base:
             base_names=base.namelist()
             bootstrap_links=base.read("SYMLINKS.txt").decode()
             base_libs={name.removeprefix("lib/"):base.read(name)
                        for name in base_names
-                       if name.startswith("lib/") and not name.endswith("/")}
+                       if name.startswith("lib/") and not name.endswith("/") and
+                       "/" not in name.removeprefix("lib/")}
     require(len(node)==ELF_SIZE and hashlib.sha256(node).hexdigest()==ELF_SHA,
             "P127_EXACT_NODE_ELF_PREIMAGE_DRIFT")
     require(len(node_libs)>0 and len(base_libs)>0,"P127_NO_LIBRARY_CONTENT")
