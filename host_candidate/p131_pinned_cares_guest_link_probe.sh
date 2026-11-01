@@ -45,12 +45,16 @@ C
 args=(--target=aarch64-linux-android35 -fuse-ld=lld -nostdlib -fno-stack-protector -fPIE -pie -Wl,-e,_start -Wl,--dynamic-linker=/system/bin/linker64)
 clang "${args[@]}" "$tmp/probe.c" -lc -o "$tmp/platform"
 clang "${args[@]}" -DPINNED "$tmp/probe.c" -Wl,--no-as-needed "$stage/lib/libcares.so" -lc -o "$tmp/pinned"
-for b in platform pinned; do
+clang "${args[@]}" -DPINNED "$tmp/probe.c" '-Wl,-rpath,$ORIGIN/lib' -Wl,--no-as-needed "$stage/lib/libcares.so" -lc -o "$tmp/pinned_runpath"
+for b in platform pinned pinned_runpath; do
  readelf -h "$tmp/$b" | grep -Eq 'Machine:[[:space:]]*AArch64'
  readelf -l "$tmp/$b" | grep -Fq '[Requesting program interpreter: /system/bin/linker64]'
  readelf -d "$tmp/$b" | grep -Fq '[libc.so]'
 done
 readelf -d "$tmp/pinned" | grep -Fq "[$soname]" || { echo P131_DT_NEEDED=NOT_PINNED; exit 1; }
+readelf -d "$tmp/pinned_runpath" | grep -Fq "[$soname]" || exit 1
+readelf -d "$tmp/pinned_runpath" | grep -Fq 'Library runpath: [$ORIGIN/lib]' || { echo P131_ORIGIN_RUNPATH=NOT_PRESENT; exit 1; }
+echo P131_ORIGIN_RUNPATH=VERIFIED
 if readelf -d "$tmp/platform" | grep -Fq "[$soname]"; then exit 1; fi
 echo P131_PREFLIGHT=PASS_TRUE_LIBC_AND_REAL_CARES_DT_NEEDED
 echo P131_CARES_SHA256="$(sha256sum "$stage/lib/libcares.so" | awk '{print $1}')"
@@ -67,7 +71,7 @@ test "$(adb shell settings get global airplane_mode_on | tr -d '\r')" = 1
 case "$(adb shell getprop ro.dalvik.vm.native.bridge | tr -d '\r')" in libndk_translation.so|libhoudini.so|libhoudini64.so) ;; *) echo P131_BRIDGE=UNAVAILABLE; exit 0 ;; esac
 case "$(adb shell getprop ro.product.cpu.abilist | tr -d '\r')" in *arm64-v8a*) ;; *) echo P131_GUEST_ABI=NOT_ADVERTISED; exit 0 ;; esac
 adb shell "mkdir -p '$remote/lib'" >/dev/null
-for b in platform pinned; do
+for b in platform pinned pinned_runpath; do
  adb push "$tmp/$b" "$remote/$b" >/dev/null
  adb shell "chmod 700 '$remote/$b'" >/dev/null
  test "$(sha256sum "$tmp/$b" | awk '{print $1}')" = "$(adb shell "sha256sum '$remote/$b'" | tr -d '\r' | awk '{print $1}')"
@@ -86,7 +90,7 @@ check() {
  printf 'P131_%s_OUTPUT_SHA256=%s\n' "$lbl" "$(printf '%s' "$output" | sha256sum | awk '{print $1}')"
  return 1
 }
-libc=NO; cares=NO
+libc=NO; cares=NO; runpath=NO
 check LIBC_PLATFORM "'$remote/platform'" P131_LIBC_OK && libc=YES
 if check MISSING_CARES "'$remote/pinned'" P131_CARES_OK; then
  echo P131_NEGATIVE_CONTROL=FAIL_UNEXPECTED_PREEXISTING_SONAME
@@ -97,12 +101,17 @@ adb push "$stage/lib/libcares.so" "$remote/lib/$soname" >/dev/null
 test "$(sha256sum "$stage/lib/libcares.so" | awk '{print $1}')" = "$(adb shell "sha256sum '$remote/lib/$soname'" | tr -d '\r' | awk '{print $1}')"
 echo P131_REAL_LIB_DEVICE_SHA=PASS
 check EXACT_CARES "LD_LIBRARY_PATH='$remote/lib' '$remote/pinned'" P131_CARES_OK && cares=YES
-if test "$libc" = YES && test "$cares" = YES; then
- echo P131_GUEST_LINKER=PASS_LIBC_AND_REAL_CARES
-elif test "$libc" = YES; then
- echo P131_GUEST_LINKER=BLOCKED_ORIGINAL_CARES_RESOLUTION
-else
+check RUNPATH_CARES "'$remote/pinned_runpath'" P131_CARES_OK && runpath=YES
+if test "$libc" != YES; then
  echo P131_GUEST_LINKER=BLOCKED_BIONIC_PLATFORM
+elif test "$cares" = YES && test "$runpath" = YES; then
+ echo P131_GUEST_LINKER=PASS_PINNED_CARES_BOTH_RESOLVERS
+elif test "$runpath" = YES; then
+ echo P131_GUEST_LINKER=PASS_RUNPATH_ONLY_ENV_NOT_RESOLVED
+elif test "$cares" = YES; then
+ echo P131_GUEST_LINKER=PASS_ENV_ONLY_RUNPATH_NOT_RESOLVED
+else
+ echo P131_GUEST_LINKER=BLOCKED_CARES_BOTH_RESOLVERS
 fi
 echo P131_ORIGINAL_NODE=NOT_EXECUTED
 echo P131_ISOLATED_UID=NOT_TESTED
