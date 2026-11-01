@@ -134,6 +134,33 @@ else
       echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_OTHER'
     fi
     echo 'P127_AB_COMPARISON_DISTINCT_LIBRARY_ENVIRONMENTS=YES'
+    # Final finite path-order experiment: x86_64 translator host libraries
+    # first, exact SHA-pinned ARM64 guest libraries second. Only --version,
+    # same disposable offline emulator and no model-controlled arguments.
+    set +e
+    hybrid="$(timeout 20s adb shell "LD_LIBRARY_PATH=/system/lib64:/system/lib:$remote/lib $remote/bin/node --version" 2>&1)"
+    hybrid_code=$?
+    set -e
+    echo "P127_SYSTEM_FIRST_GUEST_SECOND_EXIT_CODE=$hybrid_code"
+    echo "P127_SYSTEM_FIRST_GUEST_SECOND_OUTPUT_SHA256=$(printf '%s' "$hybrid" | sha256sum | awk '{print $1}')"
+    hybrid_clean="$(printf '%s' "$hybrid" | tr -d '\r\n')"
+    if test "$hybrid_code" -eq 0 && printf '%s' "$hybrid_clean" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+      echo 'P127_SYSTEM_FIRST_GUEST_SECOND_NODE_VERSION=PASS_SHELL_UID_ONLY'
+      echo "P127_SYSTEM_FIRST_GUEST_SECOND_VERSION=$hybrid_clean"
+    elif test "$hybrid_code" -eq 124; then
+      echo 'P127_SYSTEM_FIRST_GUEST_SECOND_NODE_VERSION=BLOCKED_TIMEOUT'
+    elif printf '%s' "$hybrid" | grep -Eqi 'not accessible for the namespace|namespace.*denied'; then
+      echo 'P127_SYSTEM_FIRST_GUEST_SECOND_NODE_VERSION=BLOCKED_NAMESPACE'
+    elif printf '%s' "$hybrid" | grep -Eqi 'cannot locate symbol|undefined symbol|relocation.*failed'; then
+      echo 'P127_SYSTEM_FIRST_GUEST_SECOND_NODE_VERSION=BLOCKED_SYMBOL'
+    elif printf '%s' "$hybrid" | grep -Eqi 'library.*not found|cannot locate library|needed.*not found'; then
+      echo 'P127_SYSTEM_FIRST_GUEST_SECOND_NODE_VERSION=BLOCKED_MISSING_LIBRARY'
+    elif printf '%s' "$hybrid" | grep -Eqi 'CANNOT LINK EXECUTABLE|linker'; then
+      echo 'P127_SYSTEM_FIRST_GUEST_SECOND_NODE_VERSION=BLOCKED_LINKER_UNCLASSIFIED'
+    else
+      echo 'P127_SYSTEM_FIRST_GUEST_SECOND_NODE_VERSION=BLOCKED_OTHER'
+    fi
+    echo 'P127_PATH_ORDER_EXPERIMENTS_FINISHED_NO_AUTOMATIC_RETRIES=YES'
   else
     echo 'P127_AB_COMPARISON=SKIPPED_NOT_GENERIC_LINKER_FAILURE'
   fi
