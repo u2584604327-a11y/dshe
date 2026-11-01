@@ -11,6 +11,8 @@ import subprocess
 FILE="app/src/main/java/com/dsh/android/EngineManager.kt"
 GATE="app/src/main/java/com/dsh/android/p142/P142OriginalEngineSpawnSeam.java"
 FROM="host_candidate/p142_original_three_seams/src/com/dsh/android/p142/P142OriginalEngineSpawnSeam.java"
+P149_SOURCE="host_candidate/p149_prelaunch_witness/src/com/dsh/android/p149/P149OriginalBuilderWitness.java"
+P149_TARGET="app/src/main/java/com/dsh/android/p149/P149OriginalBuilderWitness.java"
 PINNED="4dddb12fd076d052e788a16638a658b7a447b669"
 REPLACEMENTS=(
   ("            val proc = pb.start()\n"
@@ -60,6 +62,12 @@ def main():
     if not src.is_file():raise ValueError("P142_GATE_SOURCE_MISSING")
     target.parent.mkdir(parents=True,exist_ok=True)
     shutil.copyfile(src,target)
+    p149_target=root/P149_TARGET
+    p149_source=a.changes_dir/P149_SOURCE
+    if p149_target.exists() or not p149_source.is_file():
+        raise ValueError("P149_EXACT_JAVA_WITNESS_REQUIRED")
+    p149_target.parent.mkdir(parents=True,exist_ok=True)
+    shutil.copyfile(p149_source,p149_target)
     engine.write_text(after,encoding="utf-8")
     if before.replace(REPLACEMENTS[0][0],REPLACEMENTS[0][1]) \
              .replace(REPLACEMENTS[1][0],REPLACEMENTS[1][1]) \

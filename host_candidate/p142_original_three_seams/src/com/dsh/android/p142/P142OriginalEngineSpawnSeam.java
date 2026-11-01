@@ -2,6 +2,7 @@
 package com.dsh.android.p142;
 
 import java.io.IOException;
+import com.dsh.android.p149.P149OriginalBuilderWitness;
 import java.lang.ProcessBuilder;
 import java.util.List;
 
@@ -68,16 +69,19 @@ public final class P142OriginalEngineSpawnSeam {
   public static Process probeOrDeny(ProcessBuilder original)
       throws IOException {
     verify(original,1);
+    P149OriginalBuilderWitness.observeWithoutLaunch(original,1);
     throw new IOException(UNAVAILABLE);
   }
   public static Process configOrDeny(ProcessBuilder original)
       throws IOException {
     verify(original,2);
+    P149OriginalBuilderWitness.observeWithoutLaunch(original,2);
     throw new IOException(UNAVAILABLE);
   }
   public static Process primaryOrDeny(ProcessBuilder original)
       throws IOException {
     verify(original,3);
+    P149OriginalBuilderWitness.observeWithoutLaunch(original,3);
     throw new IOException(UNAVAILABLE);
   }
 }

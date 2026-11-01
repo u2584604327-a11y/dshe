@@ -4,6 +4,8 @@ on:
     types: [opened, synchronize]
     paths:
       - 'host_candidate/p142_original_three_seams/**'
+      - 'host_candidate/p149_prelaunch_witness/**'
+      - 'host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java'
       - '.github/workflows/p142-original-three-engine-start-gates.yml'
 permissions:
   contents: read
@@ -44,6 +46,7 @@ jobs:
           assert set(changed+added)=={
             'app/src/main/java/com/dsh/android/EngineManager.kt',
             'app/src/main/java/com/dsh/android/p142/P142OriginalEngineSpawnSeam.java',
+            'app/src/main/java/com/dsh/android/p149/P149OriginalBuilderWitness.java',
           },'P142_EXCESS_ORIGINAL_SOURCE_CHANGE'
           s=Path('original/app/src/main/java/com/dsh/android/EngineManager.kt').read_text()
           assert s.count('P142OriginalEngineSpawnSeam.')==3
@@ -62,10 +65,14 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/p142-test"
           javac --release 8 -d "$RUNNER_TEMP/p142-test" \
+            changes/host_candidate/p149_prelaunch_witness/src/com/dsh/android/p149/P149OriginalBuilderWitness.java \
+            changes/host_candidate/p149_prelaunch_witness/test/com/dsh/android/p149/P149WitnessTest.java \
             changes/host_candidate/p142_original_three_seams/src/com/dsh/android/p142/P142OriginalEngineSpawnSeam.java \
             changes/host_candidate/p142_original_three_seams/test/com/dsh/android/p142/P142OriginalEngineSpawnSeamTest.java
+          java -cp "$RUNNER_TEMP/p142-test" com.dsh.android.p149.P149WitnessTest
           java -cp "$RUNNER_TEMP/p142-test" com.dsh.android.p142.P142OriginalEngineSpawnSeamTest
           javap -c -p -classpath "$RUNNER_TEMP/p142-test" com.dsh.android.p142.P142OriginalEngineSpawnSeam > "$RUNNER_TEMP/p142-bytecode"
+          javap -c -p -classpath "$RUNNER_TEMP/p142-test" com.dsh.android.p149.P149OriginalBuilderWitness >> "$RUNNER_TEMP/p142-bytecode"
           if grep -Eq "java/lang/ProcessBuilder.start|java/lang/Runtime.exec|java/lang/ProcessHandle" "$RUNNER_TEMP/p142-bytecode"; then
             echo P142_UNAUTHORIZED_EXEC_IN_GATE; exit 1
           fi

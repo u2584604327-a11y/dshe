@@ -269,6 +269,8 @@ public final class P43ProbeActivity extends Activity {
     if(canary.exists()){canary.delete();return false;}
     log("P47_REAL_ORIGINAL_MAIN_DEX_ENGINE_BRIDGE_DENIES_HOST_START=PASS");
     log("P47_NO_HOST_PROCESSBUILDER_FALLBACK=PASS");
+    log("P149_P43_SYNTHETIC_BUILDER_THROUGH_PINNED_MAIN_DEX_BRIDGE=PASS");
+    log("P149_REAL_ENGINEMANAGER_COROUTINE_INVOKED=NO");
     log("P47_PRODUCTION_NODE_ENGINE_RUNNING=NO");
     return true;
   }
