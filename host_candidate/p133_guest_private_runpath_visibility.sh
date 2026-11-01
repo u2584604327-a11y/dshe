@@ -180,7 +180,7 @@ if adb shell "test -r '$guestlib/libcares.so'" >/dev/null 2>&1; then
 else
   echo P133_PRIVATE_LIBRARY_READ_TEST=DENIED
 fi
-# Actual read, not test -r (which may only check Unix mode bits).
+# Non-root byte read with real ADB exit status, not just mode-bit test -r.
 set +e
 hash_output="$(timeout 12s adb shell "sha256sum '$guestlib/libcares.so'" 2>&1)"
 hash_code=$?
@@ -195,33 +195,7 @@ else
   if test "$hash_code" = 124; then cls=TIMEOUT
   elif grep -Eqi 'Permission denied|access denied|avc: denied' <<< "$hash_output"; then cls=ACCESS_DENIED
   elif grep -Eqi 'No such file or directory|not found' <<< "$hash_output"; then cls=PATH_NOT_FOUND
-  elif test "$hash_code" = 0 && printf '%s' "$hash_first" | grep -Eq '^[0-9a-f]{64}
-for mode in origin absolute; do
-  if test "$mode" = origin; then path="$remote/bin/origin-runpath"; else path="$remote/bin/absolute-runpath"; fi
-  set +e
-  output="$(timeout 12s adb shell "env -i PATH=/system/bin:/system/xbin '$path'" 2>&1)"
-  code=$?
-  set -e
-  if test "$code" = 0 && test "$(printf '%s' "$output" | tr -d '\r\n')" = P133_ABSOLUTE_RUNPATH_CARES_OK; then
-    printf 'P133_%s_GUEST_LOADER=PASS_EXACT_MARKER\n' "$mode"
-  else
-    printf 'P133_%s_GUEST_LOADER=BLOCKED\n' "$mode"
-    printf 'P133_%s_EXIT=%s\n' "$mode" "$code"
-    printf 'P133_%s_OUTPUT_SHA256=%s\n' "$mode" "$(printf '%s' "$output" | sha256sum | awk '{print $1}')"
-    category=UNCLASSIFIED
-    if grep -Eqi 'not accessible for the namespace|namespace.*(denied|restricted)' <<< "$output"; then category=NAMESPACE_DENIED
-    elif grep -Eqi 'library.*not found|cannot locate library|needed.*not found' <<< "$output"; then category=LIBRARY_NOT_FOUND
-    elif grep -Eqi 'Permission denied|avc: denied' <<< "$output"; then category=ACCESS_DENIED
-    elif grep -Eqi 'undefined symbol|cannot locate symbol|relocation.*failed' <<< "$output"; then category=SYMBOL_RELOCATION
-    fi
-    printf 'P133_%s_ERROR_CLASS=%s\n' "$mode" "$category"
-  fi
-done
-echo P133_ORIGINAL_NODE_EXECUTED=NO
-echo P133_ANDROID_ISOLATED_UID=NOT_TESTED
-echo P133_P109_NATIVE_AUTHORITY=DENY_ALL
-echo P133_FORMAL_V139_RELEASE=BLOCKED
-; then cls=HASH_MISMATCH
+  elif test "$hash_code" = 0 && printf '%s' "$hash_first" | grep -Eq '^[0-9a-f]{64}$'; then cls=HASH_MISMATCH
   fi
   echo P133_SHELL_PRIVATE_LIBRARY_READ_CLASS="$cls"
   echo P133_SHELL_PRIVATE_LIBRARY_READ_OUTPUT_SHA="$(printf '%s' "$hash_output" | sha256sum | awk '{print $1}')"
@@ -233,7 +207,7 @@ case "$label_info" in
   *app_data_file*) echo P133_ORIGINAL_PRIVATE_LIB_SELINUX_LABEL=APP_DATA_FILE ;;
   *shell_data_file*) echo P133_ORIGINAL_PRIVATE_LIB_SELINUX_LABEL=SHELL_DATA_FILE ;;
   *system_data_file*) echo P133_ORIGINAL_PRIVATE_LIB_SELINUX_LABEL=SYSTEM_DATA_FILE ;;
-  *Permission\ denied*) echo P133_ORIGINAL_PRIVATE_LIB_SELINUX_LABEL=LABEL_ACCESS_DENIED ;;
+  *"Permission denied"*) echo P133_ORIGINAL_PRIVATE_LIB_SELINUX_LABEL=LABEL_ACCESS_DENIED ;;
   *) echo P133_ORIGINAL_PRIVATE_LIB_SELINUX_LABEL=OTHER_OR_UNAVAILABLE ;;
 esac
 for mode in origin absolute; do
