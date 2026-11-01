@@ -13,6 +13,7 @@ import java.io.FileInputStream;
 import com.dsh.android.p77.P77TarAudit;
 import com.dsh.android.p78.P78ModuleSlot;
 import com.dsh.android.p144.P144ScopedSourceBroker;
+import com.dsh.android.p145.P145ExactBootEntry;
 import java.util.Arrays;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -73,6 +74,7 @@ public final class P76EngineArchiveFdProbe {
            !b.getBoolean("p77_full_tree_verified",false) ||
            !b.getBoolean("p78_bounded_module_read_verified",false) ||
            !b.getBoolean("p144_two_readonly_resources_verified",false) ||
+           !b.getBoolean("p145_exact_cli_entry_verified",false) ||
            b.getLong("bytes",-1)!=expectedBytes[0] ||
            expectedSha[0]==null || !expectedSha[0].equals(b.getString("sha256"))) {
           terminal[0]=true;listener.fail("P76_REPLY_UID_SESSION_OR_HASH_MISMATCH");return;
@@ -84,6 +86,8 @@ public final class P76EngineArchiveFdProbe {
         listener.report("P144_EXACT_ORIGINAL_TREE_TWO_SOURCE_LEASES=PASS");
         listener.report("P144_ORIGINAL_SCRIPT_AND_PACKAGE_BYTES_ISOLATED=PASS");
         listener.report("P144_PRODUCTION_NODE_RESOLUTION=NOT_WIRED");
+        listener.report("P145_PINNED_ORIGINAL_ENTRY_AND_PACKAGE_ISOLATED=PASS");
+        listener.report("P145_ORIGINAL_NODE_IMPORT_OR_EXECUTION=NOT_WIRED");
         listener.report("P76_ISOLATED_SOURCE_ARCHIVE_NOT_EXECUTED=YES");
         listener.report("P76_PRODUCTION_NODE_MODULE_LOADING_READY=NOT_WIRED");
         if("com.dsh.android".equals(host.getPackageName())) {
@@ -199,9 +203,11 @@ public final class P76EngineArchiveFdProbe {
         // extraction, chmod or Node script execution is involved.
         in.getChannel().position(0);
         P78ModuleSlot module=new P78ModuleSlot(session);
-        try(P144ScopedSourceBroker broker=new P144ScopedSourceBroker(session)){
-        P77TarAudit.Result original=P77TarAudit.inspectGzip(in,module,broker);
-        if(!original.isExactOriginal() || !module.isReady() || !broker.isReady())
+        try(P144ScopedSourceBroker broker=new P144ScopedSourceBroker(session);
+            P145ExactBootEntry boot=new P145ExactBootEntry(session)){
+        P77TarAudit.Result original=P77TarAudit.inspectGzip(in,module,broker,boot);
+        if(!original.isExactOriginal() || !module.isReady() || !broker.isReady() ||
+           !boot.isReady())
           throw new IOException("P144_ORIGINAL_ROOT_OR_TWO_RESOURCES_MISMATCH");
         String scriptId=broker.scriptId(),packageId=broker.manifestId();
         String scriptHash=broker.scriptHash(),packageHash=broker.manifestHash();
@@ -214,7 +220,17 @@ public final class P76EngineArchiveFdProbe {
            !scriptHash.equals(hex(sha().digest(script))) ||
            !packageHash.equals(hex(sha().digest(packageJson))))
           throw new IOException("P144_LEASE_REPLAY_SIZE_OR_DIGEST");
-        // The broker clears both buffers on close. No bytes are sent to host.
+        String realEntryHash=boot.entrySha(),realPackageHash=boot.packageSha();
+        byte[] realEntry=boot.takeOnce(session,true);
+        byte[] realPackage=boot.takeOnce(session,false);
+        if(!boot.exhausted()||realEntry.length<1||
+           realEntry.length>P145ExactBootEntry.MAX_ENTRY_BYTES ||
+           realPackage.length<1||
+           realPackage.length>P145ExactBootEntry.MAX_PACKAGE_BYTES ||
+           !realEntryHash.equals(hex(sha().digest(realEntry))) ||
+           !realPackageHash.equals(hex(sha().digest(realPackage))))
+          throw new IOException("P145_ORIGINAL_ENTRY_HASH_OR_REPLAY_FAILED");
+        // Both brokers clear source on close. No bytes/paths leave isolated UID.
         }
         byte[] js=module.takeOnce(session,module.opaqueId());
         try {
@@ -232,6 +248,7 @@ public final class P76EngineArchiveFdProbe {
         b.putBoolean("p77_full_tree_verified",true);
         b.putBoolean("p78_bounded_module_read_verified",true);
         b.putBoolean("p144_two_readonly_resources_verified",true);
+        b.putBoolean("p145_exact_cli_entry_verified",true);
         Message ack=Message.obtain(null,ACK);ack.setData(b);reply.send(ack);
       }catch(Exception failure){
         // Never send an unverified success; no private archive bytes or paths

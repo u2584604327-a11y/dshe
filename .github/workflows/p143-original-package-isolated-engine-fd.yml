@@ -6,6 +6,7 @@ on:
       - 'host_candidate/p76_original_engine_fd/android/com/dsh/android/p76/P76EngineArchiveFdProbe.java'
       - 'host_candidate/p143_same_package_engine_fd/**'
       - 'host_candidate/p144_scoped_source_broker/**'
+      - 'host_candidate/p145_exact_boot_entry/**'
       - 'host_candidate/p77_engine_tar_audit/src/com/dsh/android/p77/P77TarAudit.java'
       - 'host_candidate/p43_original_service/build_embedded_emulator_apk.sh'
       - '.github/workflows/p143-original-package-isolated-engine-fd.yml'
@@ -42,6 +43,8 @@ jobs:
           test "$P47_NO_HOST_FALLBACK" = 1 && test "$P49_NODE_STAGE" = 0 && test "$P51_SIDE_BY_SIDE" = 0
           bash -n host_candidate/p143_same_package_engine_fd/run_real_original_emulator.sh
           grep -Fq 'P144ScopedSourceBroker.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          grep -Fq 'P145ExactBootEntry.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          grep -Fq 'p145_exact_cli_entry_verified' host_candidate/p76_original_engine_fd/android/com/dsh/android/p76/P76EngineArchiveFdProbe.java
           grep -Fq 'p144_two_readonly_resources_verified' host_candidate/p76_original_engine_fd/android/com/dsh/android/p76/P76EngineArchiveFdProbe.java
           bash -n host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           grep -Fq '"com.dsh.android.p43.P43ProbeActivity".equals(host.getClass().getName())' host_candidate/p76_original_engine_fd/android/com/dsh/android/p76/P76EngineArchiveFdProbe.java
@@ -89,6 +92,8 @@ jobs:
           rm -rf .p43tmp .p143_build.log
           echo P143_PRODUCTION_NODE_SCRIPTS=NOT_EXECUTED >> "$GITHUB_STEP_SUMMARY"
           echo P144_TWO_SOURCE_BROKER=CHECK_EMULATOR_JOB >> "$GITHUB_STEP_SUMMARY"
+          echo P145_EXACT_ORIGINAL_ENTRY=CHECK_EMULATOR_JOB >> "$GITHUB_STEP_SUMMARY"
+          echo P145_PRODUCTION_ENGINE_MANAGER_HANDOFF=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
           echo P144_PRODUCTION_NODE_MODULE_RESOLUTION=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
           echo P143_REAL_ENGINE_MANAGER_HANDOFF=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
           echo P143_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
