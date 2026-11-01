@@ -70,16 +70,31 @@ if test "$code" -eq 0 && printf '%s\n' "$clean" | grep -Eq '^v[0-9]+\.[0-9]+\.[0
   echo "P127_ORIGINAL_ARM64_NODE_VERSION=$clean"
   echo 'P127_ORIGINAL_ARM64_NODE_IN_ISOLATED_APP=NOT_TESTED'
 else
+  # No verbatim stderr/stdout, user data, paths or environment is logged.
+  # A fixed exit code and bounded output digest preserve reproducible evidence.
+  echo "P127_NODE_REMOTE_EXIT_CODE=$code"
+  diagnostic_digest="$(printf '%s' "$response" | sha256sum | awk '{print $1}')"
+  echo "P127_NODE_REDACTED_OUTPUT_SHA256=$diagnostic_digest"
+  referenced=NONE_OF_PINNED_DIRECT_LIBRARIES
+  for lib in libz.so.1 libcares.so libsqlite3.so libffi.so libcrypto.so.3 libssl.so.3 libicui18n.so.78 libicuuc.so.78 libc++_shared.so libc.so libm.so libdl.so; do
+    if printf '%s' "$response" | grep -Fq "$lib"; then
+      referenced="$lib"
+      break
+    fi
+  done
+  echo "P127_DIAGNOSTIC_REFERENCED_NEEDED_LIBRARY=$referenced"
   if test "$code" -eq 124; then
     failure=TIMEOUT
-  elif printf '%s\n' "$response" | grep -Eqi 'linker|cannot locate|CANNOT LINK|not found'; then
-    failure=DYNAMIC_LOADER_OR_LIBRARY
-  elif printf '%s\n' "$response" | grep -Eqi 'exec format|architecture'; then
-    failure=ELF_ARCH_OR_BRIDGE
+  elif printf '%s\n' "$response" | grep -Eqi 'CANNOT LINK EXECUTABLE|linker.*failed|linker.*cannot'; then
+    failure=ANDROID_DYNAMIC_LINKER_DIAGNOSTIC
+  elif printf '%s\n' "$response" | grep -Eqi 'exec format|architecture|not executable'; then
+    failure=ELF_FORMAT_OR_NATIVE_BRIDGE
+  elif printf '%s\n' "$response" | grep -Eqi 'No such file|not found'; then
+    failure=MISSING_PATH_OR_TRANSITIVE_LIBRARY
   elif printf '%s\n' "$response" | grep -Eqi 'Permission denied|denied'; then
     failure=EXECUTE_PERMISSION
   else
-    failure=OTHER_FAIL_CLOSED
+    failure=UNKNOWN_FAIL_CLOSED
   fi
   echo "P127_ORIGINAL_ARM64_NODE_VERSION_IN_EMULATOR_SHELL=BLOCKED_$failure"
   echo 'P127_NODE_FAILED_RESULT_NOT_RETRIED'
