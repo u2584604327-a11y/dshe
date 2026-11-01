@@ -56,7 +56,16 @@ public final class P120IsolatedDenyService extends Service {
    * Host selects the original asset; Binder transmits only an FD. This Service
    * never opens host-private paths and never supplies the model any raw bytes.
    */
+  private static void sendAssetStatus(Messenger receiver,String code){
+    Message receipt=Message.obtain(null,ASSET_PREFIX_RECEIPT);
+    Bundle result=new Bundle();
+    result.putString("assetPrefix",code);
+    result.putString("toolAccess","DENY_ALL");
+    receipt.setData(result);
+    try{receiver.send(receipt);}catch(RemoteException ignored){}
+  }
   private void receivePinnedEnginePrefix(Message request){
+    final Messenger receiver=request.replyTo;
     ParcelFileDescriptor input=null;
     try{
       Bundle bundle=request.getData();
@@ -64,18 +73,25 @@ public final class P120IsolatedDenyService extends Service {
       input=(ParcelFileDescriptor)bundle.getParcelable("engine_fd");
     }catch(RuntimeException malformed){
       if(input!=null)try{input.close();}catch(Exception ignored){}
+      sendAssetStatus(receiver,"REJECTED_BAD_FD_NO_EXEC");
       return;
     }
-    if(input==null)return;
+    if(input==null){
+      sendAssetStatus(receiver,"REJECTED_BAD_FD_NO_EXEC");
+      return;
+    }
     if(!assetBusy.compareAndSet(false,true)){
       try{input.close();}catch(Exception ignored){}
+      sendAssetStatus(receiver,"REJECTED_BUSY_NO_EXEC");
       return;
     }
     final ParcelFileDescriptor fd=input;
-    final Messenger receiver=request.replyTo;
     final Handler main=new Handler(Looper.getMainLooper());
+    final AtomicBoolean answered=new AtomicBoolean(false);
     final Runnable timeout=()->{
       try{fd.close();}catch(Exception ignored){}
+      if(answered.compareAndSet(false,true))
+        sendAssetStatus(receiver,"REJECTED_TIMEOUT_NO_EXEC");
     };
     main.postDelayed(timeout,5000);
     Thread checker=new Thread(()->{
@@ -100,13 +116,9 @@ public final class P120IsolatedDenyService extends Service {
       }finally{
         main.removeCallbacks(timeout);
         assetBusy.set(false);
-        Message receipt=Message.obtain(null,ASSET_PREFIX_RECEIPT);
-        Bundle status=new Bundle();
-        status.putString("assetPrefix",
-          valid?"PINNED_4096_SHA256_MATCH_NO_EXEC":"REJECTED_NO_EXEC");
-        status.putString("toolAccess","DENY_ALL");
-        receipt.setData(status);
-        try{receiver.send(receipt);}catch(RemoteException ignored){}
+        if(answered.compareAndSet(false,true))
+          sendAssetStatus(receiver,
+            valid?"PINNED_4096_SHA256_MATCH_NO_EXEC":"REJECTED_NO_EXEC");
       }
     },"p121-pinned-engine-fd-only");
     checker.setDaemon(true);
