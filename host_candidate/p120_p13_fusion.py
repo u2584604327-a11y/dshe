@@ -39,7 +39,9 @@ public final class P120IsolatedDenyService extends Service {
       if(Build.VERSION.SDK_INT<34)return;
       if(!Process.isIsolated()||!Process.isIsolatedUid(Process.myUid())||
          incoming.sendingUid!=getApplicationInfo().uid||
-         incoming.what!=PING||incoming.replyTo==null)return;
+         incoming.replyTo==null)return;
+      // Type dispatch comes AFTER framework sender-UID verification.
+      // A pinned FD request must not be rejected by the legacy PING check.
       if(incoming.what==ASSET_PREFIX_FD){receivePinnedEnginePrefix(incoming);return;}
       if(incoming.what!=PING)return;
       Message output=Message.obtain(null,PONG);
