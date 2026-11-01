@@ -16,6 +16,7 @@ import java.lang.reflect.InvocationTargetException;
 import com.dsh.android.p48.P48HostProcessProbe;
 import com.dsh.p37.P37RemoteProcess;
 import com.dsh.android.p150.P150OriginalCoroutineObserver;
+import com.dsh.android.p151.P151OriginalEngineStateSampler;
 
 /**
  * P43 temporary exported test entry exists ONLY in the throwaway emulator APK.
@@ -82,6 +83,22 @@ public final class P43ProbeActivity extends Activity {
         fail("P46_CONTENT_ADDRESSED_BUNDLE_REJECTED");return;
       }
       received=true;
+      // Original MainActivity is already launched by the emulator runner.
+      // Observe its existing EngineManager singleton without creating one,
+      // calling start(), reading data or modifying bootstrap.
+      for(final int t:new int[]{5,20,40}){
+        main.postDelayed(()->{
+          P151OriginalEngineStateSampler.Sample sample=
+              P151OriginalEngineStateSampler.sample();
+          log("P151_ORIGINAL_ENGINE_AT_"+t+"S="+sample.safeLine());
+          if(t==40){
+            log(P150OriginalCoroutineObserver.observedOriginal()>0?
+              "P151_REAL_COROUTINE_REACHED_PRELAUNCH=OBSERVED":
+              "P151_REAL_COROUTINE_REACHED_PRELAUNCH=NOT_OBSERVED");
+            log("P151_ACTUAL_ARGV_ENV_CWD_ORIGINAL=NOT_PROVEN");
+          }
+        },t*1000L);
+      }
       main.postDelayed(()->{
         log(P150OriginalCoroutineObserver.observedOriginal()>0 ?
           "P150_ACTUAL_ENGINE_COROUTINE_STACK=OBSERVED" :
