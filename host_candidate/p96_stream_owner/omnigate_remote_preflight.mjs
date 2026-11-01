@@ -1,5 +1,5 @@
 /**
- * P149 public tunnel -> OmniGate read-only reachability classifier.
+ * OGNET01 public tunnel -> OmniGate read-only reachability classifier.
  * Works on a user-supplied *.claua.de HTTPS origin only. NEVER POSTs, adds
  * credentials, follows redirects, retries messages, reveals response bodies,
  * model IDs, IPs, tokens or hostnames in output.
@@ -97,7 +97,7 @@ export function classifyRemoteHealth({status,payload}={}){
 /** A user-local diagnosis only. No POST, no model call, no auth/key read. */
 export async function probeRemote({baseUrl,request=getRemoteJson}={}){
   const origin=parseTunnelBaseUrl(baseUrl);
-  const report={probe:'DSH_OMNIGATE_REMOTE_READONLY_P149',
+  const report={probe:'DSH_OMNIGATE_REMOTE_READONLY_OGNET01',
     public_origin_redacted:true,issued_post:false,credentials_sent:false,
     model_turn_verified:false,assistant_reply_verified:false,
     automatic_retry:false,verdict:'NOT_CHECKED'};
@@ -130,7 +130,7 @@ export async function probeRemote({baseUrl,request=getRemoteJson}={}){
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   if(process.argv.length!==3){
-    process.stdout.write(JSON.stringify({probe:'DSH_OMNIGATE_REMOTE_READONLY_P149',
+    process.stdout.write(JSON.stringify({probe:'DSH_OMNIGATE_REMOTE_READONLY_OGNET01',
       verdict:'REQUIRES_ONE_HTTPS_CLAUA_TUNNEL_URL',issued_post:false})+'\n');
     process.exitCode=2;
   }else{
@@ -139,7 +139,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
       if(report.verdict!=='PUBLIC_GET_READY_NO_SSE_OR_ASSISTANT_REPLY_PROOF')
         process.exitCode=2;
     }).catch(()=>{
-      process.stdout.write(JSON.stringify({probe:'DSH_OMNIGATE_REMOTE_READONLY_P149',
+      process.stdout.write(JSON.stringify({probe:'DSH_OMNIGATE_REMOTE_READONLY_OGNET01',
         verdict:'INVALID_OR_OUT_OF_SCOPE_TUNNEL_URL',issued_post:false})+'\n');
       process.exitCode=2;
     });

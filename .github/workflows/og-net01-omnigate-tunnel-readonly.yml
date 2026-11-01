@@ -1,16 +1,16 @@
-name: P149 OmniGate public tunnel no-reply layer diagnostic (GET only, offline fixtures)
+name: OGNET01 OmniGate public tunnel no-reply layer diagnostic (GET only, offline fixtures)
 on:
   pull_request:
     types: [opened, synchronize]
     paths:
       - 'host_candidate/p96_stream_owner/omnigate_remote_preflight.mjs'
       - 'host_candidate/p96_stream_owner/omnigate_remote_preflight.test.mjs'
-      - 'host_candidate/P149_OMNIGATE_TUNNEL_NO_REPLY_TRIAGE.md'
-      - '.github/workflows/p149-omnigate-tunnel-readonly.yml'
+      - 'host_candidate/OGNET01_OMNIGATE_TUNNEL_NO_REPLY_TRIAGE.md'
+      - '.github/workflows/og-net01-omnigate-tunnel-readonly.yml'
 permissions:
   contents: read
 jobs:
-  p149-no-public-network-no-secrets:
+  og-net01-no-public-network-no-secrets:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
@@ -45,10 +45,10 @@ jobs:
           assert "from './omnigate_remote_preflight.mjs'" in test
           assert 'https://gw-example.claua.de/v1' in test
           assert 'gw-33e850180248' not in s+test
-          print('P149_PUBLIC_RELAY_NO_REPLY_LAYERS=PASS_OFFLINE')
-          print('P149_NO_POST_NO_SECRETS_NO_AUTORETRY=PASS_STATIC_AND_UNIT')
-          print('P149_LIVE_USER_TUNNEL_REACHABILITY=NOT_TESTED')
-          print('P149_ORIGINAL_DSH_PRODUCTION_APP_FIXED=NO')
+          print('OGNET01_PUBLIC_RELAY_NO_REPLY_LAYERS=PASS_OFFLINE')
+          print('OGNET01_NO_POST_NO_SECRETS_NO_AUTORETRY=PASS_STATIC_AND_UNIT')
+          print('OGNET01_LIVE_USER_TUNNEL_REACHABILITY=NOT_TESTED')
+          print('OGNET01_ORIGINAL_DSH_PRODUCTION_APP_FIXED=NO')
           PY
-          echo 'P149_TUNNEL_RELAY_OWNER_AND_AUTH_DIAGNOSTIC=PASS_UNIT_ONLY' >> "$GITHUB_STEP_SUMMARY"
-          echo 'P149_REAL_PUBLIC_URL_AND_MODEL_REPLY=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'OGNET01_TUNNEL_RELAY_OWNER_AND_AUTH_DIAGNOSTIC=PASS_UNIT_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'OGNET01_REAL_PUBLIC_URL_AND_MODEL_REPLY=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"

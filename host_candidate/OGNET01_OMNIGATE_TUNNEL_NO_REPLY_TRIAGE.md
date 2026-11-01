@@ -1,4 +1,4 @@
-# P149 | OmniGate public tunnel “no reply”: read-only fault isolation
+# OGNET01 | OmniGate public tunnel “no reply”: read-only fault isolation
 
 **Status: diagnostic-only; production DSH/OmniGate tunnel NOT repaired.** Original DSHAPP MIT and secondary modification notices remain intact.
 
@@ -33,6 +33,6 @@ A UI message saying “no reply” can mean: (1) no HTTP response, (2) HTTP 200 
 
 ## Public design reference and licensing
 
-Reference reviewed: https://github.com/xingling66666/fuckds . It describes OpenAI/Anthropic-compatible responses, incremental SSE conversion, stateless prompt concatenation and a tool-call textual adapter, but it is **GPL-3.0** whereas original DSHAPP is **MIT**. The present P149 code is independently written; **no source from that GPL repository was copied**. We may independently adopt architectural *goals* (lossless SSE final frame, tool-call deduplication, actual message-store UI painting), but never copy its source into this MIT secondary modification without separate license compatibility and compliance review. Do not adopt unofficial webpage token scraping/PoW or model-formatted tool approval as a security authority.
+Reference reviewed: https://github.com/xingling66666/fuckds . It describes OpenAI/Anthropic-compatible responses, incremental SSE conversion, stateless prompt concatenation and a tool-call textual adapter, but it is **GPL-3.0** whereas original DSHAPP is **MIT**. The present OGNET01 code is independently written; **no source from that GPL repository was copied**. We may independently adopt architectural *goals* (lossless SSE final frame, tool-call deduplication, actual message-store UI painting), but never copy its source into this MIT secondary modification without separate license compatibility and compliance review. Do not adopt unofficial webpage token scraping/PoW or model-formatted tool approval as a security authority.
 
 Single writable repo `u2584604327-a11y/dshe` PR #80 only. No signed APK, phone install, user's cookies, model sessions, login, ports or private tunnel credentials modified. This diagnostic cannot repair remote Relay/cloud configuration itself.

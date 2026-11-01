@@ -77,5 +77,5 @@ test('no reply / DNS / TLS / timeout are distinct sanitized failures',async()=>{
     assert.equal(r.verdict,expected);assert.equal(JSON.stringify(r).includes('secret'),false);
   }
 });
-console.log('P149_REMOTE_PUBLIC_TUNNEL_LAYER_CLASSIFICATION=PASS');
-console.log('P149_NO_POST_NO_KEY_NO_RETRY_NO_UNVERIFIED_REPLY=PASS');
+console.log('OGNET01_REMOTE_PUBLIC_TUNNEL_LAYER_CLASSIFICATION=PASS');
+console.log('OGNET01_NO_POST_NO_KEY_NO_RETRY_NO_UNVERIFIED_REPLY=PASS');
