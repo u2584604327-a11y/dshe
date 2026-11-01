@@ -85,7 +85,14 @@ def stage(original, root):
                     "P127_SYMLINK_WOULD_REPLACE_REAL_LIBRARY")
             continue
         if target in combined:
-            (lib_dir/alias).symlink_to(target)
+            # Android adb shell may refuse unprivileged symlink creation
+            # under /data/local/tmp. Materialize the exact already-verified
+            # target bytes as a regular filename rather than copying links.
+            # This never follows arbitrary host paths or requests an APK patch.
+            replacement=combined[target]
+            total+=len(replacement)
+            require(total<=MAX_TOTAL*2,"P127_MATERIALIZED_ALIAS_BUDGET_EXCEEDED")
+            (lib_dir/alias).write_bytes(replacement)
             created+=1
     for needed in ("libssl.so.3","libcrypto.so.3","libc++_shared.so",
                    "libz.so.1","libcares.so","libsqlite3.so",
@@ -94,7 +101,7 @@ def stage(original, root):
     print("P127_ORIGINAL_NODE_AND_BOOTSTRAP_EXACT_SHA=PASS")
     print("P127_ARM64_NODE_LIBS_STAGED_READONLY_FOR_EMULATOR=PASS")
     print("P127_STATIC_STAGED_LIBRARIES="+str(len(combined)))
-    print("P127_STATIC_STAGED_SYMLINKS="+str(created))
+    print("P127_STATIC_STAGED_FLAT_LIBRARY_ALIASES="+str(created))
     print("P127_ISOLATED_NODE_EXECUTION=NOT_TESTED")
     print("P127_NATIVE_TOOLS=DENY_ALL")
 
