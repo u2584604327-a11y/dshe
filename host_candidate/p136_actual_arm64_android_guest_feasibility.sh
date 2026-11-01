@@ -64,12 +64,27 @@ if test "$installed" != 0; then
   report P136_ARM64_ANDROID_BOOT=NOT_TESTED
   exit 0
 fi
-if ! test -s "$sdk/system-images/android-35/google_apis/arm64-v8a/system.img"; then
-  report P136_ARM64_IMAGE_LAYOUT=NOT_VERIFIED
-  report P136_ARM64_ANDROID_BOOT=NOT_TESTED
+image_dir="$sdk/system-images/android-35/google_apis/arm64-v8a"
+# SDK package layouts differ; do not assert a single system.img filename.
+if ! test -d "$image_dir"; then
+  report P136_ARM64_IMAGE_DIRECTORY=ABSENT_AFTER_INSTALL_RETURNED_ZERO
+  report P136_ANDROID_ARM64_BOOT=NOT_TESTED
   exit 0
 fi
-report P136_ARM64_SYSTEM_IMAGE_INSTALLED=PASS
+if ! test -f "$image_dir/source.properties"; then
+  report P136_ARM64_IMAGE_PACKAGE_METADATA=ABSENT
+  report P136_ANDROID_ARM64_BOOT=NOT_TESTED
+  exit 0
+fi
+count="$(find "$image_dir" -maxdepth 1 -type f -name '*.img' | wc -l | tr -d ' ')"
+if test "$count" = 0; then
+  report P136_ARM64_IMAGE_FILES=NONE_VISIBLE
+  report P136_ANDROID_ARM64_BOOT=NOT_TESTED
+  exit 0
+fi
+report P136_ARM64_IMAGE_PACKAGE_METADATA=PASS
+report P136_ARM64_IMAGE_FILE_COUNT="$count"
+report P136_ARM64_SYSTEM_IMAGE_INSTALLED=PASS_METADATA_AND_FILES
 avdm="$(command -v avdmanager || true)"
 test -n "$avdm" || avdm="$(find "$sdk/cmdline-tools" -type f -name avdmanager -perm /111 2>/dev/null | head -n1 || true)"
 if test -z "$avdm"; then report P136_AVDMANAGER=UNAVAILABLE; exit 0; fi
