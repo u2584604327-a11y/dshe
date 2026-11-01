@@ -14,6 +14,7 @@ ATTRS={"name":0x01010003,"exported":0x01010010,"process":0x01010011,"isolatedPro
 JAVA="""package com.dsh.p120;
 import android.app.Service;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -27,6 +28,7 @@ public final class P120IsolatedDenyService extends Service {
   public static final int PING=12001, PONG=12002;
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()){
     @Override public void handleMessage(Message incoming){
+      if(Build.VERSION.SDK_INT<34)return;
       if(!Process.isIsolated()||!Process.isIsolatedUid(Process.myUid())||
          incoming.sendingUid!=getApplicationInfo().uid||
          incoming.what!=PING||incoming.replyTo==null)return;
@@ -40,7 +42,7 @@ public final class P120IsolatedDenyService extends Service {
     }
   });
   @Override public IBinder onBind(Intent intent){
-    return Process.isIsolated()&&Process.isIsolatedUid(Process.myUid())
+    return Build.VERSION.SDK_INT>=34&&Process.isIsolated()&&Process.isIsolatedUid(Process.myUid())
       ?inbox.getBinder():null;
   }
 }
