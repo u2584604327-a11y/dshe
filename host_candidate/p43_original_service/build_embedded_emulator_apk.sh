@@ -111,6 +111,8 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p152_termux_readonly/android/com/dsh/android/p152/P152TermuxReadOnly.java \
   host_candidate/p153_node_elf/src/com/dsh/android/p153/P153ElfHeader.java \
   host_candidate/p153_node_elf/android/com/dsh/android/p153/P153OriginalNodeElfProbe.java \
+  host_candidate/p156_original_app_lib_uid/src/com/dsh/android/p156/P156PrivateLibAudit.java \
+  host_candidate/p156_original_app_lib_uid/android/com/dsh/android/p156/P156OriginalAppLibProbe.java \
   host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java \
   host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48FixedIsolatedChild.java \
   host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48HostProcessProbe.java \
@@ -214,6 +216,7 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p151/P151OriginalEngineStateSampler;',
                   'Lcom/dsh/android/p152/P152TermuxReadOnly;',
                   'Lcom/dsh/android/p153/P153OriginalNodeElfProbe;',
+                  'Lcom/dsh/android/p156/P156OriginalAppLibProbe;',
                   'Lcom/dsh/android/p149/P149OriginalBuilderWitness;',
                   'Lcom/dsh/p37/P37RemoteProcess;',
                   'Lcom/dsh/android/p48/P48FixedIsolatedChild;',

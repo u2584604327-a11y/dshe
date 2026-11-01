@@ -14,6 +14,7 @@ on:
       - 'host_candidate/p151_original_state_probe/**'
       - 'host_candidate/p152_termux_readonly/**'
       - 'host_candidate/p153_node_elf/**'
+      - 'host_candidate/p156_original_app_lib_uid/**'
       - 'host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java'
       - 'host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java'
       - 'host_candidate/p77_engine_tar_audit/src/com/dsh/android/p77/P77TarAudit.java'
@@ -63,6 +64,11 @@ jobs:
           grep -Fq 'P151OriginalEngineStateSampler.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           grep -Fq 'P152TermuxReadOnly.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           grep -Fq 'P153OriginalNodeElfProbe.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          mkdir -p .p156classes
+          javac --release 8 -d .p156classes host_candidate/p156_original_app_lib_uid/src/com/dsh/android/p156/P156PrivateLibAudit.java host_candidate/p156_original_app_lib_uid/test/com/dsh/android/p156/P156PrivateLibAuditTest.java
+          java -cp .p156classes com.dsh.android.p156.P156PrivateLibAuditTest
+          rm -rf .p156classes
+          grep -Fq 'P156OriginalAppLibProbe.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           grep -Fq 'P149OriginalBuilderWitness.observeWithoutLaunch' host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java
           mkdir -p .p149classes
           javac --release 8 -d .p149classes \
@@ -155,6 +161,8 @@ jobs:
           echo P152_NODE_PROCESS_OR_RESTART=DENIED >> "$GITHUB_STEP_SUMMARY"
           echo P153_REAL_NODE_ELF_ARCH_AND_PT_INTERP=CHECK_ANDROID_LOGCAT >> "$GITHUB_STEP_SUMMARY"
           echo P153_PRODUCTION_NODE_EXECUTION=DENIED >> "$GITHUB_STEP_SUMMARY"
+          echo P156_APP_UID_LIB_ACCESS=CHECK_EMULATOR_ONLY >> "$GITHUB_STEP_SUMMARY"
+          echo P156_PRODUCTION_ELF_LOADER=NOT_PROVEN >> "$GITHUB_STEP_SUMMARY"
           echo P151_NODE_STARTUP_PROVEN=NO >> "$GITHUB_STEP_SUMMARY"
           echo P150_NATIVE_IDENTITY_PROVEN=NO >> "$GITHUB_STEP_SUMMARY"
           echo P149_ORIGINAL_ENGINEMANAGER_PRODUCTION_PARAMETERS=NOT_PROVEN >> "$GITHUB_STEP_SUMMARY"

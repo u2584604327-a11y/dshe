@@ -19,6 +19,7 @@ import com.dsh.android.p150.P150OriginalCoroutineObserver;
 import com.dsh.android.p151.P151OriginalEngineStateSampler;
 import com.dsh.android.p152.P152TermuxReadOnly;
 import com.dsh.android.p153.P153OriginalNodeElfProbe;
+import com.dsh.android.p156.P156OriginalAppLibProbe;
 
 /**
  * P43 temporary exported test entry exists ONLY in the throwaway emulator APK.
@@ -95,6 +96,7 @@ public final class P43ProbeActivity extends Activity {
           log("P151_ORIGINAL_ENGINE_AT_"+t+"S="+sample.safeLine());
           log("P152_TERMUX_METADATA_AT_"+t+"S="+P152TermuxReadOnly.safeSnapshot(getApplicationContext()));
           log("P153_NODE_ELF_AT_"+t+"S="+P153OriginalNodeElfProbe.safeSnapshot(getApplicationContext()));
+          log("P156_APP_UID_LIBS_AT_"+t+"S="+P156OriginalAppLibProbe.safeSnapshot(getApplicationContext()));
           if(t==40){
             log(P150OriginalCoroutineObserver.observedOriginal()>0?
               "P151_REAL_COROUTINE_REACHED_PRELAUNCH=OBSERVED":
