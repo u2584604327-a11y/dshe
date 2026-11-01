@@ -25,13 +25,16 @@ import android.os.Process;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 /** Isolated UID only; synthetic ping + DENY_ALL; no original Node/tools. */
 public final class P120IsolatedDenyService extends Service {
   public static final int PING=12001, PONG=12002;
   public static final int ASSET_PREFIX_FD=12003, ASSET_PREFIX_RECEIPT=12004;
   public static final int FULL_ENGINE_FD=12201, FULL_ENGINE_RECEIPT=12202;
+  public static final int FIXED_CHILD_UID_PROBE=12401, FIXED_CHILD_UID_RECEIPT=12402;
   private static final int PREFIX_LIMIT=4096;
   private static final long FULL_ENGINE_BYTES=57724933L;
   private static final long FULL_ENGINE_MAX_BYTES=64L*1024L*1024L;
@@ -39,6 +42,7 @@ public final class P120IsolatedDenyService extends Service {
       "adc7a3aa9eeef64e9155860340731316067b5fe97bc71a3eef6fea1daca504aa";
   private static final String ENGINE_PREFIX_SHA256="9a2cff4e385d679c384ccfab16252e086b7cef8546826807c9a8926b267777fb";
   private final AtomicBoolean assetBusy=new AtomicBoolean(false);
+  private final AtomicBoolean childBusy=new AtomicBoolean(false);
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()){
     @Override public void handleMessage(Message incoming){
       if(Build.VERSION.SDK_INT<34)return;
@@ -49,6 +53,7 @@ public final class P120IsolatedDenyService extends Service {
       // A pinned FD request must not be rejected by the legacy PING check.
       if(incoming.what==ASSET_PREFIX_FD){receivePinnedEnginePrefix(incoming);return;}
       if(incoming.what==FULL_ENGINE_FD){receiveFullEngineFd(incoming);return;}
+      if(incoming.what==FIXED_CHILD_UID_PROBE){probeFixedIsolatedChild(incoming);return;}
       if(incoming.what!=PING)return;
       Message output=Message.obtain(null,PONG);
       Bundle result=new Bundle();
@@ -203,6 +208,72 @@ public final class P120IsolatedDenyService extends Service {
               ?"PINNED_FULL_ENGINE_SHA256_MATCH_NO_EXEC":"REJECTED_CONTENT_NO_EXEC");
       }
     },"p122-original-full-engine-fd-hash");
+    worker.setDaemon(true);
+    worker.start();
+  }
+
+  /** P124: executable-domain capability probe in the actual original-host
+   * isolated UID. Fixed Android system /system/bin/id -u only, no user/model
+   * input, no shell, no APK executable or third-party libraries, no tools.
+   * Never pass a caller-controlled command, path, environment or argument.
+   */
+  private static void replyFixedChild(Messenger recipient,String result,int uid){
+    Message reply=Message.obtain(null,FIXED_CHILD_UID_RECEIPT);
+    Bundle data=new Bundle();
+    data.putString("isolatedChild",result);
+    data.putInt("observedChildUid",uid);
+    data.putString("toolAccess","DENY_ALL");
+    reply.setData(data);
+    try{recipient.send(reply);}catch(RemoteException ignored){}
+  }
+  private void probeFixedIsolatedChild(Message request){
+    final Messenger receiver=request.replyTo;
+    if(!childBusy.compareAndSet(false,true)){
+      replyFixedChild(receiver,"REJECTED_BUSY_NO_TOOLS",-1);
+      return;
+    }
+    Thread worker=new Thread(()->{
+      java.lang.Process child=null;
+      boolean matched=false;
+      int childUid=-1;
+      try{
+        ProcessBuilder builder=new ProcessBuilder("/system/bin/id","-u");
+        // Do not inherit arbitrary environment values or secrets.
+        builder.environment().clear();
+        builder.environment().put("PATH","/system/bin");
+        builder.environment().put("ANDROID_ROOT","/system");
+        builder.environment().put("ANDROID_DATA","/data");
+        child=builder.start();
+        boolean exited=child.waitFor(5,TimeUnit.SECONDS);
+        if(exited&&child.exitValue()==0){
+          byte[] small=new byte[24];
+          try(InputStream stdout=child.getInputStream()){
+            int n=stdout.read(small);
+            if(n>0&&n<small.length){
+              String value=new String(small,0,n,StandardCharsets.US_ASCII).trim();
+              if(value.matches("[0-9]{1,10}")){
+                childUid=Integer.parseInt(value);
+                matched=Process.isIsolatedUid(childUid)&&childUid==Process.myUid();
+              }
+            }
+          }
+        }
+      }catch(Exception denied){
+        // No host path, environment, stdout/stderr, exception or stack trace in logs.
+      }finally{
+        if(child!=null){
+          child.destroyForcibly();
+          try{child.getInputStream().close();}catch(Exception ignored){}
+          try{child.getErrorStream().close();}catch(Exception ignored){}
+          try{child.getOutputStream().close();}catch(Exception ignored){}
+        }
+        childBusy.set(false);
+        replyFixedChild(receiver,matched
+            ?"FIXED_ANDROID_ID_CHILD_SAME_ISOLATED_UID_NO_TOOLS"
+            :"REJECTED_CHILD_EXEC_OR_UID_NO_TOOLS",
+            matched?childUid:-1);
+      }
+    },"p124-fixed-android-system-id-uid-only");
     worker.setDaemon(true);
     worker.start();
   }
