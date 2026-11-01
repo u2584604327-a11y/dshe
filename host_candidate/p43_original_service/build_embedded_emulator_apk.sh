@@ -108,6 +108,7 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48FixedIsolatedChild.java \
   host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48HostProcessProbe.java \
   host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java \
+  host_candidate/p134_real_arm64_gate/src/com/dsh/android/p134/P134RealArm64Gate.java \
   host_candidate/p53_child_start/src/com/dsh/android/p53/P53StartOrder.java \
   host_candidate/p67_authenticated_handoff/src/com/dsh/android/p67/P67AuthenticatedHandoff.java \
   host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java \
@@ -202,6 +203,7 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p48/P48FixedIsolatedChild;',
                   'Lcom/dsh/android/p48/P48HostProcessProbe;',
                   'Lcom/dsh/android/p50/P50OriginalNodeFixedChild;',
+                  'Lcom/dsh/android/p134/P134RealArm64Gate;',
                   'Lcom/dsh/android/p53/P53StartOrder;',
                   'Lcom/dsh/android/p67/P67AuthenticatedHandoff;',
                   'Lcom/dsh/android/p68/P68AndroidBinderIntake;',
