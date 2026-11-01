@@ -1,0 +1,37 @@
+name: P136 bounded real ARM64 Android system-image TCG feasibility (no Node)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p136_actual_arm64_android_guest_feasibility.sh'
+      - '.github/workflows/p136-arm64-android-guest-feasibility.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: p136-arm64-systemimage-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-arm64-android-system-image-feasibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Probe API35 native ARM64 guest system image with bounded unsupported TCG
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p136_actual_arm64_android_guest_feasibility.sh
+          bash host_candidate/p136_actual_arm64_android_guest_feasibility.sh
+      - name: Preserve production deny-gates independent of feasibility
+        if: always()
+        shell: bash
+        run: |
+          echo P136_ORIGINAL_SIGNED_DSH_APK=NOT_INSTALLED >> "$GITHUB_STEP_SUMMARY"
+          echo P136_ORIGINAL_NODE=NOT_EXECUTED >> "$GITHUB_STEP_SUMMARY"
+          echo P136_PRODUCTION_ISOLATED_UID=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P136_ENGINE_MANAGER_LIFECYCLE=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P136_P109_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P136_FORMAL_V139=BLOCKED >> "$GITHUB_STEP_SUMMARY"
