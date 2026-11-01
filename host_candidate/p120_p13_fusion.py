@@ -31,7 +31,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class P120IsolatedDenyService extends Service {
   public static final int PING=12001, PONG=12002;
   public static final int ASSET_PREFIX_FD=12003, ASSET_PREFIX_RECEIPT=12004;
+  public static final int FULL_ENGINE_FD=12201, FULL_ENGINE_RECEIPT=12202;
   private static final int PREFIX_LIMIT=4096;
+  private static final long FULL_ENGINE_BYTES=57724933L;
+  private static final long FULL_ENGINE_MAX_BYTES=64L*1024L*1024L;
+  private static final String FULL_ENGINE_SHA256=
+      "adc7a3aa9eeef64e9155860340731316067b5fe97bc71a3eef6fea1daca504aa";
   private static final String ENGINE_PREFIX_SHA256="9a2cff4e385d679c384ccfab16252e086b7cef8546826807c9a8926b267777fb";
   private final AtomicBoolean assetBusy=new AtomicBoolean(false);
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()){
@@ -43,6 +48,7 @@ public final class P120IsolatedDenyService extends Service {
       // Type dispatch comes AFTER framework sender-UID verification.
       // A pinned FD request must not be rejected by the legacy PING check.
       if(incoming.what==ASSET_PREFIX_FD){receivePinnedEnginePrefix(incoming);return;}
+      if(incoming.what==FULL_ENGINE_FD){receiveFullEngineFd(incoming);return;}
       if(incoming.what!=PING)return;
       Message output=Message.obtain(null,PONG);
       Bundle result=new Bundle();
@@ -126,6 +132,81 @@ public final class P120IsolatedDenyService extends Service {
     checker.setDaemon(true);
     checker.start();
   }
+  /** Original full engine.bin source, fixed-byte content-addressed FD proof.
+   * This worker never executes Node, unpacks tar, writes files or grants tools.
+   * Memory O(64 KiB). No arbitrary names, paths or caller-supplied hashes.
+   */
+  private static void replyFullEngine(Messenger recipient,String status){
+    Message reply=Message.obtain(null,FULL_ENGINE_RECEIPT);
+    Bundle result=new Bundle();
+    result.putString("fullEngine",status);
+    result.putString("toolAccess","DENY_ALL");
+    reply.setData(result);
+    try{recipient.send(reply);}catch(RemoteException ignored){}
+  }
+  private void receiveFullEngineFd(Message request){
+    final Messenger recipient=request.replyTo;
+    ParcelFileDescriptor handle=null;
+    try{
+      Bundle args=request.getData();
+      args.setClassLoader(ParcelFileDescriptor.class.getClassLoader());
+      handle=(ParcelFileDescriptor)args.getParcelable("engine_fd");
+    }catch(RuntimeException invalid){
+      if(handle!=null)try{handle.close();}catch(Exception ignored){}
+      replyFullEngine(recipient,"REJECTED_BAD_FD_NO_EXEC");
+      return;
+    }
+    if(handle==null){
+      replyFullEngine(recipient,"REJECTED_BAD_FD_NO_EXEC");return;
+    }
+    if(!assetBusy.compareAndSet(false,true)){
+      try{handle.close();}catch(Exception ignored){}
+      replyFullEngine(recipient,"REJECTED_BUSY_NO_EXEC");
+      return;
+    }
+    final ParcelFileDescriptor fd=handle;
+    final AtomicBoolean answered=new AtomicBoolean(false);
+    final Handler handler=new Handler(Looper.getMainLooper());
+    final Runnable timeout=()->{
+      try{fd.close();}catch(Exception ignored){}
+      if(answered.compareAndSet(false,true))
+        replyFullEngine(recipient,"REJECTED_TIMEOUT_NO_EXEC");
+    };
+    handler.postDelayed(timeout,60000L);
+    Thread worker=new Thread(()->{
+      boolean accepted=false;
+      try(InputStream stream=new ParcelFileDescriptor.AutoCloseInputStream(fd)){
+        MessageDigest sha=MessageDigest.getInstance("SHA-256");
+        byte[] chunk=new byte[65536];
+        long total=0L;
+        int read;
+        while((read=stream.read(chunk))!=-1){
+          if(read==0)continue;
+          total+=read;
+          if(total>FULL_ENGINE_MAX_BYTES)break;
+          sha.update(chunk,0,read);
+        }
+        if(total==FULL_ENGINE_BYTES){
+          byte[] digest=sha.digest();
+          StringBuilder hex=new StringBuilder(64);
+          for(byte b:digest)hex.append(String.format(
+              java.util.Locale.ROOT,"%02x",b&255));
+          accepted=FULL_ENGINE_SHA256.equals(hex.toString());
+        }
+      }catch(Exception rejected){
+        // No paths, original file contents or throwable messages in logs.
+      }finally{
+        handler.removeCallbacks(timeout);
+        assetBusy.set(false);
+        if(answered.compareAndSet(false,true))
+          replyFullEngine(recipient,accepted
+              ?"PINNED_FULL_ENGINE_SHA256_MATCH_NO_EXEC":"REJECTED_CONTENT_NO_EXEC");
+      }
+    },"p122-original-full-engine-fd-hash");
+    worker.setDaemon(true);
+    worker.start();
+  }
+
   @Override public IBinder onBind(Intent intent){
     return Build.VERSION.SDK_INT>=34&&Process.isIsolated()&&Process.isIsolatedUid(Process.myUid())
       ?inbox.getBinder():null;
