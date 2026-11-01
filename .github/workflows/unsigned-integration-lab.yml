@@ -160,7 +160,191 @@ jobs:
           root=pathlib.Path('out')
           addon=(root/'p120-dex/classes.dex').read_bytes()
           classes={cls.get_name() for cls in DEX(addon).get_classes()}
-          if classes!={'Lcom/dsh/p120/P120IsolatedDenyService;'}:
+          if ('Lcom/dsh/p120/P120IsolatedDenyService;' not in classes or
+              not all(name.startswith('Lcom/dsh/p120/P120IsolatedDenyService
+          original=root/'UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk'
+          target=root/'P120_PENDING_UNSIGNED.zip'
+          with zipfile.ZipFile(original) as base,zipfile.ZipFile(target,'w',allowZip64=True) as output:
+              names=set(base.namelist())
+              if 'classes4.dex' in names or not {'classes.dex','classes2.dex','classes3.dex','AndroidManifest.xml'}.issubset(names):
+                  raise SystemExit('P120_UNEXPECTED_EXISTING_DEX_LAYOUT')
+              for info in base.infolist():
+                  data=(root/'p120-axml.bin').read_bytes() if info.filename=='AndroidManifest.xml' else base.read(info.filename)
+                  meta=copy.copy(info)
+                  meta.extra=b''
+                  output.writestr(meta,data)
+              output.writestr('classes4.dex',addon,compress_type=zipfile.ZIP_DEFLATED)
+          with zipfile.ZipFile(original) as before,zipfile.ZipFile(target) as after:
+              if after.testzip():raise SystemExit('P120_FUSED_ZIP_CRC_FAIL')
+              for name in before.namelist():
+                  if name!='AndroidManifest.xml' and before.read(name)!=after.read(name):
+                      raise SystemExit('P120_CHANGED_UNRELATED_APK_CONTENT_'+name)
+              if after.read('classes4.dex')!=addon:raise SystemExit('P120_NEW_DEX_MISMATCH')
+          target.replace(original)
+          print('P120_FUSED_ORIGINAL_P13_APK_DENY_ONLY_SERVICE=PASS')
+          PY
+          "$SDK_ROOT/build-tools/35.0.0/zipalign" -f 4 \
+            out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
+          "$SDK_ROOT/build-tools/35.0.0/zipalign" -c 4 out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
+          unzip -tqq out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
+          badging="$("$SDK_ROOT/build-tools/35.0.0/aapt" dump badging out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk)"
+          pkgline="$(printf '%s\n' "$badging" | grep '^package: ' | head -n1)"
+          [[ "$pkgline" == *"name='com.dsh.android'"* ]]
+          [[ "$pkgline" == *"versionCode='138'"* ]]
+          test "$(unzip -Z1 out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk | grep -Ec '^classes([234])?\.dex
+          if "$SDK_ROOT/build-tools/35.0.0/apksigner" verify out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk >/dev/null 2>&1; then
+            echo 'Unexpected valid APK signing detected: fail closed.'
+            exit 1
+          fi
+          echo 'UNSIGNED_APK_STRUCTURAL_ASSEMBLY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P13_MANIFEST_AUTOHOOK_METADATA=PINNED_SHA_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'UNSIGNED_APK_ZIPALIGN_AND_AAPT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'ORIGINAL_APK_SIGNATURE_INTENTIONALLY_INVALIDATED=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'VERSION_CODE=138_UNCHANGED' >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PY'
+          import json,os,pathlib
+          r=json.loads(pathlib.Path('out/fusion-report.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:
+              out.write('Added P5 DEX classes: '+str(r['P5_CLASS_COUNT'])+'\n')
+              out.write('Unmodified APK entries byte-checked: '+str(r['UNCHANGED_ENTRIES_CHECKED'])+'\n')
+              out.write('P2 primary DEX SHA256: '+r['PATCHED_MAIN_DEX_SHA256']+'\n')
+              out.write('Ephemeral unsigned aligned lab APK exists only inside this runner, never published.\n')
+          PY
+      - name: Create one-time SELF-SIGNED lab identity (never original DSH certificate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          LAB_PASS="$(openssl rand -hex 20)"
+          keytool -genkeypair -alias dsh-ephemeral-ci -keyalg RSA -keysize 3072 \
+            -validity 1 -storetype PKCS12 -dname 'CN=DISPOSABLE_EMULATOR_TEST_ONLY' \
+            -keystore out/EMULATOR_ONLY_EPHEMERAL.p12 \
+            -storepass "$LAB_PASS" -keypass "$LAB_PASS" -noprompt >/dev/null 2>&1
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" sign \
+            --ks out/EMULATOR_ONLY_EPHEMERAL.p12 --ks-key-alias dsh-ephemeral-ci \
+            --ks-pass "pass:$LAB_PASS" --key-pass "pass:$LAB_PASS" \
+            --out out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk \
+            out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
+            out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk > out/ephemeral-cert.txt
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" sign \
+            --ks out/EMULATOR_ONLY_EPHEMERAL.p12 --ks-key-alias dsh-ephemeral-ci \
+            --ks-pass "pass:$LAB_PASS" --key-pass "pass:$LAB_PASS" \
+            --out out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk \
+            out/P5_INSTRUMENTATION_ALIGNED_DO_NOT_SHARE.apk
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose \
+            out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk >/dev/null
+          lab_cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' out/ephemeral-cert.txt | head -n 1)"
+          test -n "$lab_cert"
+          test "$lab_cert" != '90072b7de43e96999be92d99869ce5e5b7639b5f2449417b99a1790831b60ff8'
+          echo 'EMULATOR_ONLY_EPHEMERAL_SIGNATURE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'NOT_COMPATIBLE_WITH_INSTALLED_DSH_V138=EXPECTED' >> "$GITHUB_STEP_SUMMARY"
+      - name: Prepare emulator KVM access
+        shell: bash
+        run: |
+          if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Install and launch disposable candidate on fresh offline Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/run_emulator_smoke.sh out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk
+      - name: Destroy transient APK and state remaining blockers
+        if: always()
+        shell: bash
+        run: |
+          rm -f out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/EMULATOR_ONLY_EPHEMERAL.p12 out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk out/P5_INSTRUMENTATION_ALIGNED_DO_NOT_SHARE.apk out/P5_INSTRUMENTATION_UNSIGNED_DO_NOT_SHARE.apk /tmp/dsh-private-emulator-logcat.txt
+          {
+            echo 'PRODUCTION_V139_APK_BUILT=NO'
+            echo 'FIXED_CERTIFICATE_SIGNING=NOT_PERFORMED'
+            echo 'P12_TEST_ONLY_UI_HOOK=CHECK_INSTRUMENTATION_STEP'
+            echo 'P13_ANDROIDX_STARTUP_NATIVE_AUTOHOOK=SEE_REAL_INSTRUMENTATION_GATE'
+            echo 'P13_PRODUCT_RUNTIME_AUTOHOOK=NOT_ASSUMED_FROM_STATIC_TESTS'
+            echo 'P5_SEND_GATE_CONNECTED_TO_LEGACY_NATIVE_NODE=NO'
+            echo 'ART_EMULATOR_RESULT=SEE_DISPOSABLE_EMULATOR_JOB_STEP'\n            echo 'ART_ON_REAL_PHONE=NOT_VERIFIED'
+            echo 'No generated APK or binary artifact uploaded or released.'
+          } >> "$GITHUB_STEP_SUMMARY"
+)" -eq 4
+          if "$SDK_ROOT/build-tools/35.0.0/apksigner" verify out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk >/dev/null 2>&1; then
+            echo 'Unexpected valid APK signing detected: fail closed.'
+            exit 1
+          fi
+          echo 'UNSIGNED_APK_STRUCTURAL_ASSEMBLY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P13_MANIFEST_AUTOHOOK_METADATA=PINNED_SHA_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'UNSIGNED_APK_ZIPALIGN_AND_AAPT=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'ORIGINAL_APK_SIGNATURE_INTENTIONALLY_INVALIDATED=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'VERSION_CODE=138_UNCHANGED' >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PY'
+          import json,os,pathlib
+          r=json.loads(pathlib.Path('out/fusion-report.json').read_text())
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as out:
+              out.write('Added P5 DEX classes: '+str(r['P5_CLASS_COUNT'])+'\n')
+              out.write('Unmodified APK entries byte-checked: '+str(r['UNCHANGED_ENTRIES_CHECKED'])+'\n')
+              out.write('P2 primary DEX SHA256: '+r['PATCHED_MAIN_DEX_SHA256']+'\n')
+              out.write('Ephemeral unsigned aligned lab APK exists only inside this runner, never published.\n')
+          PY
+      - name: Create one-time SELF-SIGNED lab identity (never original DSH certificate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          LAB_PASS="$(openssl rand -hex 20)"
+          keytool -genkeypair -alias dsh-ephemeral-ci -keyalg RSA -keysize 3072 \
+            -validity 1 -storetype PKCS12 -dname 'CN=DISPOSABLE_EMULATOR_TEST_ONLY' \
+            -keystore out/EMULATOR_ONLY_EPHEMERAL.p12 \
+            -storepass "$LAB_PASS" -keypass "$LAB_PASS" -noprompt >/dev/null 2>&1
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" sign \
+            --ks out/EMULATOR_ONLY_EPHEMERAL.p12 --ks-key-alias dsh-ephemeral-ci \
+            --ks-pass "pass:$LAB_PASS" --key-pass "pass:$LAB_PASS" \
+            --out out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk \
+            out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
+            out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk > out/ephemeral-cert.txt
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" sign \
+            --ks out/EMULATOR_ONLY_EPHEMERAL.p12 --ks-key-alias dsh-ephemeral-ci \
+            --ks-pass "pass:$LAB_PASS" --key-pass "pass:$LAB_PASS" \
+            --out out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk \
+            out/P5_INSTRUMENTATION_ALIGNED_DO_NOT_SHARE.apk
+          "$SDK_ROOT/build-tools/35.0.0/apksigner" verify --verbose \
+            out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk >/dev/null
+          lab_cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' out/ephemeral-cert.txt | head -n 1)"
+          test -n "$lab_cert"
+          test "$lab_cert" != '90072b7de43e96999be92d99869ce5e5b7639b5f2449417b99a1790831b60ff8'
+          echo 'EMULATOR_ONLY_EPHEMERAL_SIGNATURE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'NOT_COMPATIBLE_WITH_INSTALLED_DSH_V138=EXPECTED' >> "$GITHUB_STEP_SUMMARY"
+      - name: Prepare emulator KVM access
+        shell: bash
+        run: |
+          if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Install and launch disposable candidate on fresh offline Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/run_emulator_smoke.sh out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk
+      - name: Destroy transient APK and state remaining blockers
+        if: always()
+        shell: bash
+        run: |
+          rm -f out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/EMULATOR_ONLY_EPHEMERAL.p12 out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk out/P5_INSTRUMENTATION_ALIGNED_DO_NOT_SHARE.apk out/P5_INSTRUMENTATION_UNSIGNED_DO_NOT_SHARE.apk /tmp/dsh-private-emulator-logcat.txt
+          {
+            echo 'PRODUCTION_V139_APK_BUILT=NO'
+            echo 'FIXED_CERTIFICATE_SIGNING=NOT_PERFORMED'
+            echo 'P12_TEST_ONLY_UI_HOOK=CHECK_INSTRUMENTATION_STEP'
+            echo 'P13_ANDROIDX_STARTUP_NATIVE_AUTOHOOK=SEE_REAL_INSTRUMENTATION_GATE'
+            echo 'P13_PRODUCT_RUNTIME_AUTOHOOK=NOT_ASSUMED_FROM_STATIC_TESTS'
+            echo 'P5_SEND_GATE_CONNECTED_TO_LEGACY_NATIVE_NODE=NO'
+            echo 'ART_EMULATOR_RESULT=SEE_DISPOSABLE_EMULATOR_JOB_STEP'\n            echo 'ART_ON_REAL_PHONE=NOT_VERIFIED'
+            echo 'No generated APK or binary artifact uploaded or released.'
+          } >> "$GITHUB_STEP_SUMMARY"
+) or
+                      name=='Lcom/dsh/p120/P120IsolatedDenyService;' for name in classes)):
               raise SystemExit('P120_UNKNOWN_EXECUTABLE_DEX_CLASSES')
           original=root/'UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk'
           target=root/'P120_PENDING_UNSIGNED.zip'
