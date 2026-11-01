@@ -17,13 +17,19 @@ created=NO
 cleanup() {
   rm -rf -- "$hosttmp"
   if test "$safe" = YES; then
-    adb root >/dev/null 2>&1 || true
-    adb wait-for-device >/dev/null 2>&1 || true
-    adb shell "rm -rf '$remote'" >/dev/null 2>&1 || true
-    if test "$created" = YES; then
-      adb shell "rm -rf '$guestroot'" >/dev/null 2>&1 || true
+    # Never let a lost adbd transport hang the cleanup trap indefinitely.
+    # Only delete our fixed scratch roots on the SAME disposable emulator.
+    timeout 6s adb -s emulator-5554 root >/dev/null 2>&1 || true
+    if timeout 6s adb -s emulator-5554 wait-for-device >/dev/null 2>&1 &&
+       test "$(timeout 5s adb -s emulator-5554 shell getprop ro.kernel.qemu 2>/dev/null | tr -d '\r' || true)" = 1; then
+      timeout 6s adb -s emulator-5554 shell "rm -rf '$remote'" >/dev/null 2>&1 || true
+      if test "$created" = YES; then
+        timeout 6s adb -s emulator-5554 shell "rm -rf '$guestroot'" >/dev/null 2>&1 || true
+      fi
+      timeout 6s adb -s emulator-5554 unroot >/dev/null 2>&1 || true
+    else
+      echo P154_CLEANUP_ADBD_UNAVAILABLE=EPHEMERAL_EMULATOR_TEARDOWN_REQUIRED
     fi
-    adb unroot >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
@@ -129,13 +135,22 @@ test "$(adb shell "sha256sum '$remote/bin/node'" | tr -d '\r' | awk '{print $1}'
 test "$(adb shell "sha256sum '$guestlib/libcares.so'" | tr -d '\r' | awk '{print $1}')" = "$cares_sha"
 test "$(adb shell "sha256sum '$remote/bin/absolute-runpath'" | tr -d '\r' | awk '{print $1}')" = "$(sha256sum "$hosttmp/absolute-runpath" | awk '{print $1}')"
 echo P132_DEVICE_NODE_AND_CARES_SHA256=PASS
-# Drop emulator adbd root before attempting Node. Only fixed --version, no scripts.
-adb unroot >/dev/null 2>&1
-timeout 30s adb wait-for-device
-shell_uid="$(adb shell id -u | tr -d '\r')"
-if test "$shell_uid" != 2000; then
-  echo P132_POST_UNROOT_SHELL_UID=NOT_PROVEN
+# P154: adbd unroot can briefly remove emulator-5554 from ADB.
+# Revalidate QEMU identity + shell UID 2000 before the one controlled --version.
+# An unavailable device is NOT evidence that original Node launched.
+source "$(dirname "$0")/p154_adbd_recovery.sh"
+timeout 12s adb -s emulator-5554 unroot >/dev/null 2>&1 || true
+set +e
+p154_verify_shell_reattach
+reattach_status=$?
+set -e
+if (( reattach_status == 1 ));then
+  echo P132_EXACT_ORIGINAL_NODE_VERSION_IN_SHELL=NOT_ATTEMPTED_ADBD_UNAVAILABLE
+  echo P132_ISOLATED_NODE_START=BLOCKED_BEFORE_EXECUTION
   exit 0
+elif (( reattach_status != 0 ));then
+  echo P132_UNSAFE_EMULATOR_IDENTITY_OR_UID=DENIED
+  exit 1
 fi
 echo P132_NODE_TEST_UID=ANDROID_ADB_SHELL_2000_NOT_ISOLATED
 # Separate synthetic control with EXACT same immutable absolute RUNPATH as original Node.
