@@ -36,7 +36,7 @@ jobs:
           assert 'uname -m' in text and 'aarch64' in text
           assert 'P160_LICENSE_ACCEPTANCE=NOT_ATTEMPTED' in text
           assert not re.search(r'\bsdkmanager\b|\bapt-get\b|\bcurl\b|\bwget\b|\bgh\s+release\s+download\b',text)
-          assert 'CREATE_VM' in probes and 'KVM_API_VERSION' not in probes
+          assert 'CREATE_VM = 0xAE01' in probes and 'API_VERSION = 0xAE00' in probes
           print('P160_NO_SDK_LICENSE_DOWNLOAD_OR_NODE_EXECUTION=PASS')
           PY
       - name: Native ARM64 Linux and KVM capability, preinstalled Android inventory
