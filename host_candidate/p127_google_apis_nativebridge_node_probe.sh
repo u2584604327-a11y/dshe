@@ -121,8 +121,31 @@ else
     set -e
     echo "P127_SYSTEM_LIBS_ONLY_EXIT_CODE=$control_code"
     echo "P127_SYSTEM_LIBS_ONLY_OUTPUT_SHA256=$(printf '%s' "$control" | sha256sum | awk '{print $1}')"
-    cleaned="$(printf '%s' "$control" | tr -d '\\r\\n')"
-    if test "$control_code" -eq 0 && printf '%s' "$cleaned" | grep -Eq '^v[0-9]+\\.[0-9]+\\.[0-9]+$'; then
+    cleaned="$(printf '%s' "$control" | tr -d '\r\n')"
+    if test "$control_code" -eq 0 && printf '%s' "$cleaned" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+; then
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=PASS_SHELL_UID_NOT_ISOLATED'
+      echo "P127_SYSTEM_LIBS_ONLY_VERSION=$cleaned"
+    elif test "$control_code" -eq 124; then
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_TIMEOUT'
+    elif printf '%s' "$control" | grep -Eqi 'not accessible for the namespace|namespace.*denied'; then
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_NAMESPACE'
+    elif printf '%s' "$control" | grep -Eqi 'cannot locate symbol|undefined symbol|relocation.*failed'; then
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_SYMBOL'
+    elif printf '%s' "$control" | grep -Eqi 'library.*not found|cannot locate library|needed.*not found'; then
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_MISSING_LIBRARY'
+    elif printf '%s' "$control" | grep -Eqi 'CANNOT LINK EXECUTABLE|linker'; then
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_LINKER_UNCLASSIFIED'
+    else
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_OTHER'
+    fi
+    echo 'P127_AB_COMPARISON_DISTINCT_LIBRARY_ENVIRONMENTS=YES'
+  else
+    echo 'P127_AB_COMPARISON=SKIPPED_NOT_GENERIC_LINKER_FAILURE'
+  fi
+  echo 'P127_ORIGINAL_NODE_EXEC_PRODUCTION=NOT_PROVEN'
+fi
+echo 'P127_ORIGINAL_ARM64_NODE_IN_ISOLATED_APP=NOT_TESTED'
+; then
       echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=PASS_SHELL_UID_NOT_ISOLATED'
       echo "P127_SYSTEM_LIBS_ONLY_VERSION=$cleaned"
     elif test "$control_code" -eq 124; then
