@@ -5,6 +5,8 @@ on:
     paths:
       - 'host_candidate/p76_original_engine_fd/android/com/dsh/android/p76/P76EngineArchiveFdProbe.java'
       - 'host_candidate/p143_same_package_engine_fd/**'
+      - 'host_candidate/p159_emulator_root_reattach.sh'
+      - 'host_candidate/p159_emulator_root_reattach.test.sh'
       - 'host_candidate/p144_scoped_source_broker/**'
       - 'host_candidate/p145_exact_boot_entry/**'
       - 'host_candidate/p146_cli_import_hints/**'
@@ -55,6 +57,8 @@ jobs:
           set -euo pipefail
           test "$P47_NO_HOST_FALLBACK" = 1 && test "$P49_NODE_STAGE" = 0 && test "$P51_SIDE_BY_SIDE" = 0
           bash -n host_candidate/p143_same_package_engine_fd/run_real_original_emulator.sh
+          bash -n host_candidate/p159_emulator_root_reattach.sh
+          bash host_candidate/p159_emulator_root_reattach.test.sh
           grep -Fq 'P144ScopedSourceBroker.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           grep -Fq 'P145ExactBootEntry.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           grep -Fq 'P146DirectImports.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
@@ -149,6 +153,7 @@ jobs:
         run: |
           rm -rf .p43tmp .p143_build.log
           echo P143_PRODUCTION_NODE_SCRIPTS=NOT_EXECUTED >> "$GITHUB_STEP_SUMMARY"
+          echo P159_DISPOSABLE_ROOT_REATTACH=CHECK_EMULATOR_JOB_NOT_ASSUMED_PASS >> "$GITHUB_STEP_SUMMARY"
           echo P144_TWO_SOURCE_BROKER=CHECK_EMULATOR_JOB >> "$GITHUB_STEP_SUMMARY"
           echo P145_EXACT_ORIGINAL_ENTRY=CHECK_EMULATOR_JOB >> "$GITHUB_STEP_SUMMARY"
           echo P146_ORIGINAL_CLI_STATIC_IMPORT_HINTS=CHECK_EMULATOR_JOB >> "$GITHUB_STEP_SUMMARY"

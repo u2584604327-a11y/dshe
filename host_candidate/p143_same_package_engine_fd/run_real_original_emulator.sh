@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Disposable Android emulator ONLY; no user phone/package operation.
-test "$(adb shell getprop ro.kernel.qemu | tr -d "\r")" = "1" || { echo P143_BLOCKED_NON_EMULATOR_DEVICE; exit 1; }
-adb wait-for-device
-adb root
-adb wait-for-device
-test "$(adb shell getprop ro.kernel.qemu | tr -d "\r")" = "1"
-adb shell id | grep -Eq "uid=0\\("
+# P159: emulator runner may report booted while root adbd reconnects.
+# No install, private read, host command or app-state change before exact
+# QEMU + hardware + boot + UID 0 verification on emulator-5554.
+source "$(dirname "$0")/../p159_emulator_root_reattach.sh"
+p159_verify_disposable_root
+test "$(adb -s emulator-5554 shell getprop ro.kernel.qemu | tr -d "\r")" = 1
+test "$(adb -s emulator-5554 shell id -u | tr -d "\r")" = 0
 apk=.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
 test -s "$apk"
 sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
