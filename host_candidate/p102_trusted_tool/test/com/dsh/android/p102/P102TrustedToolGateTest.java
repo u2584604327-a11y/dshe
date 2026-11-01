@@ -4,6 +4,8 @@ import com.dsh.android.p71.P71ToolReplyOnce;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /** Deterministic JVM8 security tests. Does NOT claim real Android Binder. */
@@ -205,6 +207,61 @@ public final class P102TrustedToolGateTest {
     check(concurrent.executions.get()==1&&concurrent.replies()==1,
       "concurrent_native_approvals_one_execution_one_receipt");
 
+    // Real blocked executor: revocation cannot wait for executor completion
+    // or claim that the post-dispatch side effect was canceled.
+    final CountDownLatch executorEntered=new CountDownLatch(1);
+    final CountDownLatch releaseExecutor=new CountDownLatch(1);
+    final AtomicInteger blockedExecutionCount=new AtomicInteger();
+    final List<P71ToolReplyOnce.Terminal> revokedReplies=new ArrayList<>();
+    final AtomicReference<P102TrustedToolGate.Decision> workerDecision=new AtomicReference<>();
+    final P102TrustedToolGate blocked=new P102TrustedToolGate(
+      UID,SESSION,new Clock(),u->u==UID,
+      (name,arguments)->{
+        blockedExecutionCount.incrementAndGet();
+        executorEntered.countDown();
+        try{return releaseExecutor.await(5,TimeUnit.SECONDS);}
+        catch(InterruptedException interrupted){
+          Thread.currentThread().interrupt();return false;
+        }
+      },
+      terminal->{synchronized(revokedReplies){revokedReplies.add(terminal);}},
+      (sessionId,callId)->ORIGINAL.equals(sessionId)&&"blocked".equals(callId));
+    check(blocked.accept(UID,SESSION,ORIGINAL,"blocked",P102TrustedToolGate.TOOL,
+      P102TrustedToolGate.FIXED_ARGS)==P102TrustedToolGate.Decision.PENDING_NATIVE_APPROVAL,
+      "blocked_executor_preapproval");
+    Thread dispatchWorker=new Thread(()->workerDecision.set(
+      blocked.onTrustedNativeApproval("blocked")),"p102-blocked-worker");
+    dispatchWorker.setDaemon(true);
+    dispatchWorker.start();
+    try{
+      check(executorEntered.await(2,TimeUnit.SECONDS),"blocked_executor_reached");
+      Thread revokeWorker=new Thread(blocked::revoke,"p102-revoke-worker");
+      revokeWorker.setDaemon(true);
+      revokeWorker.start();
+      revokeWorker.join(800);
+      check(!revokeWorker.isAlive(),"revoke_does_not_wait_for_blocked_executor");
+      check(blocked.isTerminal(),"blocked_gate_revoked_immediately");
+      synchronized(revokedReplies){
+        check(revokedReplies.size()==1,"blocked_executor_one_terminal_on_revoke");
+        P71ToolReplyOnce.Terminal term=revokedReplies.get(0);
+        check(term.dispatched&&term.outcomeUnknown&&!term.retrySafe&&!term.ok,
+          "blocked_dispatched_revoke_unknown_never_retry");
+      }
+    }finally{
+      releaseExecutor.countDown();
+    }
+    dispatchWorker.join(2500);
+    check(!dispatchWorker.isAlive(),"blocked_worker_finishes_after_release");
+    check(workerDecision.get()==P102TrustedToolGate.Decision.DISPATCHED,
+      "revoked_inflight_dispatch_classification");
+    check(blockedExecutionCount.get()==1,"revoked_inflight_at_most_one_execute");
+    synchronized(revokedReplies){
+      check(revokedReplies.size()==1,"revoked_inflight_never_sends_late_success");
+    }
+    check(blocked.onTrustedNativeApproval("blocked")==
+      P102TrustedToolGate.Decision.REJECTED,"revoked_inflight_reapproval_denied");
+    System.out.println("P102_EXECUTOR_INFLIGHT_REVOKE_NONBLOCKING=PASS");
+    System.out.println("P102_INFLIGHT_UNKNOWN_NEVER_RETRIED=PASS");
     System.out.println("P102_JVM8_NATIVE_TOOL_TRUST_GATE=PASS checks="+checks);
     System.out.println("P102_PREAPPROVAL_DENY_AND_REPLAY=PASS");
     System.out.println("P102_UID_SESSION_CANONICAL_TOOL_AND_TIMEOUT=PASS");
