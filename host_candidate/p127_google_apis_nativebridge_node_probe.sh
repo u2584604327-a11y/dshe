@@ -108,6 +108,40 @@ else
   fi
   echo "P127_LOADER_ROOT_CAUSE_CLASS=$failure"
   echo "P127_ORIGINAL_ARM64_NODE_VERSION_IN_EMULATOR_SHELL=BLOCKED_$failure"
-  echo 'P127_NODE_FAILED_RESULT_NOT_RETRIED'
+  # A/B, not a retry of the same failed environment. Some native-bridge
+  # emulator launchers are x86_64 processes: their host loader may incorrectly
+  # encounter guest ARM64 .so files when LD_LIBRARY_PATH points to the guest
+  # directory. Run exactly ONE system-library-only control on the same pinned
+  # ELF, with no shell scripts, tooling or user data, and do not disclose raw
+  # stdout/stderr. This does NOT bypass Android linker namespaces.
+  if test "$failure" = ANDROID_DYNAMIC_LINKER_UNCLASSIFIED; then
+    set +e
+    control="$(timeout 20s adb shell "LD_LIBRARY_PATH=/system/lib64:/system/lib $remote/bin/node --version" 2>&1)"
+    control_code=$?
+    set -e
+    echo "P127_SYSTEM_LIBS_ONLY_EXIT_CODE=$control_code"
+    echo "P127_SYSTEM_LIBS_ONLY_OUTPUT_SHA256=$(printf '%s' "$control" | sha256sum | awk '{print $1}')"
+    cleaned="$(printf '%s' "$control" | tr -d '\\r\\n')"
+    if test "$control_code" -eq 0 && printf '%s' "$cleaned" | grep -Eq '^v[0-9]+\\.[0-9]+\\.[0-9]+$'; then
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=PASS_SHELL_UID_NOT_ISOLATED'
+      echo "P127_SYSTEM_LIBS_ONLY_VERSION=$cleaned"
+    elif test "$control_code" -eq 124; then
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_TIMEOUT'
+    elif printf '%s' "$control" | grep -Eqi 'not accessible for the namespace|namespace.*denied'; then
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_NAMESPACE'
+    elif printf '%s' "$control" | grep -Eqi 'cannot locate symbol|undefined symbol|relocation.*failed'; then
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_SYMBOL'
+    elif printf '%s' "$control" | grep -Eqi 'library.*not found|cannot locate library|needed.*not found'; then
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_MISSING_LIBRARY'
+    elif printf '%s' "$control" | grep -Eqi 'CANNOT LINK EXECUTABLE|linker'; then
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_LINKER_UNCLASSIFIED'
+    else
+      echo 'P127_SYSTEM_LIBS_ONLY_NODE_VERSION=BLOCKED_OTHER'
+    fi
+    echo 'P127_AB_COMPARISON_DISTINCT_LIBRARY_ENVIRONMENTS=YES'
+  else
+    echo 'P127_AB_COMPARISON=SKIPPED_NOT_GENERIC_LINKER_FAILURE'
+  fi
+  echo 'P127_ORIGINAL_NODE_EXEC_PRODUCTION=NOT_PROVEN'
 fi
 echo 'P127_ORIGINAL_ARM64_NODE_IN_ISOLATED_APP=NOT_TESTED'
