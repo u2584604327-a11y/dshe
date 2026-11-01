@@ -178,17 +178,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
-          script: bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
-      - name: Android36 real framework isolated Messenger ACK and terminal regression
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 36
-          target: default
-          arch: x86_64
-          profile: pixel_2
-          disable-animations: true
-          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
-          script: bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
+          script: P102_ANDROID_API=35 bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
       - name: Cleanup and forbid confusing candidate with original DSH
         if: always()
         shell: bash
@@ -201,3 +191,67 @@ jobs:
             echo 'P102_PRODUCTION_DSH_APK_SIGNING_RELEASE=NONE'
             echo 'P102_DIAGNOSTIC_ARTIFACT=CHECK_EARLIER_UPLOAD_NOT_E2E_PASS'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # P157: Android36 has its own fresh Ubuntu/KVM/ADB process space. Reusing the
+  # first job's Android35 emulator/adb state previously left Android36 offline.
+  # This job does not bypass or downgrade the original native-consent gates.
+  p102-android36-independent:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    needs: [p102-native-binder-boundary]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/download-artifact@v4
+        with:
+          name: P102-Standalone-Phone-Diagnostic-Candidate-${{ github.event.pull_request.head.sha }}
+          path: .p102tmp/downloaded
+      - name: P157 verify identical signed zero-permission synthetic APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .p102tmp/downloaded/SHA256SUMS.txt
+          test -s .p102tmp/downloaded/P102-Standalone-Binder-Lab-Android34plus.apk
+          (cd .p102tmp/downloaded && sha256sum -c SHA256SUMS.txt)
+          cp .p102tmp/downloaded/P102-Standalone-Binder-Lab-Android34plus.apk .p102tmp/p102-emulator-only.apk
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          manager="$(command -v sdkmanager || true)"
+          if test -z "$manager"; then
+            manager="$(find "$sdk/cmdline-tools" -name sdkmanager -type f -perm /111 2>/dev/null | head -n1 || true)"
+          fi
+          test -n "$manager"
+          "$manager" --sdk_root="$sdk" 'build-tools;35.0.0' 'platforms;android-35'
+          bt="$sdk/build-tools/35.0.0"
+          "$bt/apksigner" verify .p102tmp/p102-emulator-only.apk
+          "$bt/aapt" dump badging .p102tmp/p102-emulator-only.apk | grep -Fq "package: name='com.dsh.p102.trustedtoolprobe'"
+          if "$bt/aapt" dump permissions .p102tmp/p102-emulator-only.apk | grep -Fq 'uses-permission:'; then
+            echo P157_SYNTHETIC_APK_PERMISSION_DRIFT=FAIL
+            exit 1
+          fi
+          echo P157_ANDROID36_SAME_SIGNED_APK_SHA=PASS
+          echo P157_ANDROID36_SYNTHETIC_ZERO_PERMISSIONS=PASS
+      - name: P157 independent Android36 emulator hardware acceleration
+        run: if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Android36 real framework isolated Messenger and explicit native approval
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: P102_ANDROID_API=36 bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
+      - name: P157 cleanup and preserve production denial
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p102tmp
+          echo P157_PRODUCTION_ORIGINAL_DSH_RUNTIME=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P157_NATIVE_APPROVAL_GATES=UNCHANGED_HARD_FAIL >> "$GITHUB_STEP_SUMMARY"
+          echo P157_FORMAL_V139_APK=BLOCKED >> "$GITHUB_STEP_SUMMARY"
