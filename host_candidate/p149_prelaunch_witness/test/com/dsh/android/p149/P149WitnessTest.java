@@ -72,7 +72,9 @@ public final class P149WitnessTest {
     denied(()->P149OriginalBuilderWitness.observeWithoutLaunch(b,3),
         "P149_INVALID_FIELD_OR_LENGTH");
     b.command().remove(b.command().size()-1);
-    b.environment().put("P149_TEST_HEADER","contains\u0000null");
+    // Java ProcessEnvironment rejects NUL before our witness can inspect it.
+    // Put the invalid byte in argv to exercise P149's own fail-closed check.
+    b.command().set(4,"contains" + (char)0 + "null");
     denied(()->P149OriginalBuilderWitness.observeWithoutLaunch(b,3),
         "P149_INVALID_FIELD_OR_LENGTH");
     yes(count>=19);
