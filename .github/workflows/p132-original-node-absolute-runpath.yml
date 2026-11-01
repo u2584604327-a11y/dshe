@@ -1,0 +1,58 @@
+name: P132 exact original Node absolute DT_RUNPATH and version probe (offline)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p132_original_node_absolute_runpath_probe.sh'
+      - '.github/workflows/p132-original-node-absolute-runpath.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: p132-original-node-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  original-node-absolute-runpath:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Exact v138 source SHA and original dependency provenance
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p132_original_node_absolute_runpath_probe.sh
+          mkdir -p "$RUNNER_TEMP/p132-apk"
+          gh release download dsh-baseline-v135dsh-baseline-v135 --repo "$GH_REPO" --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk --dir "$RUNNER_TEMP/p132-apk"
+          printf "%s  %s\n" 3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 "$RUNNER_TEMP/p132-apk/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk" | sha256sum -c -
+          python3 host_candidate/p127_google_apis_nativebridge_original_node_stage.py "$RUNNER_TEMP/p132-apk/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk" "$RUNNER_TEMP/p132-stage"
+          echo "P132_STAGE=$RUNNER_TEMP/p132-stage" >> "$GITHUB_ENV"
+      - name: Preflight exact original Node hardcoded runpath, without running Node
+        run: P132_COMPILE_ONLY=1 bash host_candidate/p132_original_node_absolute_runpath_probe.sh "$P132_STAGE"
+      - name: Enable KVM for disposable emulator only
+        run: if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Provision synthetic Termux-style path and attempt one original Node --version
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: P132_COMPILE_ONLY=0 bash host_candidate/p132_original_node_absolute_runpath_probe.sh "$P132_STAGE"
+      - name: Always clear temporary inputs and preserve release deny gate
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/p132-apk" "$RUNNER_TEMP/p132-stage"
+          echo P132_ORIGINAL_ISOLATED_UID=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P132_ENGINE_MANAGER_LIFECYCLE=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P132_P109_SENSITIVE_TOOL_AUTHORITY=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P132_FORMAL_V139_RELEASE=BLOCKED >> "$GITHUB_STEP_SUMMARY"
