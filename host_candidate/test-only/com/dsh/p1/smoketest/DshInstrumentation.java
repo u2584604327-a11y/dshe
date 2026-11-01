@@ -415,7 +415,77 @@ public final class DshInstrumentation extends Instrumentation {
     }
   }
 
-()=>method+"  @Override public void onStart() {"
+  /**
+   * P124 real original-host isolated service child spawn: only /system/bin/id -u.
+   * A caller-supplied alternate command is ignored; no Node/tools execute.
+   */
+  private void verifyP124FixedIsolatedChildUid() throws Exception {
+    final android.content.Context host=getTargetContext();
+    final java.util.concurrent.CountDownLatch done=
+        new java.util.concurrent.CountDownLatch(1);
+    final java.util.concurrent.atomic.AtomicBoolean ok=
+        new java.util.concurrent.atomic.AtomicBoolean(false);
+    final java.util.concurrent.atomic.AtomicReference<String> outcome=
+        new java.util.concurrent.atomic.AtomicReference<>("NO_RECEIPT");
+    final android.os.HandlerThread callbacks=
+        new android.os.HandlerThread("p124-original-isolated-child-uid");
+    callbacks.start();
+    final android.os.Messenger receiver=new android.os.Messenger(
+        new android.os.Handler(callbacks.getLooper()) {
+      @Override public void handleMessage(android.os.Message reply) {
+        try {
+          final android.os.Bundle data=reply.getData();
+          final int sender=reply.sendingUid;
+          final int child=data.getInt("observedChildUid",-1);
+          final String code=data.getString("isolatedChild","");
+          ok.set(reply.what==12402 &&
+              android.os.Process.isIsolatedUid(sender) &&
+              sender!=android.os.Process.myUid() &&
+              child==sender &&
+              "DENY_ALL".equals(data.getString("toolAccess")) &&
+              !data.containsKey("fixedResult") &&
+              !data.containsKey("rawBytes") &&
+              "FIXED_ANDROID_ID_CHILD_SAME_ISOLATED_UID_NO_TOOLS".equals(code));
+          outcome.set(ok.get()?"VERIFIED":"REJECTED_OR_UID_MISMATCH");
+        } finally {done.countDown();}
+      }
+    });
+    final android.content.ServiceConnection connection=
+        new android.content.ServiceConnection() {
+      @Override public void onServiceConnected(
+          android.content.ComponentName component,android.os.IBinder binder) {
+        try {
+          final android.os.Message request=android.os.Message.obtain(null,12401);
+          request.replyTo=receiver;
+          final android.os.Bundle attemptedInjection=new android.os.Bundle();
+          attemptedInjection.putString("command","/system/bin/sh");
+          attemptedInjection.putString("args","-c arbitrary-command");
+          request.setData(attemptedInjection);
+          new android.os.Messenger(binder).send(request);
+        } catch(Exception error) {
+          outcome.set("BINDER_SEND_FAILED");done.countDown();
+        }
+      }
+      @Override public void onServiceDisconnected(android.content.ComponentName component) {
+        outcome.set("ISOLATED_DISCONNECTED");done.countDown();
+      }
+    };
+    final android.content.Intent intent=new android.content.Intent();
+    intent.setClassName("com.dsh.android","com.dsh.p120.P120IsolatedDenyService");
+    boolean bound=false;
+    try {
+      bound=host.bindService(intent,connection,android.content.Context.BIND_AUTO_CREATE);
+      assertTrue(bound,"P124_ORIGINAL_SERVICE_BIND_FAILED");
+      assertTrue(done.await(20,java.util.concurrent.TimeUnit.SECONDS),
+          "P124_FIXED_CHILD_RECEIPT_TIMEOUT");
+      assertTrue(ok.get(),"P124_"+outcome.get());
+    } finally {
+      if(bound)host.unbindService(connection);
+      callbacks.quitSafely();
+    }
+  }
+
+  @Override public void onStart() {
     Bundle result=new Bundle();
     Activity activity=null;
     AndroidFdQueue queue=null;
