@@ -86,43 +86,81 @@ public final class P102TrustedToolGate {
    * Invoked ONLY by a trusted native Activity's explicit confirmation button.
    * There is deliberately no Binder/JS/Node message that invokes this.
    */
-  public synchronized Decision onTrustedNativeApproval(String callId){
-    if(dead||pending==null||!pendingCallId.equals(callId)||pending.isCompleted())
-      return Decision.REJECTED;
-    final long now=clock.elapsedRealtimeMs();
-    if(now<acceptedAt||now-acceptedAt>APPROVAL_WINDOW_MS){
-      pending.deadlineElapsed();dead=true;return Decision.EXPIRED;
+  /**
+   * Native button permission is checked under this gate's monitor, but the
+   * executor and terminal sink are NEVER run while holding that monitor.
+   * A background worker must call this method; Android UI must not block.
+   * Revocation during execution is terminal-unknown, never a safe retry.
+   */
+  public Decision onTrustedNativeApproval(String callId){
+    final P71ToolReplyOnce current;
+    final String original;
+    final Decision early;
+    synchronized(this){
+      if(dead||pending==null||!pendingCallId.equals(callId)||pending.isCompleted())
+        return Decision.REJECTED;
+      current=pending;
+      original=originalSessionId;
+      final long now=clock.elapsedRealtimeMs();
+      if(now<acceptedAt||now-acceptedAt>APPROVAL_WINDOW_MS){
+        dead=true;
+        early=Decision.EXPIRED;
+      }else if(!originalCallValid(original,pendingCallId)){
+        dead=true;
+        early=Decision.REJECTED;
+      }else{
+        if(!current.markDispatched())return Decision.REJECTED;
+        early=null;
+      }
     }
-    // Must re-check the live original turn after asynchronous native approval.
-    if(!originalCallValid(originalSessionId,pendingCallId)){
-      pending.executorConfirmedFailure("ORIGINAL_TURN_NOT_CURRENT");
-      dead=true;
-      return Decision.REJECTED;
+    if(early!=null){
+      // No lock inversion: terminal may enter the host Binder port.
+      if(early==Decision.EXPIRED)current.deadlineElapsed();
+      else current.executorConfirmedFailure("ORIGINAL_TURN_NOT_CURRENT");
+      return early;
     }
-    if(!pending.markDispatched())return Decision.REJECTED;
+    // A revoke arriving after dispatch but before actual execution wins.
+    synchronized(this){
+      if(dead||pending!=current)return Decision.DISPATCHED;
+    }
     boolean ok=false;
     try{ok=executor.executeFixedRead(TOOL,FIXED_ARGS);}
     catch(RuntimeException ignored){ok=false;}
-    if(ok&&!originalCallValid(originalSessionId,pendingCallId)){
-      pending.executorDispatchedOutcomeUnknown("ORIGINAL_TURN_STALE_AFTER_EXECUTION");
-    }else if(ok)pending.executorConfirmedSuccess();
-    else pending.executorDispatchedOutcomeUnknown("EXECUTOR_REJECTED");
-    dead=true;
+    final boolean stale;
+    synchronized(this){
+      // Revoke/timeout may already have delivered the one unknown terminal.
+      if(dead||pending!=current)return Decision.DISPATCHED;
+      stale=ok&&!originalCallValid(original,pendingCallId);
+      dead=true;
+    }
+    if(stale)current.executorDispatchedOutcomeUnknown("ORIGINAL_TURN_STALE_AFTER_EXECUTION");
+    else if(ok)current.executorConfirmedSuccess();
+    else current.executorDispatchedOutcomeUnknown("EXECUTOR_REJECTED");
     return Decision.DISPATCHED;
   }
 
-  public synchronized boolean expire(){
-    if(dead||pending==null||pending.isCompleted())return false;
-    long now=clock.elapsedRealtimeMs();
-    if(now>=acceptedAt && now-acceptedAt<=APPROVAL_WINDOW_MS)return false;
-    boolean accepted=pending.deadlineElapsed();dead=true;return accepted;
+  public boolean expire(){
+    final P71ToolReplyOnce current;
+    synchronized(this){
+      if(dead||pending==null||pending.isCompleted())return false;
+      long now=clock.elapsedRealtimeMs();
+      if(now>=acceptedAt && now-acceptedAt<=APPROVAL_WINDOW_MS)return false;
+      dead=true;
+      current=pending;
+    }
+    return current.deadlineElapsed();
   }
 
   /** Worker death, native UI background, or binding loss irrevocably revokes. */
-  public synchronized void revoke(){
-    if(dead)return;
-    dead=true;
-    if(pending!=null&&!pending.isCompleted())pending.browserLost();
+  public void revoke(){
+    final P71ToolReplyOnce current;
+    synchronized(this){
+      if(dead)return;
+      dead=true;
+      current=pending!=null&&!pending.isCompleted()?pending:null;
+    }
+    // The original tool body can still be executing; do not wait for it.
+    if(current!=null)current.browserLost();
   }
   public synchronized boolean isTerminal(){return dead;}
   public synchronized boolean hasPendingApproval(){
