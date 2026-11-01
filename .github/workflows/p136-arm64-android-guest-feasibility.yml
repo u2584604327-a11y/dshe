@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       acknowledge_sdk_license:
-        description: "To approve this CI run to accept the official SDK license for the single API35 Google APIs arm64-v8a image, enter exact text shown in the README."
+        description: "Manual only, once registered on default branch: see host_candidate/P137_MANUAL_SDK_LICENSE_AND_POSITIVE_PROOF_GATE.md for exact acknowledgment."
         required: false
         type: string
         default: ''
