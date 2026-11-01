@@ -132,7 +132,7 @@ def audit(path):
       "gates":{"exact_source":"PASS","same_length_tamper":"REJECTED",
                "two_signed_v138_arm64_asset_archives":"PASS_SHA_PINNED",
                "direct_node_dt_needed_archive_closure":"9_OF_12_PLUS_3_ANDROID_BASE_LIBRARIES_STATIC",
-               "node_start_in_x86_64_emulator":"IMPOSSIBLE_ARCH_MISMATCH",
+               "node_start_in_x86_64_emulator":"NOT_TESTED_NATIVE_BRIDGE_UNKNOWN",
                "isolated_android_node_exec":"NOT_TESTED",
                "isolated_uid_library_resolution":"NOT_TESTED",
                "termux_private_runpath_access":"NOT_PROVEN",
