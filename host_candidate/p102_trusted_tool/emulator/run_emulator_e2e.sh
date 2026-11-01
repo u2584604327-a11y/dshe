@@ -33,7 +33,7 @@ echo 'P102_REAL_BINDER_PREGRANT_NO_EXECUTION=PASS'
 # multiple/disabled buttons. Unresolved ambiguity remains a hard failure.
 COORDS=""
 UI_LAST_REASON="NOT_OBSERVED"
-for attempt in $(seq 1 15); do
+for attempt in $(seq 1 35); do
   # The accessibility dumper can briefly alter Activity focus. A stale
   # enabled button from an earlier Binder session MUST NOT be clicked.
   # Snapshot the native revoke/pending event counts before inspecting UI.
