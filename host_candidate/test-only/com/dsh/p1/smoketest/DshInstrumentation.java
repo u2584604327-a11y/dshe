@@ -211,6 +211,8 @@ public final class DshInstrumentation extends Instrumentation {
         new java.util.concurrent.CountDownLatch(1);
     final java.util.concurrent.atomic.AtomicBoolean success=
         new java.util.concurrent.atomic.AtomicBoolean(false);
+    final java.util.concurrent.atomic.AtomicReference<String> failedCode=
+        new java.util.concurrent.atomic.AtomicReference<>("NO_REPLY");
     final java.util.concurrent.atomic.AtomicInteger phase=
         new java.util.concurrent.atomic.AtomicInteger(0);
     final android.os.Messenger[] service={null};
@@ -232,14 +234,28 @@ public final class DshInstrumentation extends Instrumentation {
           if(state==0){
             if(!common||!"PINNED_4096_SHA256_MATCH_NO_EXEC".equals(
                 b.getString("assetPrefix"))){
+              String code=b.getString("assetPrefix","");
+              if("REJECTED_BAD_FD_NO_EXEC".equals(code))
+                failedCode.set("FIRST_BAD_FD");
+              else if("REJECTED_TIMEOUT_NO_EXEC".equals(code))
+                failedCode.set("FIRST_TIMEOUT");
+              else if("REJECTED_BUSY_NO_EXEC".equals(code))
+                failedCode.set("FIRST_BUSY");
+              else if("REJECTED_NO_EXEC".equals(code))
+                failedCode.set("FIRST_HASH_NOT_PINNED");
+              else failedCode.set("FIRST_REPLY_UID_OR_FRAME_INVALID");
               finish.countDown();return;
             }
             byte[] corrupt=java.util.Arrays.copyOf(pinned,pinned.length);
             corrupt[0]^=1;
+            failedCode.set("SECOND_REPLY_MISSING");
             try{sendP121FdProof(service[0],receiverRef[0],corrupt);}
-            catch(Exception invalid){finish.countDown();}
+            catch(Exception invalid){
+              failedCode.set("SECOND_SEND_FAILED");finish.countDown();
+            }
           }else if(state==1){
             success.set(common&&"REJECTED_NO_EXEC".equals(b.getString("assetPrefix")));
+            if(!success.get())failedCode.set("SECOND_REJECTION_OR_UID_INVALID");
             finish.countDown();
           }else finish.countDown();
         }
@@ -264,9 +280,9 @@ public final class DshInstrumentation extends Instrumentation {
           android.content.Context.BIND_AUTO_CREATE);
       assertTrue(bound,"P121_ORIGINAL_HOST_BIND_FAILED");
       assertTrue(finish.await(22,java.util.concurrent.TimeUnit.SECONDS),
-          "P121_ORIGINAL_ENGINE_FD_NO_RECEIPT");
+          "P121_STAGE_"+phase.get()+"_REPLY_TIMEOUT");
       assertTrue(success.get()&&phase.get()==2,
-          "P121_ENGINE_PREFIX_FD_OR_NEGATIVE_REJECTION_FAILED");
+          "P121_"+failedCode.get());
     }finally{
       if(bound)getTargetContext().unbindService(bind);
       replies.quitSafely();
@@ -375,6 +391,8 @@ public final class DshInstrumentation extends Instrumentation {
         result.putString("FAIL_REASON","SYNTHETIC_QUEUE_PERMISSIONS");
       else if(cause!=null&&cause.equals("Queue is not a directory"))
         result.putString("FAIL_REASON","SYNTHETIC_QUEUE_NOT_DIRECTORY");
+      else if(cause!=null&&cause.matches("P121_[A-Z0-9_]{1,90}"))
+        result.putString("FAIL_REASON",cause);
       else
         result.putString("FAIL_REASON","OTHER_NO_DETAIL");
       // No raw paths, arbitrary native errors or stack traces are emitted.
