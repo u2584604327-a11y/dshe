@@ -14,16 +14,26 @@ public final class P68AndroidBinderIntake {
   private static final int MAX_FIXTURE_BYTES=128;
   private final String trustedSession;
   private final P37RemoteProcess.RemoteControl controls;
+  private final boolean mergeErrorToOutput;
   private P67AuthenticatedHandoff handoff;
   private int isolatedUid=-1;
   private boolean invalid;
   public P68AndroidBinderIntake(String hostGeneratedSession,
                                  P37RemoteProcess.RemoteControl stopControls) {
+    this(hostGeneratedSession,stopControls,false);
+  }
+  /** Trusted native host opt-in only; not inferred from worker IPC fields.
+   * Existing P48/P51 constructs the two-argument split-stream variant.
+   */
+  public P68AndroidBinderIntake(String hostGeneratedSession,
+                                 P37RemoteProcess.RemoteControl stopControls,
+                                 boolean trustedHostRequestsMergedStderr) {
     if(stopControls==null || hostGeneratedSession==null ||
        !hostGeneratedSession.matches("[a-f0-9]{64}"))
       throw new IllegalArgumentException("P68_TRUSTED_HOST_SESSION_REQUIRED");
     trustedSession=hostGeneratedSession;
     controls=stopControls;
+    mergeErrorToOutput=trustedHostRequestsMergedStderr;
   }
   private static boolean exactShape(Bundle b,int kind) {
     if(b==null || !b.containsKey("session") || !b.containsKey("seq"))return false;
@@ -66,7 +76,7 @@ public final class P68AndroidBinderIntake {
         isolatedUid=sender;
         handoff=new P67AuthenticatedHandoff(
             isolatedUid,trustedSession,android.os.Process::isIsolatedUid,
-            controls);
+            controls,mergeErrorToOutput);
       }else if(sender!=isolatedUid)return reject();
       byte[] data=null;
       if(msg.what==P53StartOrder.STDOUT||msg.what==P53StartOrder.STDERR){

@@ -1,0 +1,81 @@
+name: P141 original EngineManager redirectErrorStream transport (trusted opt-in)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p37_remote_process/**'
+      - 'host_candidate/p53_child_start/**'
+      - 'host_candidate/p67_authenticated_handoff/**'
+      - 'host_candidate/p68_android_binder/**'
+      - 'host_candidate/p141_merged_engine_stream/**'
+      - '.github/workflows/p141-original-engine-stderr-merge.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p141-engine-binder-merge-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  trusted-merge-authenticated-frame-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile existing full P37, P67 regressions and new P141 opt-in
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p141-jvm"
+          javac --release 8 -d "$RUNNER_TEMP/p141-jvm" \
+            host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java \
+            host_candidate/p37_remote_process/test/com/dsh/p37/P37RemoteProcessTest.java \
+            host_candidate/p53_child_start/src/com/dsh/android/p53/P53StartOrder.java \
+            host_candidate/p67_authenticated_handoff/src/com/dsh/android/p67/P67AuthenticatedHandoff.java \
+            host_candidate/p67_authenticated_handoff/test/com/dsh/android/p67/P67AuthenticatedHandoffTest.java \
+            host_candidate/p141_merged_engine_stream/test/com/dsh/android/p141/P141RedirectedEngineStreamTest.java
+          java -cp "$RUNNER_TEMP/p141-jvm" com.dsh.p37.P37RemoteProcessTest
+          java -cp "$RUNNER_TEMP/p141-jvm" com.dsh.android.p67.P67AuthenticatedHandoffTest
+          java -cp "$RUNNER_TEMP/p141-jvm" com.dsh.android.p141.P141RedirectedEngineStreamTest
+      - name: Compile actual P68 Android SDK35 Binder intake against merged P67
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          mkdir -p "$RUNNER_TEMP/p141-android"
+          javac --release 8 -cp "$sdk/platforms/android-35/android.jar" \
+            -d "$RUNNER_TEMP/p141-android" \
+            host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java \
+            host_candidate/p53_child_start/src/com/dsh/android/p53/P53StartOrder.java \
+            host_candidate/p67_authenticated_handoff/src/com/dsh/android/p67/P67AuthenticatedHandoff.java \
+            host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java
+          test -s "$RUNNER_TEMP/p141-android/com/dsh/android/p68/P68AndroidBinderIntake.class"
+          test -s "$RUNNER_TEMP/p141-android/com/dsh/p37/P37RemoteProcess.class"
+          javap -p -classpath "$RUNNER_TEMP/p141-android" com.dsh.android.p68.P68AndroidBinderIntake | grep -Fq "boolean"
+          echo P141_ACTUAL_ANDROID35_BINDER_INTAKE_MERGE_COMPILE=PASS
+      - name: Prove existing P48/P51 fixture never opted into merged production semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          old=Path('host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48HostProcessProbe.java').read_text()
+          assert 'new P68AndroidBinderIntake(session,' in old
+          assert old.count('new P68AndroidBinderIntake(')==1
+          assert 'controls,mergeErrorToOutput' in Path('host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java').read_text()
+          assert 'P75_PRODUCTION_ARGV_NOT_AUTHORIZED' in Path('host_candidate/p75_engine_rendezvous/src/com/dsh/android/p75/P75EngineStartRendezvous.java').read_text()
+          print('P141_P51_P48_DEFAULT_SPLIT_AND_FIXTURE_DENY=PASS')
+          PY
+      - name: Always delete disposable classes and preserve deny gates
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/p141-jvm" "$RUNNER_TEMP/p141-android"
+          echo P141_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P141_REAL_PRODUCTION_ENGINE_READY=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P141_FIXED_SIGNED_V139_APK=BLOCKED >> "$GITHUB_STEP_SUMMARY"

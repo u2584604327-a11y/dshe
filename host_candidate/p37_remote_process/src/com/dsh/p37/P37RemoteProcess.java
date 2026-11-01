@@ -33,6 +33,8 @@ public final class P37RemoteProcess extends Process {
   private final String session;
   private final IsolatedUidVerifier uidVerifier;
   private final RemoteControl control;
+  /** Only trusted host constructor may opt in; legacy P51 stays split. */
+  private final boolean mergeErrorToOutput;
   private final BoundedStream stdout = new BoundedStream(BUFFER_BYTES);
   private final BoundedStream stderr = new BoundedStream(BUFFER_BYTES);
   private final CountDownLatch exited = new CountDownLatch(1);
@@ -44,6 +46,15 @@ public final class P37RemoteProcess extends Process {
 
   public P37RemoteProcess(int authenticatedWorkerUid, String hostSession,
       IsolatedUidVerifier verifier, RemoteControl remoteControl) {
+    this(authenticatedWorkerUid, hostSession, verifier, remoteControl, false);
+  }
+  /** P141: reproduces original ProcessBuilder.redirectErrorStream(true).
+   * Binder frame order must already be validated by P53/P67 before routing.
+   * Neither true nor false grants original Node argv or EngineManager READY.
+   */
+  public P37RemoteProcess(int authenticatedWorkerUid, String hostSession,
+      IsolatedUidVerifier verifier, RemoteControl remoteControl,
+      boolean trustedHostRequestsMergedStderr) {
     if (verifier == null || remoteControl == null || hostSession == null ||
         !hostSession.matches("[a-f0-9]{64}") || authenticatedWorkerUid < 0 ||
         !verifier.isIsolatedUid(authenticatedWorkerUid)) {
@@ -53,6 +64,10 @@ public final class P37RemoteProcess extends Process {
     session = hostSession;
     uidVerifier = verifier;
     control = remoteControl;
+    mergeErrorToOutput = trustedHostRequestsMergedStderr;
+    // With redirectErrorStream(true), Java Process.getErrorStream() is EOF;
+    // no reader may wait forever for an unpopulated error pipe.
+    if (mergeErrorToOutput) stderr.finish(false);
   }
 
   /** Caller MUST pass platform Message.sendingUid, never a Bundle UID. */
@@ -70,7 +85,10 @@ public final class P37RemoteProcess extends Process {
   }
   public boolean onAuthenticatedStderr(int frameworkUid, String incomingSession,
       byte[] data) {
-    return accept(frameworkUid, incomingSession, data, stderr);
+    // Frame acceptance and bounded buffering share the same host receive
+    // order as STDOUT, including forged-identity and overflow revocation.
+    return accept(frameworkUid, incomingSession, data,
+        mergeErrorToOutput ? stdout : stderr);
   }
   private boolean accept(int uid, String incomingSession, byte[] data,
       BoundedStream stream) {
