@@ -113,6 +113,7 @@ if test -n "$instrument_apk"; then
     ! printf '%s\\n' "$test_output" | grep -q 'P120_ORIGINAL_HOST_ISOLATED_UID=PASS_REAL_ANDROID_BINDER' || \
     ! printf '%s\\n' "$test_output" | grep -q 'P121_ORIGINAL_ENGINE_FD_PREFIX=PASS_REAL_ANDROID_UID_HASH_AND_DENY' || \
     ! printf '%s\\n' "$test_output" | grep -q 'P122_FULL_ENGINE_FD_SHA256=PASS_FULL_57724933_AND_CORRUPTED_REJECTED_NO_EXEC' || \
+    ! printf '%s\\n' "$test_output" | grep -q 'P124_FIXED_CHILD_ISOLATED_UID=PASS_SYSTEM_ID_CHILD_MATCHES_FRAMEWORK_ISOLATED_UID_DENY_ALL' || \
     ! printf '%s\\n' "$test_output" | grep -q 'P5_UNTRUSTED_SCHEMA_REJECTION=PASS_ANDROID_FIXTURE' || \
     ! printf '%s\\n' "$test_output" | grep -q 'INSTRUMENTATION_CODE: -1'; then
     echo "::error::P5 NativeDiagnosticReview real Activity UI smoke FAILED"
