@@ -41,8 +41,8 @@ void _start(void) {
 }
 C
 args=(--target=aarch64-linux-android35 -fuse-ld=lld -nostdlib -fno-stack-protector -fPIE -pie -Wl,-e,_start -Wl,--dynamic-linker=/system/bin/linker64)
-clang "\${args[@]}" "$tmp/probe.c" -lc -o "$tmp/platform"
-clang "\${args[@]}" -DPINNED "$tmp/probe.c" -Wl,--no-as-needed "$stage/lib/libcares.so" -lc -o "$tmp/pinned"
+clang "${args[@]}" "$tmp/probe.c" -lc -o "$tmp/platform"
+clang "${args[@]}" -DPINNED "$tmp/probe.c" -Wl,--no-as-needed "$stage/lib/libcares.so" -lc -o "$tmp/pinned"
 for b in platform pinned; do
  readelf -h "$tmp/$b" | grep -Eq 'Machine:[[:space:]]*AArch64'
  readelf -l "$tmp/$b" | grep -Fq '[Requesting program interpreter: /system/bin/linker64]'
