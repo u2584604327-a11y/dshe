@@ -9,6 +9,46 @@ adb wait-for-device
 test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
 test -s "$lab_apk"
 
+# P126: observe real emulator ABI/native bridge BEFORE installing any APK.
+# These Android properties are not proof of execve/bionic linker support for
+# the original SHA-pinned AArch64 Node ELF. No ARM binary is executed here.
+p126_arch="$(adb shell uname -m | tr -d '\r')"
+p126_abis="$(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"
+p126_bridge="$(adb shell getprop ro.dalvik.vm.native.bridge | tr -d '\r')"
+p126_exec="$(adb shell getprop ro.enable.native.bridge.exec | tr -d '\r')"
+p126_binfmt="$(adb shell 'if test -d /proc/sys/fs/binfmt_misc; then echo PRESENT; else echo ABSENT; fi' | tr -d '\r')"
+case "$p126_arch" in
+  x86_64|i686|aarch64) ;;
+  *) echo '::error::P126 emulator CPU architecture unexpected'; exit 1 ;;
+esac
+if test -z "$p126_abis" || test "${#p126_abis}" -gt 180; then
+  echo '::error::P126 Android CPU ABI list missing or unbounded'; exit 1
+fi
+case "$p126_bridge" in
+  ""|"0"|"none"|"libndk_translation.so"|"libhoudini.so"|"libhoudini64.so") ;;
+  *) echo 'P126_NATIVE_BRIDGE_PROPERTY=OTHER_UNCLASSIFIED' ;;
+esac
+echo "P126_ANDROID_EMULATOR_MACHINE=$p126_arch"
+case "$p126_abis" in
+  *arm64-v8a*) echo 'P126_SUPPORTED_ABI_HAS_ARM64=YES' ;;
+  *) echo 'P126_SUPPORTED_ABI_HAS_ARM64=NO' ;;
+esac
+case "$p126_bridge" in
+  ""|"0"|"none") echo 'P126_NATIVE_BRIDGE_PROPERTY=ABSENT_OR_DISABLED' ;;
+  "libndk_translation.so"|"libhoudini.so"|"libhoudini64.so")
+    echo 'P126_NATIVE_BRIDGE_PROPERTY=CONFIGURED_ONLY'
+    ;;
+esac
+case "$p126_exec" in
+  ""|"0"|"false") echo 'P126_NATIVE_BRIDGE_EXEC_FLAG=NOT_ENABLED_OR_UNSET' ;;
+  "1"|"true") echo 'P126_NATIVE_BRIDGE_EXEC_FLAG=ENABLED_UNVERIFIED' ;;
+  *) echo 'P126_NATIVE_BRIDGE_EXEC_FLAG=UNCLASSIFIED' ;;
+esac
+echo "P126_BINFMT_DIRECTORY=$p126_binfmt"
+echo 'P126_ORIGINAL_ARM64_NODE_ELF_EXECVE=NOT_TESTED'
+echo 'P126_ORIGINAL_ARM64_NODE_ISOLATED_UID=NOT_TESTED'
+echo 'P126_P109_NATIVE_TOOLS=DENY_ALL'
+
 # All app execution is restricted to a clean emulator after an airplane mode gate.
 # This does not claim full OS-level network namespace isolation.
 adb shell cmd connectivity airplane-mode enable
