@@ -1,0 +1,63 @@
+name: P148 exact signed v138 EngineManager triple spawn DEX audit
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p148_binary_provenance/**'
+      - '.github/workflows/p148-v138-binary-provenance.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p148-original-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  signed-original-structural:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/checkout@v4
+        with:
+          repository: pht88888888/DSHAPP
+          ref: 4dddb12fd076d052e788a16638a658b7a447b669
+          persist-credentials: false
+          path: .p148_upstream
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Pinned source plus fail-closed synthetic regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C .p148_upstream rev-parse HEAD)" = 4dddb12fd076d052e788a16638a658b7a447b669
+          python -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          python -m py_compile host_candidate/p148_binary_provenance/audit.py
+          python host_candidate/p148_binary_provenance/audit.py --synthetic
+      - name: Pinned signed v138 actual DEX three spawn audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .p148_tmp
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo "$GH_REPO" --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk --dir .p148_tmp
+          file=.p148_tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          printf '%s  %s\n' 3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 "$file" | sha256sum -c - >/dev/null
+          python host_candidate/p148_binary_provenance/audit.py --apk "$file" \
+            --upstream .p148_upstream/app/src/main/java/com/dsh/android/EngineManager.kt > .p148_tmp/categorical.log
+          grep -Fxq 'P148_SIGNED_V138_THREE_REAL_DEX_SPAWNS=PASS' .p148_tmp/categorical.log
+          grep -Fxq 'P148_ARGV_CWD_ENV_VALUES_AND_ORIGINS=NOT_PROVEN' .p148_tmp/categorical.log
+          grep -Fxq 'P148_V139_RELEASE=BLOCKED' .p148_tmp/categorical.log
+          grep '^P148_.*_CATEGORICAL_COUNTS=' .p148_tmp/categorical.log >> "$GITHUB_STEP_SUMMARY"
+      - name: Always clean original APK, temp source and no artifacts
+        if: always()
+        run: |
+          rm -rf .p148_tmp .p148_upstream
+          echo P148_P47_HOST_FALLBACK=DENIED >> "$GITHUB_STEP_SUMMARY"
+          echo P148_P109_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
