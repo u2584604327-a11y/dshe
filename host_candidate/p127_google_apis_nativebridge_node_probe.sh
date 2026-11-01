@@ -83,19 +83,30 @@ else
     fi
   done
   echo "P127_DIAGNOSTIC_REFERENCED_NEEDED_LIBRARY=$referenced"
+  # P127 exact-cause contract: emit ONLY literal categories, no raw linker
+  # text, symbols, filesystem paths, environment, device account state or secrets.
+  # Priority matters: namespace and symbol errors often include the generic
+  # "CANNOT LINK EXECUTABLE" string, which is not a root-cause diagnosis.
   if test "$code" -eq 124; then
     failure=TIMEOUT
-  elif printf '%s\n' "$response" | grep -Eqi 'CANNOT LINK EXECUTABLE|linker.*failed|linker.*cannot'; then
-    failure=ANDROID_DYNAMIC_LINKER_DIAGNOSTIC
-  elif printf '%s\n' "$response" | grep -Eqi 'exec format|architecture|not executable'; then
-    failure=ELF_FORMAT_OR_NATIVE_BRIDGE
-  elif printf '%s\n' "$response" | grep -Eqi 'No such file|not found'; then
-    failure=MISSING_PATH_OR_TRANSITIVE_LIBRARY
-  elif printf '%s\n' "$response" | grep -Eqi 'Permission denied|denied'; then
-    failure=EXECUTE_PERMISSION
+  elif printf '%s\\n' "$response" | grep -Eqi 'not accessible for the namespace|not permitted in (the )?namespace|library namespace|namespace.*(denied|restricted)'; then
+    failure=ANDROID_LINKER_NAMESPACE_DENIED
+  elif printf '%s\\n' "$response" | grep -Eqi 'cannot locate symbol|undefined symbol|cannot find symbol|symbol.*not found|relocation.*failed'; then
+    failure=ELF_SYMBOL_OR_RELOCATION_UNRESOLVED
+  elif printf '%s\\n' "$response" | grep -Eqi 'library.*not found|cannot find library|cannot locate library|shared object.*not found|needed.*not found'; then
+    failure=UNRESOLVED_DYNAMIC_LIBRARY
+  elif printf '%s\\n' "$response" | grep -Eqi 'wrong ELF class|unexpected e_machine|invalid ELF|exec format|architecture mismatch'; then
+    failure=ELF_ARCH_FORMAT_INCOMPATIBLE
+  elif printf '%s\\n' "$response" | grep -Eqi 'Permission denied|access denied|not permitted|avc: denied'; then
+    failure=EXEC_PERMISSION_OR_SELINUX
+  elif printf '%s\\n' "$response" | grep -Eqi 'CANNOT LINK EXECUTABLE|linker.*failed|linker.*cannot'; then
+    failure=ANDROID_DYNAMIC_LINKER_UNCLASSIFIED
+  elif printf '%s\\n' "$response" | grep -Eqi 'No such file|not found'; then
+    failure=MISSING_RUNTIME_PATH_UNCLASSIFIED
   else
     failure=UNKNOWN_FAIL_CLOSED
   fi
+  echo "P127_LOADER_ROOT_CAUSE_CLASS=$failure"
   echo "P127_ORIGINAL_ARM64_NODE_VERSION_IN_EMULATOR_SHELL=BLOCKED_$failure"
   echo 'P127_NODE_FAILED_RESULT_NOT_RETRIED'
 fi
