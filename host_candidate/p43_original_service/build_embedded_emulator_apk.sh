@@ -120,6 +120,7 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p76_original_engine_fd/android/com/dsh/android/p76/P76EngineArchiveFdProbe.java \
   host_candidate/p77_engine_tar_audit/src/com/dsh/android/p77/P77TarAudit.java \
   host_candidate/p78_module_slot/src/com/dsh/android/p78/P78ModuleSlot.java \
+  host_candidate/p144_scoped_source_broker/src/com/dsh/android/p144/P144ScopedSourceBroker.java \
   host_candidate/p79_browser_native_mailbox/android/com/dsh/android/p79/P79NativeBrowserMailboxProbe.java \
   host_candidate/p83_hidden_browser/android/com/dsh/android/p83/P83HiddenBrowserPane.java \
   host_candidate/p85_durable_reply/android/com/dsh/android/p85/P85DurableReplyJournal.java \

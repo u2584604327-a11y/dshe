@@ -12,6 +12,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import com.dsh.android.p77.P77TarAudit;
 import com.dsh.android.p78.P78ModuleSlot;
+import com.dsh.android.p144.P144ScopedSourceBroker;
 import java.util.Arrays;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -71,6 +72,7 @@ public final class P76EngineArchiveFdProbe {
            !b.getBoolean("verified",false) ||
            !b.getBoolean("p77_full_tree_verified",false) ||
            !b.getBoolean("p78_bounded_module_read_verified",false) ||
+           !b.getBoolean("p144_two_readonly_resources_verified",false) ||
            b.getLong("bytes",-1)!=expectedBytes[0] ||
            expectedSha[0]==null || !expectedSha[0].equals(b.getString("sha256"))) {
           terminal[0]=true;listener.fail("P76_REPLY_UID_SESSION_OR_HASH_MISMATCH");return;
@@ -79,6 +81,9 @@ public final class P76EngineArchiveFdProbe {
         listener.report("P76_REAL_ORIGINAL_ENGINE_GZIP_READONLY_FD_ISOLATED_SHA=PASS");
         listener.report("P77_REAL_ORIGINAL_TAR_FULL_TREE_SHA_MATCH_IN_ISOLATED_UID=PASS");
         listener.report("P78_BOUNDED_ORIGINAL_JS_BYTES_READ_ONCE_IN_ISOLATED_UID=PASS");
+        listener.report("P144_EXACT_ORIGINAL_TREE_TWO_SOURCE_LEASES=PASS");
+        listener.report("P144_ORIGINAL_SCRIPT_AND_PACKAGE_BYTES_ISOLATED=PASS");
+        listener.report("P144_PRODUCTION_NODE_RESOLUTION=NOT_WIRED");
         listener.report("P76_ISOLATED_SOURCE_ARCHIVE_NOT_EXECUTED=YES");
         listener.report("P76_PRODUCTION_NODE_MODULE_LOADING_READY=NOT_WIRED");
         if("com.dsh.android".equals(host.getPackageName())) {
@@ -194,9 +199,23 @@ public final class P76EngineArchiveFdProbe {
         // extraction, chmod or Node script execution is involved.
         in.getChannel().position(0);
         P78ModuleSlot module=new P78ModuleSlot(session);
-        P77TarAudit.Result original=P77TarAudit.inspectGzip(in,module);
-        if(!original.isExactOriginal() || !module.isReady())
-          throw new IOException("P78_ORIGINAL_ROOT_OR_JS_CANDIDATE_MISMATCH");
+        try(P144ScopedSourceBroker broker=new P144ScopedSourceBroker(session)){
+        P77TarAudit.Result original=P77TarAudit.inspectGzip(in,module,broker);
+        if(!original.isExactOriginal() || !module.isReady() || !broker.isReady())
+          throw new IOException("P144_ORIGINAL_ROOT_OR_TWO_RESOURCES_MISMATCH");
+        String scriptId=broker.scriptId(),packageId=broker.manifestId();
+        String scriptHash=broker.scriptHash(),packageHash=broker.manifestHash();
+        byte[] script=broker.takeOnce(session,scriptId);
+        byte[] packageJson=broker.takeOnce(session,packageId);
+        if(!broker.exhausted() || script.length<1 ||
+           script.length>P144ScopedSourceBroker.MAX_JS_BYTES ||
+           packageJson.length<1 ||
+           packageJson.length>P144ScopedSourceBroker.MAX_PACKAGE_BYTES ||
+           !scriptHash.equals(hex(sha().digest(script))) ||
+           !packageHash.equals(hex(sha().digest(packageJson))))
+          throw new IOException("P144_LEASE_REPLAY_SIZE_OR_DIGEST");
+        // The broker clears both buffers on close. No bytes are sent to host.
+        }
         byte[] js=module.takeOnce(session,module.opaqueId());
         try {
           if(js.length<1 || js.length>P78ModuleSlot.MAX_JS_BYTES ||
@@ -212,6 +231,7 @@ public final class P76EngineArchiveFdProbe {
         b.putBoolean("verified",true);
         b.putBoolean("p77_full_tree_verified",true);
         b.putBoolean("p78_bounded_module_read_verified",true);
+        b.putBoolean("p144_two_readonly_resources_verified",true);
         Message ack=Message.obtain(null,ACK);ack.setData(b);reply.send(ack);
       }catch(Exception failure){
         // Never send an unverified success; no private archive bytes or paths
