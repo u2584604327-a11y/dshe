@@ -124,12 +124,15 @@ if test "$(adb shell id -u | tr -d '\r')" != 0; then
   exit 0
 fi
 echo P132_EMULATOR_ADBD_ROOT=AVAILABLE_FOR_DISPOSABLE_FIXTURE_ONLY
-adb shell "mkdir -p '$guestlib' '$remote/bin'" >/dev/null
+adb shell "mkdir -p '$guestlib' '$remote/bin' '$remote/lib'" >/dev/null
 created=YES
 adb push "$stage/lib/." "$guestlib/" >/dev/null
+# P158 comparison copies ONLY the same SHA-pinned v138 library fixtures
+# to the disposable shell-readable scratch tree, NOT a production prefix.
+adb push "$stage/lib/." "$remote/lib/" >/dev/null
 adb push "$stage/bin/node" "$remote/bin/node" >/dev/null
 adb push "$hosttmp/absolute-runpath" "$remote/bin/absolute-runpath" >/dev/null
-adb shell "chmod 755 '$guestroot' '$guestroot/files' '$guestroot/files/usr' '$guestlib' '$remote' '$remote/bin' '$remote/bin/node' '$remote/bin/absolute-runpath'; chmod 644 '$guestlib'/*" >/dev/null
+adb shell "chmod 755 '$guestroot' '$guestroot/files' '$guestroot/files/usr' '$guestlib' '$remote' '$remote/bin' '$remote/lib' '$remote/bin/node' '$remote/bin/absolute-runpath'; chmod 644 '$guestlib'/* '$remote/lib'/*" >/dev/null
 # Require matching original ELF and representative original library on Android.
 test "$(adb shell "sha256sum '$remote/bin/node'" | tr -d '\r' | awk '{print $1}')" = "$node_sha"
 test "$(adb shell "sha256sum '$guestlib/libcares.so'" | tr -d '\r' | awk '{print $1}')" = "$cares_sha"
@@ -153,6 +156,10 @@ elif (( reattach_status != 0 ));then
   exit 1
 fi
 echo P132_NODE_TEST_UID=ANDROID_ADB_SHELL_2000_NOT_ISOLATED
+# P158: alternate experiment under correct unprivileged shell. Must be
+# strictly separated from P155's original hardcoded Termux RUNPATH.
+source "$(dirname "$0")/p158_original_node_shell_libpath_probe.sh"
+p158_shell_alt_loader_probe "$stage"
 # P155: verify that the exact pinned source copies remain visible, readable
 # and byte-identical from the post-unroot unprivileged shell. Success does
 # not prove guest linker/Native Bridge namespace resolution.

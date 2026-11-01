@@ -8,6 +8,8 @@ on:
       - 'host_candidate/p154_adbd_recovery.test.sh'
       - 'host_candidate/p155_original_guest_lib_visibility.sh'
       - 'host_candidate/p155_original_guest_lib_visibility.test.sh'
+      - 'host_candidate/p158_original_node_shell_libpath_probe.sh'
+      - 'host_candidate/p158_original_node_shell_libpath_probe.test.sh'
       - '.github/workflows/p132-original-node-absolute-runpath.yml'
   workflow_dispatch:
 permissions:
@@ -37,6 +39,8 @@ jobs:
           bash host_candidate/p154_adbd_recovery.test.sh
           bash -n host_candidate/p155_original_guest_lib_visibility.sh
           bash host_candidate/p155_original_guest_lib_visibility.test.sh
+          bash -n host_candidate/p158_original_node_shell_libpath_probe.sh
+          bash host_candidate/p158_original_node_shell_libpath_probe.test.sh
           mkdir -p "$RUNNER_TEMP/p132-apk"
           gh release download dsh-baseline-v135dsh-baseline-v135 --repo "$GH_REPO" --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk --dir "$RUNNER_TEMP/p132-apk"
           printf "%s  %s\n" 3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 "$RUNNER_TEMP/p132-apk/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk" | sha256sum -c -
@@ -65,3 +69,5 @@ jobs:
           echo P132_ENGINE_MANAGER_LIFECYCLE=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
           echo P132_P109_SENSITIVE_TOOL_AUTHORITY=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
           echo P132_FORMAL_V139_RELEASE=BLOCKED >> "$GITHUB_STEP_SUMMARY"
+          echo P158_GUEST_ORIGINAL_NODE_WITH_SCRATCH_LIBRARY_PATH=CHECK_RUNTIME_LOG >> "$GITHUB_STEP_SUMMARY"
+          echo P158_ENGINE_MANAGER_ISOLATED_UID_HTTP_READY=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
