@@ -57,7 +57,10 @@ def assemble(apkpath,p6path,p5path,outpath):
         if set(patch.namelist())!=EXPECTED_PATHS|{"ASSET_DELTA_MANIFEST.json"}:raise ValueError("P6_EXTRA_FILES")
         overlays={n:patch.read(n) for n in EXPECTED_PATHS}
         p14_browser,p14_js=patch_p14_token(overlays["assets/browser-tool.zip"])
-        if hash_bytes(p14_browser)!=P14_BROWSER_TOOL_SHA:raise ValueError("P14_BROWSER_TOKEN_OUTPUT_NOT_PINNED")
+        if hash_bytes(p14_browser)!=P14_BROWSER_TOOL_SHA:
+            # Report only an archive digest, never user data or nested JS content.
+            # Do not bypass P14 canonical output identity or upload an APK.
+            raise ValueError("P14_BROWSER_TOKEN_OUTPUT_NOT_PINNED observed_sha256="+hash_bytes(p14_browser)+" expected_sha256="+P14_BROWSER_TOOL_SHA)
         if "本轮用量（未提供）" not in p14_js:raise ValueError("P14_UNKNOWN_USAGE_STATUS_ABSENT")
     with zipfile.ZipFile(apkpath) as original:
         if original.testzip():raise ValueError("BASELINE_APK_CRC_FAIL")
