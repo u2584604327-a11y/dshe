@@ -110,6 +110,7 @@ if test -n "$instrument_apk"; then
   printf '%s\\n' "$test_output" | head -c 4000
   if test "$test_status" -ne 0 || \
     ! printf '%s\\n' "$test_output" | grep -q 'P5_NATIVE_UI_REAL_ACTIVITY=PASS_INSTRUMENTATION' || \
+    ! printf '%s\\n' "$test_output" | grep -q 'P120_ORIGINAL_HOST_ISOLATED_UID=PASS_REAL_ANDROID_BINDER' || \
     ! printf '%s\\n' "$test_output" | grep -q 'P5_UNTRUSTED_SCHEMA_REJECTION=PASS_ANDROID_FIXTURE' || \
     ! printf '%s\\n' "$test_output" | grep -q 'INSTRUMENTATION_CODE: -1'; then
     echo "::error::P5 NativeDiagnosticReview real Activity UI smoke FAILED"
