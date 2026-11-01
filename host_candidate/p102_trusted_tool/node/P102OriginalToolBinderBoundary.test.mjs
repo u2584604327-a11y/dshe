@@ -160,8 +160,21 @@ test('source-level parity with Android trusted Messenger contract (not runtime B
     'P102TrustedToolGate.OriginalCallVerifier','Process.isIsolatedUid(sender)'])
     assert.ok(port.includes(literal),'native original session provenance missing: '+literal);
   for(const literal of ['OriginalCallVerifier','originalCallValid(originalSession,callId)',
-    'originalCallValid(originalSessionId,pendingCallId)'])
+    'originalCallValid(original,pendingCallId)'])
     assert.ok(gate.includes(literal),'trusted original call recheck missing: '+literal);
+  // P102's new two-phase approve flow must not reintroduce UI-thread work or
+  // run the executor while holding either the gate monitor or the port monitor.
+  const start=gate.indexOf('public Decision onTrustedNativeApproval(String callId)');
+  const stop=gate.indexOf('public boolean expire()',start);
+  const approve=gate.slice(start,stop);
+  assert.ok(start>=0&&stop>start,'two-phase gate approval missing');
+  assert.ok(approve.includes('synchronized(this)') &&
+    approve.includes('ok=executor.executeFixedRead(TOOL,FIXED_ARGS)'),
+    'bounded executor lock release missing');
+  assert.ok(port.includes('Looper.myLooper()==Looper.getMainLooper()') &&
+    port.includes('final P102TrustedToolGate current;') &&
+    !port.includes('public synchronized boolean onTrustedNativeUiApprove('),
+    'native approval may block UI or hold Binder port lock');
   checks++;
 });
 process.on('beforeExit',()=>{
