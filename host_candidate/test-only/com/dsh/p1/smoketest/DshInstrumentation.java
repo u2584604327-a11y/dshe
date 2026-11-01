@@ -165,6 +165,112 @@ public final class DshInstrumentation extends Instrumentation {
     }
   }
 
+  /** Host owns the source asset and passes an FD; no private path goes to isolated UID. */
+  private static void sendP121FdProof(android.os.Messenger service,
+      android.os.Messenger replyTo,byte[] prefix)throws Exception{
+    if(prefix==null||prefix.length!=4096)throw new AssertionError("P121_PREFIX_BOUND_INVALID");
+    final android.os.ParcelFileDescriptor[] pipe=
+        android.os.ParcelFileDescriptor.createPipe();
+    try{
+      android.os.Message request=android.os.Message.obtain(null,12003);
+      request.replyTo=replyTo;
+      android.os.Bundle args=new android.os.Bundle();
+      args.putParcelable("engine_fd",pipe[0]);
+      request.setData(args);
+      service.send(request);
+    }catch(Exception failed){
+      try{pipe[1].close();}catch(Exception ignored){}
+      throw failed;
+    }finally{
+      try{pipe[0].close();}catch(Exception ignored){}
+    }
+    Thread writer=new Thread(()->{
+      try(java.io.OutputStream output=
+          new android.os.ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])){
+        output.write(prefix);
+        output.flush();
+      }catch(Exception ignored){}
+    },"p121-original-asset-prefix-fd-writer");
+    writer.setDaemon(true);
+    writer.start();
+  }
+
+  /** Test the ACTUAL assets/engine.bin prefix, not a synthetic replacement. */
+  private void verifyP121OriginalEngineFd() throws Exception{
+    final byte[] pinned=new byte[4096];
+    try(java.io.InputStream original=
+        getTargetContext().getAssets().open("engine.bin")){
+      int n=0;
+      while(n<pinned.length){
+        int part=original.read(pinned,n,pinned.length-n);
+        assertTrue(part>0,"P121_ORIGINAL_ENGINE_ASSET_TOO_SMALL");
+        n+=part;
+      }
+    }
+    final java.util.concurrent.CountDownLatch finish=
+        new java.util.concurrent.CountDownLatch(1);
+    final java.util.concurrent.atomic.AtomicBoolean success=
+        new java.util.concurrent.atomic.AtomicBoolean(false);
+    final java.util.concurrent.atomic.AtomicInteger phase=
+        new java.util.concurrent.atomic.AtomicInteger(0);
+    final android.os.Messenger[] service={null};
+    final android.os.HandlerThread replies=
+        new android.os.HandlerThread("p121-original-asset-fd-replies");
+    replies.start();
+    final android.os.Messenger receiver=new android.os.Messenger(
+      new android.os.Handler(replies.getLooper()){
+        @Override public void handleMessage(android.os.Message message){
+          android.os.Bundle b=message.getData();
+          int sender=message.sendingUid;
+          boolean common=message.what==12004&&
+              android.os.Process.isIsolatedUid(sender)&&
+              sender!=android.os.Process.myUid()&&
+              "DENY_ALL".equals(b.getString("toolAccess"))&&
+              !b.containsKey("rawBytes")&&!b.containsKey("fixedResult");
+          int state=phase.getAndIncrement();
+          if(state==0){
+            if(!common||!"PINNED_4096_SHA256_MATCH_NO_EXEC".equals(
+                b.getString("assetPrefix"))){
+              finish.countDown();return;
+            }
+            byte[] corrupt=java.util.Arrays.copyOf(pinned,pinned.length);
+            corrupt[0]^=1;
+            try{sendP121FdProof(service[0],receiver,corrupt);}
+            catch(Exception invalid){finish.countDown();}
+          }else if(state==1){
+            success.set(common&&"REJECTED_NO_EXEC".equals(b.getString("assetPrefix")));
+            finish.countDown();
+          }else finish.countDown();
+        }
+      });
+    final android.content.ServiceConnection bind=
+        new android.content.ServiceConnection(){
+      @Override public void onServiceConnected(
+          android.content.ComponentName component,android.os.IBinder binder){
+        service[0]=new android.os.Messenger(binder);
+        try{sendP121FdProof(service[0],receiver,pinned);}
+        catch(Exception failed){finish.countDown();}
+      }
+      @Override public void onServiceDisconnected(
+          android.content.ComponentName component){finish.countDown();}
+    };
+    android.content.Intent intent=new android.content.Intent();
+    intent.setClassName("com.dsh.android","com.dsh.p120.P120IsolatedDenyService");
+    boolean bound=false;
+    try{
+      bound=getTargetContext().bindService(intent,bind,
+          android.content.Context.BIND_AUTO_CREATE);
+      assertTrue(bound,"P121_ORIGINAL_HOST_BIND_FAILED");
+      assertTrue(finish.await(22,java.util.concurrent.TimeUnit.SECONDS),
+          "P121_ORIGINAL_ENGINE_FD_NO_RECEIPT");
+      assertTrue(success.get()&&phase.get()==2,
+          "P121_ENGINE_PREFIX_FD_OR_NEGATIVE_REJECTION_FAILED");
+    }finally{
+      if(bound)getTargetContext().unbindService(bind);
+      replies.quitSafely();
+    }
+  }
+
   @Override public void onStart() {
     Bundle result=new Bundle();
     Activity activity=null;
@@ -188,6 +294,10 @@ public final class DshInstrumentation extends Instrumentation {
       phase="P120_REAL_ORIGINAL_HOST_ISOLATED_SERVICE";
       verifyP120IsolatedService();
       result.putString("P120_ORIGINAL_HOST_ISOLATED_UID","PASS_REAL_ANDROID_BINDER");
+      phase="P121_REAL_ORIGINAL_ENGINE_FD";
+      verifyP121OriginalEngineFd();
+      result.putString("P121_ORIGINAL_ENGINE_FD_PREFIX",
+          "PASS_REAL_ANDROID_UID_HASH_AND_DENY");
       phase="NATIVE_PINNED_QUEUE";
       // Use a native-owned 0700 root, never the shared app filesDir itself.
       // P5 correctly rejects group/other writable roots rather than
