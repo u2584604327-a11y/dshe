@@ -47,6 +47,10 @@ public final class P149OriginalBuilderWitness {
       if(raw!=null)Arrays.fill(raw,(byte)0);
     }
   }
+  /** Erase the internal growable buffer even if validation throws. */
+  private static final class SensitiveMemory extends ByteArrayOutputStream {
+    void wipe(){Arrays.fill(buf,(byte)0);reset();}
+  }
   private static byte[] bounded(ProcessBuilder builder,int kind,String session,long sequence)
       throws IOException {
     if(kind<1 || kind>3 || session==null ||
@@ -59,7 +63,7 @@ public final class P149OriginalBuilderWitness {
     Map<String,String> env=builder.environment();
     if(env==null||env.size()>MAX_ENV)
       throw new IOException("P149_ENV_LIMIT");
-    ByteArrayOutputStream memory=new ByteArrayOutputStream();
+    SensitiveMemory memory=new SensitiveMemory();
     try {
       DataOutputStream out=new DataOutputStream(memory);
       out.writeInt(DOMAIN.length);out.write(DOMAIN);
@@ -82,9 +86,8 @@ public final class P149OriginalBuilderWitness {
       if(memory.size()>MAX_TOTAL)throw new IOException("P149_SERIALIZED_CAP");
       return memory.toByteArray();
     }finally {
-      // The ephemeral ByteArrayOutputStream's private buffer is not exposed
-      // to the caller. Never persist or print serialized arguments.
-      memory.reset();
+      // Even on an exception, destroy the scratch backing buffer before exit.
+      memory.wipe();
     }
   }
   private static byte[] mac(byte[] key,byte[] payload)throws IOException {

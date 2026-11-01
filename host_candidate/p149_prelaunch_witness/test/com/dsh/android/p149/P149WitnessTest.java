@@ -42,10 +42,11 @@ public final class P149WitnessTest {
   public static void main(String[] ignored)throws Exception {
     for(int mode=1;mode<=3;mode++){
       ProcessBuilder b=builder();
+      final int modeId=mode;
       try(P149OriginalBuilderWitness.Witness w=
-            P149OriginalBuilderWitness.capture(b,mode,S,mode)){
-        w.matchOnce(b,mode,S,mode);
-        denied(()->w.matchOnce(b,mode,S,mode),"P149_USED_OR_CLOSED");
+            P149OriginalBuilderWitness.capture(b,modeId,S,modeId)){
+        w.matchOnce(b,modeId,S,modeId);
+        denied(()->w.matchOnce(b,modeId,S,modeId),"P149_USED_OR_CLOSED");
       }
       P149OriginalBuilderWitness.observeWithoutLaunch(b,mode);
     }
