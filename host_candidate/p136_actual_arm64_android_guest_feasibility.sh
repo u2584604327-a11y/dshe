@@ -68,6 +68,25 @@ image_dir="$sdk/system-images/android-35/google_apis/arm64-v8a"
 # SDK package layouts differ; do not assert a single system.img filename.
 if ! test -d "$image_dir"; then
   report P136_ARM64_IMAGE_DIRECTORY=ABSENT_AFTER_INSTALL_RETURNED_ZERO
+  install_class=UNKNOWN
+  if grep -Eqi 'not found|not available|package.*missing' "$root/install.txt"; then
+    install_class=PACKAGE_NOT_AVAILABLE_OR_MISSING
+  elif grep -Eqi 'license.*not accepted|failed to accept|accept the license' "$root/install.txt"; then
+    install_class=LICENSE_NOT_ACCEPTED
+  elif grep -Eqi 'failed|error|exception' "$root/install.txt"; then
+    install_class=INSTALL_FAILED_OR_ERROR
+  elif grep -Eqi 'already installed|up to date' "$root/install.txt"; then
+    install_class=REPORTED_ALREADY_INSTALLED
+  elif grep -Eqi 'install|download|prepar' "$root/install.txt"; then
+    install_class=PROGRESS_REPORTED_BUT_NO_IMAGE
+  fi
+  report "P136_ARM64_IMAGE_INSTALL_LOG_CLASS=$install_class"
+  # Non-secret SDK-only diagnostic, capped to 8 lines, with untrusted characters removed.
+  echo P136_ANDROID_SDK_INSTALL_DIAGNOSTIC_START
+  grep -Ei 'Warning|Error|Install|package|Download|SDK' "$root/install.txt" \
+    | tail -n 8 | cut -c 1-180 \
+    | tr -cd '[:alnum:] .;:/_()+|,\n=-' || true
+  echo P136_ANDROID_SDK_INSTALL_DIAGNOSTIC_END
   report P136_ANDROID_ARM64_BOOT=NOT_TESTED
   exit 0
 fi
