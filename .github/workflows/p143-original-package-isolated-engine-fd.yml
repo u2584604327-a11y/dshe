@@ -13,6 +13,7 @@ on:
       - 'host_candidate/p150_original_coroutine/**'
       - 'host_candidate/p151_original_state_probe/**'
       - 'host_candidate/p152_termux_readonly/**'
+      - 'host_candidate/p153_node_elf/**'
       - 'host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java'
       - 'host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java'
       - 'host_candidate/p77_engine_tar_audit/src/com/dsh/android/p77/P77TarAudit.java'
@@ -61,6 +62,7 @@ jobs:
           grep -Fq 'P150OriginalCoroutineObserver.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           grep -Fq 'P151OriginalEngineStateSampler.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           grep -Fq 'P152TermuxReadOnly.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          grep -Fq 'P153OriginalNodeElfProbe.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           grep -Fq 'P149OriginalBuilderWitness.observeWithoutLaunch' host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java
           mkdir -p .p149classes
           javac --release 8 -d .p149classes \
@@ -69,6 +71,8 @@ jobs:
             host_candidate/p151_original_state_probe/src/com/dsh/android/p151/P151OriginalEngineStateSampler.java \
             host_candidate/p152_termux_readonly/src/com/dsh/android/p152/P152CauseClassifier.java \
             host_candidate/p152_termux_readonly/test/com/dsh/android/p152/P152CauseClassifierTest.java \
+            host_candidate/p153_node_elf/src/com/dsh/android/p153/P153ElfHeader.java \
+            host_candidate/p153_node_elf/test/com/dsh/android/p153/P153ElfHeaderTest.java \
             host_candidate/p151_original_state_probe/test/com/dsh/android/p151/P151SyntheticStateTest.java \
             host_candidate/p150_original_coroutine/test/com/dsh/android/p150/P150OriginTest.java \
             host_candidate/p149_prelaunch_witness/test/com/dsh/android/p149/P149WitnessTest.java \
@@ -77,6 +81,7 @@ jobs:
           java -cp .p149classes com.dsh.android.p150.P150OriginTest
           java -cp .p149classes com.dsh.android.p151.P151SyntheticStateTest
           java -cp .p149classes com.dsh.android.p152.P152CauseClassifierTest
+          java -cp .p149classes com.dsh.android.p153.P153ElfHeaderTest
           rm -rf .p149classes
           mkdir -p .p146classes
           javac --release 8 -d .p146classes \
@@ -148,6 +153,8 @@ jobs:
           echo P151_READ_ONLY_EXISTING_ENGINE_STATE=CHECK_ANDROID_LOGCAT >> "$GITHUB_STEP_SUMMARY"
           echo P152_TERMUX_EXACT_BRANCH=CHECK_ANDROID_LOGCAT >> "$GITHUB_STEP_SUMMARY"
           echo P152_NODE_PROCESS_OR_RESTART=DENIED >> "$GITHUB_STEP_SUMMARY"
+          echo P153_REAL_NODE_ELF_ARCH_AND_PT_INTERP=CHECK_ANDROID_LOGCAT >> "$GITHUB_STEP_SUMMARY"
+          echo P153_PRODUCTION_NODE_EXECUTION=DENIED >> "$GITHUB_STEP_SUMMARY"
           echo P151_NODE_STARTUP_PROVEN=NO >> "$GITHUB_STEP_SUMMARY"
           echo P150_NATIVE_IDENTITY_PROVEN=NO >> "$GITHUB_STEP_SUMMARY"
           echo P149_ORIGINAL_ENGINEMANAGER_PRODUCTION_PARAMETERS=NOT_PROVEN >> "$GITHUB_STEP_SUMMARY"
