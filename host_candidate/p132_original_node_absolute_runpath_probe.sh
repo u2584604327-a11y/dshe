@@ -8,12 +8,14 @@ test -d "$stage/lib"
 remote=/data/local/tmp/dsh-p132-original-node
 guestroot=/data/data/com.termux
 guestlib=/data/data/com.termux/files/usr/lib
+hosttmp="$(mktemp -d)"
 node_sha=a0d21a1589312919114b24a5cc520c30ab7f26f9985b3f0c643c153172ebd1e6
 cares_sha=68733ce8d4bb1bdc87d8ec550c58c70f3dcdb0f8c48d86b83235f536cb736e83
 adb() { command adb -s emulator-5554 "$@"; }
 safe=NO
 created=NO
 cleanup() {
+  rm -rf -- "$hosttmp"
   if test "$safe" = YES; then
     adb root >/dev/null 2>&1 || true
     adb wait-for-device >/dev/null 2>&1 || true
@@ -35,6 +37,41 @@ case "$dynamic_info" in
   *) echo P132_RUNPATH=DRIFT; exit 1 ;;
 esac
 echo P132_PINNED_NODE_AND_CARES_SHA256=PASS
+cat > "$hosttmp/abs-runpath.c" <<'C'
+#include <stddef.h>
+extern long write(int, const void *, size_t);
+extern const char *ares_version(int *);
+__attribute__((noreturn)) static void done(long code) {
+ register long x0 __asm__("x0")=code;
+ register long x8 __asm__("x8")=93;
+ __asm__ volatile("svc #0" :: "r"(x0),"r"(x8) : "memory");
+ __builtin_unreachable();
+}
+void _start(void) {
+ if (!ares_version((int*)0)) done(31);
+ static const char m[]="P132_ABSOLUTE_RUNPATH_CARES_OK\n";
+ if(write(1,m,sizeof(m)-1)!=sizeof(m)-1) done(32);
+ done(0);
+}
+C
+ndk="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+test -x "$ndk/clang" || { echo P132_PINNED_NDK=UNAVAILABLE; exit 1; }
+"$ndk/clang" --target=aarch64-linux-android35 -fuse-ld=lld -nostdlib \
+ -fno-stack-protector -fPIE -pie -Wl,-e,_start \
+ -Wl,--dynamic-linker=/system/bin/linker64 \
+ -Wl,-rpath,/data/data/com.termux/files/usr/lib \
+ "$hosttmp/abs-runpath.c" -Wl,--no-as-needed "$stage/lib/libcares.so" -lc \
+ -o "$hosttmp/absolute-runpath"
+control_dyn="$(readelf -d "$hosttmp/absolute-runpath")"
+case "$control_dyn" in
+  *'Library runpath: [/data/data/com.termux/files/usr/lib]'*) ;;
+  *) echo P132_ABSOLUTE_CONTROL_RUNPATH=INVALID; exit 1 ;;
+esac
+case "$control_dyn" in
+  *'Shared library: [libcares.so]'*) ;;
+  *) echo P132_ABSOLUTE_CONTROL_DT_NEEDED=INVALID; exit 1 ;;
+esac
+echo P132_ABSOLUTE_CONTROL_ELF_PREFLIGHT=PASS_EXACT_NODE_RUNPATH_AND_CARES_DEP
 if test "$P132_COMPILE_ONLY" = 1; then
   echo P132_ANDROID_EXECUTION=NOT_ATTEMPTED_STATIC_ONLY
   exit 0
@@ -85,10 +122,12 @@ adb shell "mkdir -p '$guestlib' '$remote/bin'" >/dev/null
 created=YES
 adb push "$stage/lib/." "$guestlib/" >/dev/null
 adb push "$stage/bin/node" "$remote/bin/node" >/dev/null
+adb push "$hosttmp/absolute-runpath" "$remote/bin/absolute-runpath" >/dev/null
 adb shell "chmod 755 '$guestroot' '$guestroot/files' '$guestroot/files/usr' '$guestlib' '$remote' '$remote/bin' '$remote/bin/node'; chmod 644 '$guestlib'/*" >/dev/null
 # Require matching original ELF and representative original library on Android.
 test "$(adb shell "sha256sum '$remote/bin/node'" | tr -d '\r' | awk '{print $1}')" = "$node_sha"
 test "$(adb shell "sha256sum '$guestlib/libcares.so'" | tr -d '\r' | awk '{print $1}')" = "$cares_sha"
+test "$(adb shell "sha256sum '$remote/bin/absolute-runpath'" | tr -d '\r' | awk '{print $1}')" = "$(sha256sum "$hosttmp/absolute-runpath" | awk '{print $1}')"
 echo P132_DEVICE_NODE_AND_CARES_SHA256=PASS
 # Drop emulator adbd root before attempting Node. Only fixed --version, no scripts.
 adb unroot >/dev/null 2>&1
@@ -99,6 +138,19 @@ if test "$shell_uid" != 2000; then
   exit 0
 fi
 echo P132_NODE_TEST_UID=ANDROID_ADB_SHELL_2000_NOT_ISOLATED
+# Separate synthetic control with EXACT same immutable absolute RUNPATH as original Node.
+# This runs under Android shell UID 2000, not root and not the original app.
+set +e
+control="$(timeout 12s adb shell "env -i PATH=/system/bin:/system/xbin '$remote/bin/absolute-runpath'" 2>&1)"
+control_code=$?
+set -e
+if test "$control_code" = 0 && test "$(printf '%s' "$control" | tr -d '\r\n')" = P132_ABSOLUTE_RUNPATH_CARES_OK; then
+  echo P132_ABSOLUTE_RUNPATH_ORIGINAL_CARES=PASS_EXACT_MARKER
+else
+  echo P132_ABSOLUTE_RUNPATH_ORIGINAL_CARES=BLOCKED
+  echo P132_ABSOLUTE_RUNPATH_CONTROL_EXIT="$control_code"
+  echo P132_ABSOLUTE_RUNPATH_CONTROL_SHA256="$(printf '%s' "$control" | sha256sum | awk '{print $1}')"
+fi
 set +e
 response="$(timeout 25s adb shell "env -i PATH=/system/bin:/system/xbin '$remote/bin/node' --version" 2>&1)"
 code=$?
@@ -120,6 +172,16 @@ else
   elif grep -Eqi 'CANNOT LINK EXECUTABLE|linker.*cannot' <<< "$response"; then reason=ANDROID_LINKER_UNCLASSIFIED
   fi
   echo P132_NODE_ERROR_CLASS="$reason"
+  # Fixed allowlist only: names from exact P123 Node DT_NEEDED and known Android baseline.
+  # No verbatim stderr, arbitrary symbol or filesystem path is emitted.
+  missing=NONE_OF_PINNED_DIRECT_NAMES
+  for soname in libz.so.1 libcares.so libsqlite3.so libffi.so libcrypto.so.3 libssl.so.3 libicui18n.so.78 libicuuc.so.78 libc++_shared.so libc.so libm.so libdl.so; do
+    if printf '%s' "$response" | grep -Fq "$soname"; then
+      missing="$soname"
+      break
+    fi
+  done
+  echo P132_DIAGNOSTIC_PINNED_SONAME="$missing"
 fi
 echo P132_ORIGINAL_ISOLATED_UID=NOT_TESTED
 echo P132_ENGINE_MANAGER_LIFECYCLE=NOT_TESTED
