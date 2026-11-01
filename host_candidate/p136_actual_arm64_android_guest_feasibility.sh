@@ -11,7 +11,19 @@ manager="$(command -v sdkmanager || true)"
 test -n "$manager" || manager="$(find "$sdk/cmdline-tools" -type f -name sdkmanager -perm /111 2>/dev/null | head -n1 || true)"
 test -n "$manager" || { report P136_SDKMANAGER=UNAVAILABLE; exit 0; }
 emulator="$sdk/emulator/emulator"
-test -x "$emulator" || { report P136_HOST_EMULATOR=UNAVAILABLE; exit 0; }
+if ! test -x "$emulator"; then
+  report P136_HOST_EMULATOR_PREINSTALLED=NO
+  set +e
+  timeout 180s "$manager" --sdk_root="$sdk" --install emulator > "$RUNNER_TEMP/p136-emulator-install.log" 2>&1
+  rc=$?
+  set -e
+  if test "$rc" != 0 || ! test -x "$emulator"; then
+    report P136_HOST_EMULATOR_INSTALL=UNAVAILABLE_OR_TIMED_OUT
+    report P136_ARM64_ANDROID_BOOT=NOT_TESTED
+    exit 0
+  fi
+fi
+report P136_HOST_EMULATOR_BINARY=AVAILABLE
 root="$RUNNER_TEMP/p136-arm64-only"
 test ! -e "$root" || { report P136_TEMP_PATH_ALREADY_EXISTS=STOP; exit 1; }
 mkdir -p "$root/avd"
