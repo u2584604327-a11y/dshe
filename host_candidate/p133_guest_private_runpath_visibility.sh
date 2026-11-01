@@ -136,7 +136,7 @@ fi
 echo P133_EMULATOR_ADBD_ROOT=AVAILABLE_FOR_DISPOSABLE_FIXTURE_ONLY
 adb shell "mkdir -p '$guestlib' '$remote/bin/lib'" >/dev/null
 created=YES
-adb push "$stage/lib/." "$guestlib/" >/dev/null
+adb push "$stage/lib/libcares.so" "$guestlib/libcares.so" >/dev/null
 adb push "$stage/lib/libcares.so" "$remote/bin/lib/libcares.so" >/dev/null
 adb push "$hosttmp/absolute-runpath" "$remote/bin/absolute-runpath" >/dev/null
 adb push "$hosttmp/origin-runpath" "$remote/bin/origin-runpath" >/dev/null
@@ -147,10 +147,21 @@ test "$(adb shell "sha256sum '$guestlib/libcares.so'" | tr -d '\r' | awk '{print
 test "$(adb shell "sha256sum '$remote/bin/absolute-runpath'" | tr -d '\r' | awk '{print $1}')" = "$(sha256sum "$hosttmp/absolute-runpath" | awk '{print $1}')"
 test "$(adb shell "sha256sum '$remote/bin/origin-runpath'" | tr -d '\r' | awk '{print $1}')" = "$(sha256sum "$hosttmp/origin-runpath" | awk '{print $1}')"
 echo P133_DEVICE_CARES_AND_SYNTHETIC_SHA=PASS
-# Drop emulator adbd root before attempting Node. Only fixed --version, no scripts.
-adb unroot >/dev/null 2>&1
-timeout 30s adb wait-for-device
-shell_uid="$(adb shell id -u | tr -d '\r')"
+# Drop emulator adbd root before running *synthetic* AArch64 controls.
+# Fail closed on UID ambiguity; never run a probe as root.
+if adb unroot >/dev/null 2>&1; then
+  echo P133_ADB_UNROOT_COMMAND=ACCEPTED
+else
+  echo P133_ADB_UNROOT_COMMAND=NONZERO_RECHECK_IDENTITY
+fi
+if ! timeout 30s adb wait-for-device; then
+  echo P133_SHELL_UID_POST_UNROOT=UNKNOWN_STOP
+  exit 0
+fi
+shell_uid="$(adb shell id -u 2>/dev/null | tr -d '\r')" || {
+  echo P133_SHELL_UID_POST_UNROOT=UNKNOWN_STOP
+  exit 0
+}
 if test "$shell_uid" != 2000; then
   echo P133_POST_UNROOT_SHELL_UID=NOT_PROVEN
   exit 0
