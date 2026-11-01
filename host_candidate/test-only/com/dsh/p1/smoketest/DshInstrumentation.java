@@ -415,7 +415,7 @@ public final class DshInstrumentation extends Instrumentation {
     }
   }
 
-  @Override public void onStart() {
+()=>method+"  @Override public void onStart() {"
     Bundle result=new Bundle();
     Activity activity=null;
     AndroidFdQueue queue=null;
@@ -446,6 +446,10 @@ public final class DshInstrumentation extends Instrumentation {
       verifyP122FullEngineFd();
       result.putString("P122_FULL_ENGINE_FD_SHA256",
           "PASS_FULL_57724933_AND_CORRUPTED_REJECTED_NO_EXEC");
+      phase="P124_REAL_ORIGINAL_ISOLATED_CHILD";
+      verifyP124FixedIsolatedChildUid();
+      result.putString("P124_FIXED_CHILD_ISOLATED_UID",
+          "PASS_SYSTEM_ID_CHILD_MATCHES_FRAMEWORK_ISOLATED_UID_DENY_ALL");
       phase="NATIVE_PINNED_QUEUE";
       // Use a native-owned 0700 root, never the shared app filesDir itself.
       // P5 correctly rejects group/other writable roots rather than
@@ -521,7 +525,7 @@ public final class DshInstrumentation extends Instrumentation {
         result.putString("FAIL_REASON","SYNTHETIC_QUEUE_PERMISSIONS");
       else if(cause!=null&&cause.equals("Queue is not a directory"))
         result.putString("FAIL_REASON","SYNTHETIC_QUEUE_NOT_DIRECTORY");
-      else if(cause!=null&&cause.matches("P12[12]_[A-Z0-9_]{1,90}"))
+      else if(cause!=null&&cause.matches("P12[124]_[A-Z0-9_]{1,90}"))
         result.putString("FAIL_REASON",cause);
       else
         result.putString("FAIL_REASON","OTHER_NO_DETAIL");
