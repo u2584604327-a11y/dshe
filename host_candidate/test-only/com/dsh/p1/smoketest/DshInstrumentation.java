@@ -214,6 +214,7 @@ public final class DshInstrumentation extends Instrumentation {
     final java.util.concurrent.atomic.AtomicInteger phase=
         new java.util.concurrent.atomic.AtomicInteger(0);
     final android.os.Messenger[] service={null};
+    final android.os.Messenger[] receiverRef={null};
     final android.os.HandlerThread replies=
         new android.os.HandlerThread("p121-original-asset-fd-replies");
     replies.start();
@@ -235,7 +236,7 @@ public final class DshInstrumentation extends Instrumentation {
             }
             byte[] corrupt=java.util.Arrays.copyOf(pinned,pinned.length);
             corrupt[0]^=1;
-            try{sendP121FdProof(service[0],receiver,corrupt);}
+            try{sendP121FdProof(service[0],receiverRef[0],corrupt);}
             catch(Exception invalid){finish.countDown();}
           }else if(state==1){
             success.set(common&&"REJECTED_NO_EXEC".equals(b.getString("assetPrefix")));
@@ -243,6 +244,7 @@ public final class DshInstrumentation extends Instrumentation {
           }else finish.countDown();
         }
       });
+    receiverRef[0]=receiver;
     final android.content.ServiceConnection bind=
         new android.content.ServiceConnection(){
       @Override public void onServiceConnected(
