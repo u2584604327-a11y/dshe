@@ -1,0 +1,54 @@
+name: P149 OmniGate public tunnel no-reply layer diagnostic (GET only, offline fixtures)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p96_stream_owner/omnigate_remote_preflight.mjs'
+      - 'host_candidate/p96_stream_owner/omnigate_remote_preflight.test.mjs'
+      - 'host_candidate/P149_OMNIGATE_TUNNEL_NO_REPLY_TRIAGE.md'
+      - '.github/workflows/p149-omnigate-tunnel-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  p149-no-public-network-no-secrets:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify syntax and 7 offline no-send classification fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check host_candidate/p96_stream_owner/omnigate_remote_preflight.mjs
+          node --test host_candidate/p96_stream_owner/omnigate_remote_preflight.test.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('host_candidate/p96_stream_owner/omnigate_remote_preflight.mjs').read_text()
+          test=Path('host_candidate/p96_stream_owner/omnigate_remote_preflight.test.mjs').read_text()
+          assert "method:'GET'" in s
+          assert "issued_post:false" in s and "credentials_sent:false" in s
+          assert "assistant_reply_verified:false" in s
+          assert "PUBLIC_GET_READY_NO_SSE_OR_ASSISTANT_REPLY_PROOF" in s
+          assert "RELAY_DEVICE_OFFLINE" in s
+          assert "REMOTE_NATIVE_OWNER_UNVERIFIED_NO_POST" in s
+          assert "PUBLIC_TUNNEL_RESET_OR_NO_REPLY" in s
+          assert "https from 'node:https'" in s
+          assert "from './omnigate_remote_preflight.mjs'" in test
+          assert 'https://gw-example.claua.de/v1' in test
+          assert 'gw-33e850180248' not in s+test
+          print('P149_PUBLIC_RELAY_NO_REPLY_LAYERS=PASS_OFFLINE')
+          print('P149_NO_POST_NO_SECRETS_NO_AUTORETRY=PASS_STATIC_AND_UNIT')
+          print('P149_LIVE_USER_TUNNEL_REACHABILITY=NOT_TESTED')
+          print('P149_ORIGINAL_DSH_PRODUCTION_APP_FIXED=NO')
+          PY
+          echo 'P149_TUNNEL_RELAY_OWNER_AND_AUTH_DIAGNOSTIC=PASS_UNIT_ONLY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P149_REAL_PUBLIC_URL_AND_MODEL_REPLY=NOT_TESTED' >> "$GITHUB_STEP_SUMMARY"
