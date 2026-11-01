@@ -22,16 +22,26 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.Process;
+import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
+import java.io.InputStream;
+import java.security.MessageDigest;
+import java.util.concurrent.atomic.AtomicBoolean;
 /** Isolated UID only; synthetic ping + DENY_ALL; no original Node/tools. */
 public final class P120IsolatedDenyService extends Service {
   public static final int PING=12001, PONG=12002;
+  public static final int ASSET_PREFIX_FD=12003, ASSET_PREFIX_RECEIPT=12004;
+  private static final int PREFIX_LIMIT=4096;
+  private static final String ENGINE_PREFIX_SHA256="9a2cff4e385d679c384ccfab16252e086b7cef8546826807c9a8926b267777fb";
+  private final AtomicBoolean assetBusy=new AtomicBoolean(false);
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()){
     @Override public void handleMessage(Message incoming){
       if(Build.VERSION.SDK_INT<34)return;
       if(!Process.isIsolated()||!Process.isIsolatedUid(Process.myUid())||
          incoming.sendingUid!=getApplicationInfo().uid||
          incoming.what!=PING||incoming.replyTo==null)return;
+      if(incoming.what==ASSET_PREFIX_FD){receivePinnedEnginePrefix(incoming);return;}
+      if(incoming.what!=PING)return;
       Message output=Message.obtain(null,PONG);
       Bundle result=new Bundle();
       result.putBoolean("isolated",true);
@@ -41,9 +51,73 @@ public final class P120IsolatedDenyService extends Service {
       try{incoming.replyTo.send(output);}catch(RemoteException ignored){}
     }
   });
+  /**
+   * Bounded read-only original-APK asset transport proof, NOT executable Node.
+   * Host selects the original asset; Binder transmits only an FD. This Service
+   * never opens host-private paths and never supplies the model any raw bytes.
+   */
+  private void receivePinnedEnginePrefix(Message request){
+    ParcelFileDescriptor input=null;
+    try{
+      Bundle bundle=request.getData();
+      bundle.setClassLoader(ParcelFileDescriptor.class.getClassLoader());
+      input=(ParcelFileDescriptor)bundle.getParcelable("engine_fd");
+    }catch(RuntimeException malformed){
+      if(input!=null)try{input.close();}catch(Exception ignored){}
+      return;
+    }
+    if(input==null)return;
+    if(!assetBusy.compareAndSet(false,true)){
+      try{input.close();}catch(Exception ignored){}
+      return;
+    }
+    final ParcelFileDescriptor fd=input;
+    final Messenger receiver=request.replyTo;
+    final Handler main=new Handler(Looper.getMainLooper());
+    final Runnable timeout=()->{
+      try{fd.close();}catch(Exception ignored){}
+    };
+    main.postDelayed(timeout,5000);
+    Thread checker=new Thread(()->{
+      boolean valid=false;
+      try(InputStream source=new ParcelFileDescriptor.AutoCloseInputStream(fd)){
+        byte[] buffer=new byte[PREFIX_LIMIT];
+        int count=0;
+        while(count<PREFIX_LIMIT){
+          int n=source.read(buffer,count,PREFIX_LIMIT-count);
+          if(n<0)break;
+          if(n==0)continue;
+          count+=n;
+        }
+        if(count==PREFIX_LIMIT){
+          byte[] digest=MessageDigest.getInstance("SHA-256").digest(buffer);
+          StringBuilder hex=new StringBuilder(64);
+          for(byte b:digest)hex.append(String.format(java.util.Locale.ROOT,"%02x",b&255));
+          valid=ENGINE_PREFIX_SHA256.equals(hex.toString());
+        }
+      }catch(Exception rejected){
+        // Fail closed and never log input contents, errors, paths or tokens.
+      }finally{
+        main.removeCallbacks(timeout);
+        assetBusy.set(false);
+        Message receipt=Message.obtain(null,ASSET_PREFIX_RECEIPT);
+        Bundle status=new Bundle();
+        status.putString("assetPrefix",
+          valid?"PINNED_4096_SHA256_MATCH_NO_EXEC":"REJECTED_NO_EXEC");
+        status.putString("toolAccess","DENY_ALL");
+        receipt.setData(status);
+        try{receiver.send(receipt);}catch(RemoteException ignored){}
+      }
+    },"p121-pinned-engine-fd-only");
+    checker.setDaemon(true);
+    checker.start();
+  }
   @Override public IBinder onBind(Intent intent){
     return Build.VERSION.SDK_INT>=34&&Process.isIsolated()&&Process.isIsolatedUid(Process.myUid())
       ?inbox.getBinder():null;
+  }
+  @Override public void onDestroy(){
+    super.onDestroy();
   }
 }
 """
