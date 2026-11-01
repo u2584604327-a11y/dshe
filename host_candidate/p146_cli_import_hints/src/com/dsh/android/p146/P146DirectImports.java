@@ -79,6 +79,32 @@ public final class P146DirectImports {
     if(!summary.consistent())throw new IOException("P146_COUNT_INCONSISTENT");
     return summary;
   }
+  /**
+   * Private best-effort first in-package literal candidate, never a real Node
+   * resolver. The returned canonical name stays in the isolated UID only.
+   */
+  public static String firstExistingSource(byte[] entry,Index index)throws IOException {
+    // Reuse P146's strict UTF-8, size and matched-hint budget fail-closed gate.
+    classify(entry,index);
+    String source=StandardCharsets.UTF_8.newDecoder()
+        .onMalformedInput(CodingErrorAction.REPORT)
+        .onUnmappableCharacter(CodingErrorAction.REPORT)
+        .decode(ByteBuffer.wrap(entry)).toString();
+    Matcher m=HINT.matcher(source);
+    while(m.find()){
+      String base=scoped(m.group(2));
+      if(base==null)continue;
+      String[] names={base,base+".js",base+".cjs",base+".mjs",
+                      base+".json",base+"/index.js"};
+      for(String candidate:names){
+        if((candidate.endsWith(".js")||candidate.endsWith(".cjs")||
+            candidate.endsWith(".mjs")||candidate.endsWith(".json")) &&
+           candidate.length()<=512 && index.hasMember(candidate))
+          return candidate;
+      }
+    }
+    return null;
+  }
   public static Summary classifyOriginal(byte[] entry,P77TarAudit.Result root)
       throws IOException {
     if(root==null||!root.isExactOriginal())

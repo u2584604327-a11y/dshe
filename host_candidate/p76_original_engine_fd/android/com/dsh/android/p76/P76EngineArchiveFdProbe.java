@@ -15,6 +15,7 @@ import com.dsh.android.p78.P78ModuleSlot;
 import com.dsh.android.p144.P144ScopedSourceBroker;
 import com.dsh.android.p145.P145ExactBootEntry;
 import com.dsh.android.p146.P146DirectImports;
+import com.dsh.android.p147.P147ScopedCandidateLease;
 import java.util.Arrays;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -77,6 +78,7 @@ public final class P76EngineArchiveFdProbe {
            !b.getBoolean("p144_two_readonly_resources_verified",false) ||
            !b.getBoolean("p145_exact_cli_entry_verified",false) ||
            !b.getBoolean("p146_original_cli_hints_classified",false) ||
+           !b.getBoolean("p147_one_verified_dependency_source",false) ||
            b.getLong("bytes",-1)!=expectedBytes[0] ||
            expectedSha[0]==null || !expectedSha[0].equals(b.getString("sha256"))) {
           terminal[0]=true;listener.fail("P76_REPLY_UID_SESSION_OR_HASH_MISMATCH");return;
@@ -92,6 +94,8 @@ public final class P76EngineArchiveFdProbe {
         listener.report("P145_ORIGINAL_NODE_IMPORT_OR_EXECUTION=NOT_WIRED");
         listener.report("P146_ORIGINAL_CLI_DIRECT_IMPORT_HINT_SCAN=PASS");
         listener.report("P146_COMPLETE_RUNTIME_IMPORT_GRAPH=NOT_PROVEN");
+        listener.report("P147_ONE_SCOPED_RELATIVE_CANDIDATE_FD_SECOND_ROOT=PASS");
+        listener.report("P147_COMPLETE_MODULE_GRAPH_OR_NODE_EXEC=NOT_PROVEN");
         listener.report("P76_ISOLATED_SOURCE_ARCHIVE_NOT_EXECUTED=YES");
         listener.report("P76_PRODUCTION_NODE_MODULE_LOADING_READY=NOT_WIRED");
         if("com.dsh.android".equals(host.getPackageName())) {
@@ -189,7 +193,8 @@ public final class P76EngineArchiveFdProbe {
     } catch(RuntimeException badParcel){return;}
     if(fd==null)return;
     new Thread(()->{
-      try(ParcelFileDescriptor.AutoCloseInputStream in=
+      try(ParcelFileDescriptor secondPassFd=ParcelFileDescriptor.dup(fd.getFileDescriptor());
+          ParcelFileDescriptor.AutoCloseInputStream in=
           new ParcelFileDescriptor.AutoCloseInputStream(fd)){
         MessageDigest digest=sha();
         long count=0;byte[] buffer=new byte[65536];int n,first=-1,second=-1;
@@ -237,6 +242,27 @@ public final class P76EngineArchiveFdProbe {
         P146DirectImports.Summary hints=
             P146DirectImports.classifyOriginal(realEntry,original);
         if(!hints.consistent())throw new IOException("P146_STATIC_HINTS_INCONSISTENT");
+        String target=P146DirectImports.firstExistingSource(
+            realEntry,original::hasOriginalMember);
+        if(target==null)
+          throw new IOException("P147_NO_BOUNDED_RELATIVE_CANDIDATE");
+        // Second pass comes from a duplicated already-authorized read-only
+        // archive FD. The first P77 GZIP stream may have closed its own FD.
+        try(P147ScopedCandidateLease one=new P147ScopedCandidateLease(session,target);
+            ParcelFileDescriptor.AutoCloseInputStream secondIn=
+                new ParcelFileDescriptor.AutoCloseInputStream(secondPassFd)){
+          secondIn.getChannel().position(0);
+          P77TarAudit.Result again=P77TarAudit.inspectGzip(
+              secondIn,null,null,null,one);
+          if(!again.isExactOriginal() || !one.ready())
+            throw new IOException("P147_SECOND_TAR_ROOT_NOT_EXACT");
+          String moduleSha=one.digest();
+          byte[] content=one.takeOnce(session);
+          if(!one.exhausted() || content.length==0 ||
+             content.length>P147ScopedCandidateLease.MAX_SOURCE_BYTES ||
+             !moduleSha.equals(hex(sha().digest(content))))
+            throw new IOException("P147_ONE_SHOT_MODULE_DIGEST_OR_CAP");
+        }
         // Only bounded counters in isolated UID; never send paths/source via Binder.
         // Both brokers clear source on close. No bytes/paths leave isolated UID.
         }
@@ -258,6 +284,7 @@ public final class P76EngineArchiveFdProbe {
         b.putBoolean("p144_two_readonly_resources_verified",true);
         b.putBoolean("p145_exact_cli_entry_verified",true);
         b.putBoolean("p146_original_cli_hints_classified",true);
+        b.putBoolean("p147_one_verified_dependency_source",true);
         Message ack=Message.obtain(null,ACK);ack.setData(b);reply.send(ack);
       }catch(Exception failure){
         // Never send an unverified success; no private archive bytes or paths
