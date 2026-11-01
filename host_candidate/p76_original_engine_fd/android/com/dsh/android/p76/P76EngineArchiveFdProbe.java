@@ -42,13 +42,18 @@ public final class P76EngineArchiveFdProbe {
   private static MessageDigest sha() throws Exception {
     return MessageDigest.getInstance("SHA-256");
   }
-  /** Only this side-by-side test Activity can request the real source archive. */
+  /** Only disposable P43 test Activity in same-package original CI scratch APK
+   * or standalone P51 test app may request exact original engine.bin FD. */
   public static void start(Activity host,Messenger isolated,String session,
                            Listener listener) {
     if(host==null || isolated==null || listener==null || session==null ||
        !session.matches("[0-9a-f]{64}") ||
-       !"com.dsh.p51.isolatedprobe".equals(host.getPackageName()))
-      throw new SecurityException("P76_PINNED_ORIGINAL_SIDECAR_REQUIRED");
+       !"com.dsh.android.p43.P43ProbeActivity".equals(host.getClass().getName()) ||
+       !("com.dsh.p51.isolatedprobe".equals(host.getPackageName()) ||
+         "com.dsh.android".equals(host.getPackageName())) ||
+       host.getApplicationInfo()==null ||
+       host.getApplicationInfo().uid!=android.os.Process.myUid())
+      throw new SecurityException("P76_PINNED_P43_TEST_ACTIVITY_AND_PACKAGE_REQUIRED");
     final Handler main=new Handler(Looper.getMainLooper());
     final long[] expectedBytes={-1};
     final String[] expectedSha={null};
@@ -76,6 +81,10 @@ public final class P76EngineArchiveFdProbe {
         listener.report("P78_BOUNDED_ORIGINAL_JS_BYTES_READ_ONCE_IN_ISOLATED_UID=PASS");
         listener.report("P76_ISOLATED_SOURCE_ARCHIVE_NOT_EXECUTED=YES");
         listener.report("P76_PRODUCTION_NODE_MODULE_LOADING_READY=NOT_WIRED");
+        if("com.dsh.android".equals(host.getPackageName())) {
+          listener.report("P143_SAME_PACKAGE_ORIGINAL_ENGINE_FD_ISOLATED_SHA=PASS");
+          listener.report("P143_ORIGINAL_APP_ENGINE_SCRIPT_EXECUTED=NO");
+        }
       }
     });
     new Thread(()->{

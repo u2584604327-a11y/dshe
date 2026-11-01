@@ -1,0 +1,88 @@
+name: P143 original com.dsh.android isolated engine archive FD (emulator only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p76_original_engine_fd/android/com/dsh/android/p76/P76EngineArchiveFdProbe.java'
+      - 'host_candidate/p143_same_package_engine_fd/**'
+      - '.github/workflows/p143-original-package-isolated-engine-fd.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p143-original-fd-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verified-original-package-archive-fd:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P49_NODE_STAGE: '0'
+      P51_SIDE_BY_SIDE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.11'}
+      - name: Verify original-only test host, no license acceptance or privileged tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$P47_NO_HOST_FALLBACK" = 1 && test "$P49_NODE_STAGE" = 0 && test "$P51_SIDE_BY_SIDE" = 0
+          bash -n host_candidate/p143_same_package_engine_fd/run_real_original_emulator.sh
+          bash -n host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          grep -Fq '"com.dsh.android.p43.P43ProbeActivity".equals(host.getClass().getName())' host_candidate/p76_original_engine_fd/android/com/dsh/android/p76/P76EngineArchiveFdProbe.java
+          grep -Fq '"com.dsh.android".equals(host.getPackageName())' host_candidate/p76_original_engine_fd/android/com/dsh/android/p76/P76EngineArchiveFdProbe.java
+          grep -Fq 'P76_FAILED_TO_UNLINK_HOST_PATH' host_candidate/p76_original_engine_fd/android/com/dsh/android/p76/P76EngineArchiveFdProbe.java
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/d8"
+      - name: Build full pinned v138 original-package temporary APK and assert P47 host denies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > .p143_build.log 2>&1; then
+            grep -E 'P43_|P47_|P76_|P143_|error:|Traceback' .p143_build.log | tail -n 20 || true
+            exit 1
+          fi
+          apk=.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          test -s "$apk"
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          "$sdk/build-tools/35.0.0/aapt" dump badging "$apk" | grep -Fq "package: name='com.dsh.android'"
+          grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p143_build.log
+          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p143_build.log
+          grep -Fxq 'P43_APK_ORIGINAL_COMPONENTS_AND_APPLICATION_PRESERVED=PASS_STATIC' .p143_build.log
+          echo P143_PINNED_ORIGINAL_DSH_TEST_APK_BUNDLE=PASS
+      - name: Enable ephemeral emulator KVM
+        shell: bash
+        run: if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Android35 actual app + isolated worker original archive FD and full TAR
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p143_same_package_engine_fd/run_real_original_emulator.sh
+      - name: Clear original scratch, test signer and logs even on failed gate
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp .p143_build.log
+          echo P143_PRODUCTION_NODE_SCRIPTS=NOT_EXECUTED >> "$GITHUB_STEP_SUMMARY"
+          echo P143_REAL_ENGINE_MANAGER_HANDOFF=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P143_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P143_FIXED_SIGNED_V139=BLOCKED >> "$GITHUB_STEP_SUMMARY"
