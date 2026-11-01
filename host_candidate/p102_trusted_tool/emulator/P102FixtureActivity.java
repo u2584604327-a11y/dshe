@@ -1,6 +1,7 @@
 package com.dsh.p102.trustedtoolprobe;
 
 import android.app.Activity;
+import android.graphics.Rect;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -42,6 +43,7 @@ public final class P102FixtureActivity extends Activity {
           approveButton.setText("P102 isolated Binder lab\nApprove ONE synthetic read (no DSH access)");
         }
         Log.i(TAG,"P102_REAL_BINDER_PENDING_NATIVE_APPROVAL=PASS");
+        if(approveButton!=null)approveButton.post(this::reportNativeApprovalView);
       },
       (name,args)->{
         if(!P102TrustedToolGate.TOOL.equals(name)||
@@ -122,11 +124,24 @@ public final class P102FixtureActivity extends Activity {
     if(!bound)Log.e(TAG,"P102_REAL_SERVICE_BIND=FAIL");
     else Log.i(TAG,"P102_NATIVE_FOREGROUND_BIND=PASS");
   }
+  // Standalone synthetic lab only: report actual *visible native button*
+  // geometry after the framework grants window focus and a pending call.
+  // Never log the session ID, user app state, or any private content.
+  private void reportNativeApprovalView(){
+    if(approveButton==null || pendingCallId==null || !hasWindowFocus() ||
+       !approveButton.isShown() || !approveButton.isEnabled() ||
+       isFinishing() || isDestroyed())return;
+    Rect r=new Rect();
+    if(approveButton.getGlobalVisibleRect(r) &&
+       r.width()>=8 && r.height()>=8 &&
+       r.left>=0 && r.top>=0 && r.right<=10000 && r.bottom<=10000)
+      Log.i(TAG,"P162_VISIBLE_NATIVE_APPROVAL_RECT="+
+          r.left+","+r.top+","+r.right+","+r.bottom);
+  }
   @Override public void onWindowFocusChanged(boolean hasFocus){
     super.onWindowFocusChanged(hasFocus);
-    // Android framework callback, not derived from synthetic UI dump.
-    // Log no tokens, session IDs, button text or private app content.
     Log.i(TAG,"P102_NATIVE_WINDOW_FOCUS="+(hasFocus?"YES":"NO"));
+    if(hasFocus && approveButton!=null)approveButton.post(this::reportNativeApprovalView);
   }
   @Override protected void onStop(){
     // Never retain an approved or pending slot while the Activity is hidden.

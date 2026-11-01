@@ -10,6 +10,14 @@ adb shell am force-stop com.dsh.p102.trustedtoolprobe || true
 adb shell am start -n com.dsh.p102.trustedtoolprobe/.P102FixtureActivity
 # Source pure lab-native consent gate; never approves on its own.
 source "$(dirname "$0")/p102_native_focus_gate.sh"
+p162_os_resumed_app(){
+  # Read-only Android ActivityManager independent of fixture-reported rect.
+  # Exact package AND Activity token must be the current top-resumed app.
+  local current
+  current="$(adb shell dumpsys activity activities 2>/dev/null |
+    grep -E 'topResumedActivity=|mResumedActivity=' | head -n 8 || true)"
+  grep -Eq 'com\.dsh\.p102\.trustedtoolprobe/.?P102FixtureActivity|com\.dsh\.p102\.trustedtoolprobe/com\.dsh\.p102\.trustedtoolprobe\.P102FixtureActivity' <<< "$current"
+}
 probe(){
   adb logcat -d -v brief -s P102_TOOL_BINDER:I AndroidRuntime:E '*:S' \
     | sed -E 's/(session|grant|token)=[^ ]+/\1=[REDACTED]/g' \
@@ -47,6 +55,35 @@ for attempt in $(seq 1 35); do
   }
   before_revoke="$(grep -Fc 'P102_NATIVE_BACKGROUND_REVOKE=PASS' .p102tmp/filtered-log.txt || true)"
   before_pending="$(grep -Fc 'P102_REAL_BINDER_PENDING_NATIVE_APPROVAL=PASS' .p102tmp/filtered-log.txt || true)"
+  # P162: Android36 UiAutomator intermittently returns ONLY SystemUI nodes.
+  # Instead require true native visible button rect AND OS top-resumed app
+  # before any real input. No blind screen-center or repeated taps.
+  if [[ "$P102_ANDROID_API" == 36 ]]; then
+    if COORDS="$(python3 "$(dirname "$0")/p162_native_visible_rect.py" .p102tmp/filtered-log.txt 2> .p102tmp/ui-selection-reason.txt)";then
+      after_revoke="$(grep -Fc 'P102_NATIVE_BACKGROUND_REVOKE=PASS' .p102tmp/filtered-log.txt || true)"
+      after_pending="$(grep -Fc 'P102_REAL_BINDER_PENDING_NATIVE_APPROVAL=PASS' .p102tmp/filtered-log.txt || true)"
+      sleep 1
+      probe 'P102_PREAPPROVAL_REQUEST_GATE=PASS' || {
+        echo P162_PENDING_DISAPPEARED_DURING_FOCUS_SETTLE=FAIL;exit 1;
+      }
+      if p102_native_focus_gate .p102tmp/filtered-log.txt "$after_revoke" "$after_pending" &&
+         p162_os_resumed_app;then
+        UI_LAST_REASON="READY_NATIVE_VIEW_OS_FOCUS"
+        echo P162_ANDROID36_NATIVE_VISIBLE_VIEW_AND_OS_RESUMED=PASS
+        break
+      fi
+      UI_LAST_REASON="P162_NATIVE_VIEW_OR_OS_RESUME_UNSTABLE"
+      COORDS=""
+    else
+      UI_LAST_REASON="$(head -n1 .p102tmp/ui-selection-reason.txt || true)"
+      COORDS=""
+    fi
+    if grep -Fq 'P102_TRUSTED_EXECUTION_COUNT=' .p102tmp/filtered-log.txt;then
+      echo P162_EXECUTED_BEFORE_VERIFIED_NATIVE_CLICK=FAIL;exit 1;
+    fi
+    sleep 1
+    continue
+  fi
   if ! adb shell uiautomator dump /sdcard/p102-window.xml >/dev/null 2>&1; then
     UI_LAST_REASON="UI_DUMP_UNAVAILABLE"
   else
@@ -176,6 +213,14 @@ probe 'P102_PREAPPROVAL_REQUEST_GATE=PASS' || {
 if ! p102_native_focus_gate .p102tmp/filtered-log.txt "$after_revoke" "$after_pending";then
   echo P161_PRECLICK_FOCUS_OR_BINDER_GENERATION_STALE=FAIL
   exit 1
+fi
+if [[ "$P102_ANDROID_API" == 36 ]];then
+  # Revalidate native rectangle freshness AND independent ActivityManager
+  # top-resumed identity just before the single original UI button tap.
+  if ! p162_os_resumed_app ||
+     ! python3 "$(dirname "$0")/p162_native_visible_rect.py" .p102tmp/filtered-log.txt >/dev/null;then
+    echo P162_PRECLICK_NATIVE_RECT_OR_OS_WINDOW_STALE=FAIL;exit 1
+  fi
 fi
 echo 'P102_NATIVE_ENABLED_BUTTON_IDENTIFIED=PASS'
 echo 'P161_NATIVE_FOCUS_AND_PENDING_GENERATION_VERIFIED_BEFORE_CLICK=PASS'
