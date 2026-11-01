@@ -109,6 +109,62 @@ public final class DshInstrumentation extends Instrumentation {
     }
     return false;
   }
+  /** Real original host APK Service Binder test (disposable emulator only).
+   * Does not call real tools or access any user files.
+   */
+  private void verifyP120IsolatedService() throws Exception {
+    final android.content.Context context=getTargetContext();
+    final java.util.concurrent.CountDownLatch done=
+        new java.util.concurrent.CountDownLatch(1);
+    final java.util.concurrent.atomic.AtomicBoolean accepted=
+        new java.util.concurrent.atomic.AtomicBoolean(false);
+    final android.os.HandlerThread handlerThread=
+        new android.os.HandlerThread("p120-authenticated-receipt");
+    handlerThread.start();
+    final android.os.Messenger receiver=new android.os.Messenger(
+        new android.os.Handler(handlerThread.getLooper()) {
+      @Override public void handleMessage(android.os.Message result) {
+        try {
+          final android.os.Bundle data=result.getData();
+          final int sender=result.sendingUid;
+          accepted.set(result.what==12002 &&
+              android.os.Process.isIsolatedUid(sender) &&
+              sender!=android.os.Process.myUid() &&
+              data.getBoolean("isolated",false) &&
+              data.getInt("observedUid",-1)==sender &&
+              "DENY_ALL".equals(data.getString("toolAccess")) &&
+              !data.containsKey("fixedResult"));
+        } finally { done.countDown(); }
+      }
+    });
+    final android.content.ServiceConnection connection=
+        new android.content.ServiceConnection() {
+      @Override public void onServiceConnected(
+          android.content.ComponentName component, android.os.IBinder binder) {
+        try {
+          android.os.Message request=android.os.Message.obtain(null,12001);
+          request.replyTo=receiver;
+          new android.os.Messenger(binder).send(request);
+        } catch(android.os.RemoteException failed) { done.countDown(); }
+      }
+      @Override public void onServiceDisconnected(
+          android.content.ComponentName component) { done.countDown(); }
+    };
+    final android.content.Intent intent=new android.content.Intent();
+    intent.setClassName("com.dsh.android","com.dsh.p120.P120IsolatedDenyService");
+    boolean bound=false;
+    try {
+      bound=context.bindService(intent,connection,android.content.Context.BIND_AUTO_CREATE);
+      assertTrue(bound,"P120_ORIGINAL_SERVICE_NOT_BINDABLE");
+      assertTrue(done.await(15,java.util.concurrent.TimeUnit.SECONDS),
+          "P120_REAL_BINDER_RESPONSE_MISSING");
+      assertTrue(accepted.get(),"P120_ISOLATED_SENDER_UID_OR_DENY_ALL_INVALID");
+    } finally {
+      if(bound)context.unbindService(connection);
+      handlerThread.quitSafely();
+    }
+  }
+
   @Override public void onStart() {
     Bundle result=new Bundle();
     Activity activity=null;
@@ -129,6 +185,9 @@ public final class DshInstrumentation extends Instrumentation {
       Class.forName("com.dsh.p1.NativeDiagnosticReview",true,activity.getClassLoader());
       Class.forName("com.dsh.p1.ApprovedDiagnosticSendGate",true,activity.getClassLoader());
 
+      phase="P120_REAL_ORIGINAL_HOST_ISOLATED_SERVICE";
+      verifyP120IsolatedService();
+      result.putString("P120_ORIGINAL_HOST_ISOLATED_UID","PASS_REAL_ANDROID_BINDER");
       phase="NATIVE_PINNED_QUEUE";
       // Use a native-owned 0700 root, never the shared app filesDir itself.
       // P5 correctly rejects group/other writable roots rather than
