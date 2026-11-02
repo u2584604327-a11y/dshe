@@ -103,13 +103,18 @@ public final class P37RemoteProcess extends Process {
   private boolean accept(int uid, String incomingSession, byte[] data,
       BoundedStream stream) {
     if (!authenticate(uid, incomingSession)) return false;
-    if (reason != TerminalReason.RUNNING) return false;
-    if (data == null || data.length < 1 || data.length > MAX_FRAME_BYTES ||
-        !stream.offer(data)) {
-      failClosed(TerminalReason.BUFFER_OVERFLOW);
-      return false;
+    // Serialize the final RUNNING check and frame enqueue with authenticated
+    // EXIT. Otherwise EXIT can publish REMOTE_EXIT while a prior callback is
+    // waiting for the stream monitor, then that callback can append a frame
+    // after terminal publication. Preserve lock order: lock -> stream.
+    synchronized (lock) {
+      if (reason != TerminalReason.RUNNING) return false;
+      if (data != null && data.length >= 1 && data.length <= MAX_FRAME_BYTES &&
+          stream.offer(data)) return true;
     }
-    return true;
+    // Never call the remote kill control while holding the lifecycle lock.
+    failClosed(TerminalReason.BUFFER_OVERFLOW);
+    return false;
   }
 
   public boolean onAuthenticatedExit(int frameworkUid, String incomingSession,

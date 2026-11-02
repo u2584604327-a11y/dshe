@@ -5,6 +5,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** No Android stubs, APK, network, personal data or original DSH files. */
 public final class P37RemoteProcessTest {
@@ -207,11 +209,62 @@ public final class P37RemoteProcessTest {
     merged.onAuthenticatedExit(UID,S,0);
     System.out.println("P37_BUFFERED_TOKEN_BYTES_ZEROIZED_AFTER_READ_DISCARD=PASS");
   }
+
+  /** Force frame enqueue to wait on the stream while EXIT tries to commit.
+   * A terminal exit must never be published before an already admitted frame
+   * is queued. The old implementation set REMOTE_EXIT while frame.offer()
+   * was still blocked, and this deterministic schedule caught the inversion.
+   */
+  private static void awaitBlocked(Thread t, String label)throws Exception {
+    long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(5);
+    while(t.getState()!=Thread.State.BLOCKED && System.nanoTime()<deadline) {
+      if(!t.isAlive())throw new AssertionError(label+" ended unexpectedly");
+      Thread.sleep(2);
+    }
+    ok(t.getState()==Thread.State.BLOCKED,label+" must reach bounded contention");
+  }
+  private static void testExitFrameAtomicity()throws Exception {
+    Port port=new Port();P37RemoteProcess p=start(port);
+    java.lang.reflect.Field f=P37RemoteProcess.class.getDeclaredField("stdout");
+    f.setAccessible(true);
+    Object stream=f.get(p);
+    byte[] frame=b("synthetic-pre-exit-frame\\n");
+    AtomicBoolean frameAccepted=new AtomicBoolean(false);
+    AtomicBoolean exitAccepted=new AtomicBoolean(false);
+    AtomicReference<Throwable> failure=new AtomicReference<>();
+    Thread writer=new Thread(()->{
+      try {frameAccepted.set(p.onAuthenticatedStdout(UID,S,frame));}
+      catch(Throwable t){failure.compareAndSet(null,t);}
+    },"p37-test-frame");
+    Thread exiter=new Thread(()->{
+      try {exitAccepted.set(p.onAuthenticatedExit(UID,S,0));}
+      catch(Throwable t){failure.compareAndSet(null,t);}
+    },"p37-test-exit");
+    synchronized(stream) {
+      writer.start();
+      awaitBlocked(writer,"frame waiting for stream");
+      exiter.start();
+      awaitBlocked(exiter,"exit waiting for lifecycle lock");
+      ok(p.terminalReason()==P37RemoteProcess.TerminalReason.RUNNING,
+         "terminal exit must not overtake in-flight admitted frame");
+    }
+    writer.join(5000);exiter.join(5000);
+    ok(!writer.isAlive()&&!exiter.isAlive(),"both callbacks terminate");
+    ok(failure.get()==null,"callbacks do not throw");
+    ok(frameAccepted.get()&&exitAccepted.get(),"frame accepted before exit");
+    ok("synthetic-pre-exit-frame\\n".equals(readAll(p.getInputStream())),
+       "pre-exit frame remains readable after authentic exit");
+    ok(p.waitFor()==0&&port.kill==0,"clean exit without spurious child kill");
+    ok(!p.onAuthenticatedStdout(UID,S,b("late")),
+       "post-exit frame still rejected");
+    System.out.println("P37_EXIT_FRAME_ORDER_SERIALIZED_WITH_TERMINAL=PASS");
+  }
   public static void main(String[] args)throws Exception {
     testLifecycle();testIsolationAndReplay();testBoundedBuffer();
     testTimeoutAndDisconnect();testStdinAndFailures();
     testLocalReaderCloseKeepsChildAlive();
     testBufferedReadyTokenErasure();
+    testExitFrameAtomicity();
     System.out.println("P37_JAVA_PROCESS_LIFECYCLE_PROXY_TESTS=PASS assertions="+checks);
     System.out.println("P37_ORIGINAL_ENGINEMANAGER_WIRING=NO");
     System.out.println("P37_ANDROID_BINDER_RUNTIME_E2E=NOT_TESTED");
