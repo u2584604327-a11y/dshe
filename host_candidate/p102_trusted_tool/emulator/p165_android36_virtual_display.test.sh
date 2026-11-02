@@ -7,7 +7,10 @@ bash -n "$file"
 grep -Fq 'GITHUB_ACTIONS' "$file"
 grep -Fq 'GITHUB_REPOSITORY' "$file"
 grep -Fq 'Xvfb :96 -screen 0 1280x900x24 -nolisten tcp' "$file"
-grep -Fq 'DISPLAY=:96 xdpyinfo' "$file"
+grep -Fq 's.connect("/tmp/.X11-unix/X96")' "$file"
+if grep -Fq 'xdpyinfo' "$file" && ! grep -Fq 'No x11-utils / xdpyinfo package dependency' "$file";then
+  echo P165_UNEXPECTED_X11_UTILS_DEPENDENCY=FAIL;exit 1
+fi
 grep -Fq 'P165_NATIVE_CONSENT_WAS_NOT_INJECTED=YES' "$file"
 if grep -Eq 'adb|input tap|am start|sdkmanager|apt-get|curl |wget |wm dismiss-keyguard' "$file";then
   echo P165_UNAPPROVED_EMULATOR_CONTROL_IN_DISPLAY_HELPER=FAIL;exit 1

@@ -10,8 +10,11 @@ fi
 if [[ -z "${GITHUB_ENV:-}" || -z "${RUNNER_TEMP:-}" ]];then
   echo P165_RUNNER_ENVIRONMENT=DENIED;exit 2
 fi
-if ! command -v Xvfb >/dev/null || ! command -v xdpyinfo >/dev/null;then
-  echo P165_VIRTUAL_DISPLAY_PREREQUISITE=UNAVAILABLE;exit 2
+if ! command -v Xvfb >/dev/null;then
+  echo P165_XVFB_BINARY_NOT_AVAILABLE=DENIED;exit 2
+fi
+if ! command -v python3 >/dev/null;then
+  echo P165_PYTHON_SOCKET_PROBE_UNAVAILABLE=DENIED;exit 2
 fi
 # Do not change, unlock or inspect any real device. This is only the
 # disposable Android36 software window host display.
@@ -26,7 +29,9 @@ for i in {1..20};do
   if ! kill -0 "$pid" 2>/dev/null;then
     echo P165_XVFB_EXITED_PREMATURELY=DENIED;exit 2
   fi
-  if DISPLAY=:96 xdpyinfo >/dev/null 2>&1;then
+  # Confirm this X11 server is actually listening using Python stdlib.
+  # No x11-utils / xdpyinfo package dependency and no display interaction.
+  if python3 -c 'import socket; s=socket.socket(socket.AF_UNIX); s.settimeout(1); s.connect("/tmp/.X11-unix/X96"); s.close()' >/dev/null 2>&1;then
     alive=1;break
   fi
   sleep 1
