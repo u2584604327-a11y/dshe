@@ -19,7 +19,10 @@ public final class P75EngineStartRendezvous {
   private static final String DENY="P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK";
   private static final long WAIT_MILLIS=12000;
   private static Pending pending;
-  private static final ThreadLocal<String> trustedCall=new ThreadLocal<>();
+  // A claim belongs to this exact pending lease object, not a reusable
+  // session string. Cancellation plus accidental host-session ID reuse must
+  // NEVER reactivate a stale engine-thread permit.
+  private static final ThreadLocal<Pending> trustedCall=new ThreadLocal<>();
   private static final class Pending {
     final String session;
     final CountDownLatch entered=new CountDownLatch(1);
@@ -44,7 +47,7 @@ public final class P75EngineStartRendezvous {
       if(pending==null || pending.terminal ||
          !pending.session.equals(session) || trustedCall.get()!=null)
         throw new SecurityException("P75_UNAUTHORIZED_ENGINE_THREAD");
-      trustedCall.set(session);
+      trustedCall.set(pending);
     }
   }
   public static boolean awaitOriginalBridgeEntered(long timeoutMillis)
@@ -78,12 +81,11 @@ public final class P75EngineStartRendezvous {
   }
   public static Process startOrDeny(ProcessBuilder requested) throws IOException {
     Pending p;
-    String current=trustedCall.get();
+    Pending claimed=trustedCall.get();
     trustedCall.remove();
     synchronized(LOCK) {
       p=pending;
-      if(p==null || p.terminal || current==null ||
-         !current.equals(p.session) || p.waiting)
+      if(p==null || p.terminal || claimed!=p || p.waiting)
         throw new IOException(DENY);
       // Reject unknown engine argv BEFORE any waiting or receipt of child.
       List<String> args=requested==null?null:requested.command();

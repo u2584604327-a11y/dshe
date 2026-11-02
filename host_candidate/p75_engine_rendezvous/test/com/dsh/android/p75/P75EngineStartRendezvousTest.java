@@ -3,6 +3,8 @@ import com.dsh.p37.P37RemoteProcess;
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 public final class P75EngineStartRendezvousTest {
   static final String S="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   static final P37RemoteProcess.IsolatedUidVerifier UID = u->u==99055;
@@ -109,6 +111,39 @@ public final class P75EngineStartRendezvousTest {
     quick.join(2500);
     check(!quick.isAlive() && shortError.get()==null &&
           shortResult.get()==shortLived,"early_exit_keeps_actual_process_facade");
+    // P170: deterministically prove a cancelled lease's thread capability
+    // cannot become valid again if a buggy host reuses an identical session.
+    // The old session value alone was previously enough to pass validation.
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    CountDownLatch oldClaimReady=new CountDownLatch(1);
+    CountDownLatch useOldClaim=new CountDownLatch(1);
+    AtomicReference<String> staleResult=new AtomicReference<>();
+    Thread staleClaim=new Thread(()->{
+      try{
+        P75EngineStartRendezvous.claimOnEngineThread(S);
+        oldClaimReady.countDown();
+        if(!useOldClaim.await(3,TimeUnit.SECONDS)){
+          staleResult.set("THREAD_COORDINATION_TIMEOUT");
+          return;
+        }
+        staleResult.set(error(fixture()));
+      }catch(Exception exception){staleResult.set("THREAD_EXCEPTION");}
+    },"p170-cancelled-generation-engine-thread");
+    staleClaim.start();
+    check(oldClaimReady.await(2,TimeUnit.SECONDS),"old_generation_claimed");
+    P75EngineStartRendezvous.cancelSession("CANCELLED");
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    useOldClaim.countDown();
+    staleClaim.join(2500);
+    check(!staleClaim.isAlive(),"old_generation_rejected_without_waiting");
+    check("P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK".equals(staleResult.get()),
+          "cancelled_generation_cannot_reuse_identical_session_string");
+    check(P75EngineStartRendezvous.isArmed(),"fresh_generation_not_consumed_by_stale_thread");
+    check(!P75EngineStartRendezvous.authenticatedChildStarted(S,remote(),99055,UID),
+          "fresh_generation_child_not_accepted_without_fresh_bridge_call");
+    P75EngineStartRendezvous.cancelSession("CANCELLED");
+    check(!P75EngineStartRendezvous.isArmed(),"fresh_generation_can_be_cancelled");
+    System.out.println("P170_CANCELLED_LEASE_REARM_SAME_SESSION_STALE_THREAD_DENIED=PASS");
     System.out.println("P75_CROSS_THREAD_ENGINE_BINDER_RENDEZVOUS_JVM=PASS assertions="+count);
     System.out.println("P75_NON_MAIN_LAUNCH_WAITS_FOR_AUTHENTICATED_CHILD=PASS");
     System.out.println("P75_UNAUTHORIZED_ARGV_AND_NO_HOST_FALLBACK=PASS");
