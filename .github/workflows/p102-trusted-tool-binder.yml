@@ -252,6 +252,15 @@ jobs:
         run: |
           set -euo pipefail
           bash host_candidate/p102_trusted_tool/emulator/p165_android36_virtual_display.test.sh
+      - name: P166 exact QEMU missing-runtime dependency security regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p102_trusted_tool/emulator/p166_qemu_loader_preflight.sh
+          bash host_candidate/p102_trusted_tool/emulator/p166_qemu_loader_preflight.test.sh
+      - name: P166 repair confirmed missing libpulse runtime on disposable Android36 runner
+        shell: bash
+        run: bash host_candidate/p102_trusted_tool/emulator/p166_qemu_loader_preflight.sh
       - name: P165 launch isolated Xvfb graphical display for Android36
         shell: bash
         run: bash host_candidate/p102_trusted_tool/emulator/p165_android36_virtual_display.sh
