@@ -259,6 +259,7 @@ jobs:
           set -euo pipefail
           bash -n host_candidate/p102_trusted_tool/emulator/p166_qemu_loader_preflight.sh
           bash host_candidate/p102_trusted_tool/emulator/p166_qemu_loader_preflight.test.sh
+          python3 host_candidate/p102_trusted_tool/emulator/p172_graphics_backend_contract.test.py
       - name: P166 provide confirmed libpulse runtime before Android36 QEMU is installed by action
         shell: bash
         run: bash host_candidate/p102_trusted_tool/emulator/p166_qemu_loader_preflight.sh
@@ -274,7 +275,11 @@ jobs:
           profile: pixel_2
           disable-animations: true
           # Deliberately omit -no-window on the Xvfb-only Android36 job.
-          emulator-options: -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          # P172: emulator 37.2.13 CI trace used deprecated
+          # swiftshader_indirect and failed native focus. Use supported
+          # official software auto-backend ONLY for Android36. This is a
+          # graphics-environment hypothesis, NOT native approval bypass.
+          emulator-options: -no-snapshot -noaudio -no-boot-anim -gpu software
           script: P102_ANDROID_API=36 bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
       - name: P157 cleanup and preserve production denial
         if: always()
