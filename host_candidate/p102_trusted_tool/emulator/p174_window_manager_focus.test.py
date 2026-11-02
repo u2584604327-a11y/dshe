@@ -19,14 +19,22 @@ for raw,expected in cases:
     assert mod.summarize(raw)==expected,(expected,mod.summarize(raw))
 assert mod.summarize("A"*(mod.MAX_BYTES+1))==("OVERSIZE","OVERSIZE","UNKNOWN")
 script=Path(__file__).with_name("run_emulator_e2e.sh").read_text()
-# The Android16 WMS focus declarations may be in displays, not windows.
-# Assert a single read-only DISPLAY query FIRST, then a legacy WINDOWS
-# fallback on absent declarations, all entirely inside the existing hard-
-# failure path. The parser emits only allowlisted categorical labels.
-assert script.count('adb shell dumpsys window displays 2>/dev/null')==1
+# The Android16 focus evidence is independently read at TWO scoped points:
+# P176's sole non-consent SYSTEMUI environment candidate, then P175's final
+# hard-failed consent diagnostic. The legacy windows fallback is inside P175
+# only. None of these WMS values may authorize input or tool execution.
+assert script.count('adb shell dumpsys window displays 2>/dev/null')==2
 assert script.count('adb shell dumpsys window windows 2>/dev/null')==1
 assert 'python3 "$(dirname "$0")/p174_window_manager_focus.py"' in script
-assert script.index("P102_NATIVE_BUTTON_UNAVAILABLE_AFTER_BOUNDED_POLL") < script.index("adb shell dumpsys window displays 2>/dev/null") < script.index("adb shell dumpsys window windows 2>/dev/null") < script.index("  exit 1\nfi\nread -r X Y")
+p175_start=script.index("  # P175:")
+p176_start=script.index("    # P176:")
+p175_end=script.index("  # P164:",p175_start)
+p175=script[p175_start:p175_end]
+assert p176_start < script.index("P102_NATIVE_BUTTON_UNAVAILABLE_AFTER_BOUNDED_POLL") < p175_start
+assert p175.count('adb shell dumpsys window displays 2>/dev/null')==1
+assert p175.count('adb shell dumpsys window windows 2>/dev/null')==1
+assert p175.index('adb shell dumpsys window displays 2>/dev/null') < p175.index('adb shell dumpsys window windows 2>/dev/null')
+assert p175_end < script.index("  exit 1\nfi\nread -r X Y")
 assert script.index("P175_WM_FOCUS_SOURCE=DISPLAYS") < script.index("P175_WM_FOCUS_SOURCE=WINDOWS") < script.index("P175_WM_FOCUS_SOURCE=UNAVAILABLE")
 assert script.count("P175_WM_FOCUS_SOURCE=")==3
 assert "grep -Eq '^[[:space:]]*m(CurrentFocus|FocusedApp)[[:space:]]*='" in script
