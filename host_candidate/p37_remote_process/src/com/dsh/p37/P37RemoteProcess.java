@@ -82,8 +82,18 @@ public final class P37RemoteProcess extends Process {
 
   /** Caller MUST pass platform Message.sendingUid, never a Bundle UID. */
   private boolean authenticate(int frameworkUid, String incomingSession) {
-    if (frameworkUid == boundUid && session.equals(incomingSession) &&
-        uidVerifier.isIsolatedUid(frameworkUid)) return true;
+    // UID verification belongs to the trusted native adapter, but a runtime
+    // verifier failure must NOT escape a Binder callback with the remote
+    // Process still RUNNING (and unread token-bearing READY bytes buffered).
+    // Treat an unavailable/throwing verifier exactly as a rejected identity.
+    // Never include the verifier exception or private session in logs.
+    if (frameworkUid == boundUid && session.equals(incomingSession)) {
+      try {
+        if (uidVerifier.isIsolatedUid(frameworkUid)) return true;
+      } catch (RuntimeException ignored) {
+        // Invalidate below; do not let a framework lookup failure fail open.
+      }
+    }
     failClosed(TerminalReason.IDENTITY_MISMATCH);
     return false;
   }

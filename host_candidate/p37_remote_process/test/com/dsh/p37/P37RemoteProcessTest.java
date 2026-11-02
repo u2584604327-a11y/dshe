@@ -304,12 +304,61 @@ public final class P37RemoteProcessTest {
        "overflow erases unread stream bytes before exit can publish READY");
     System.out.println("P37_OVERFLOW_EXIT_ORDER_FAIL_CLOSED=PASS");
   }
+  /**
+   * A platform UID lookup may fail after construction. It must revoke a
+   * token-bearing stdout stream or EXIT callback without throwing through
+   * Android Messenger/Binder and without accepting a forged clean exit.
+   */
+  private static void testVerifierExceptionFailsClosed() throws Exception {
+    AtomicBoolean throwOnCheck=new AtomicBoolean(false);
+    Port stdoutPort=new Port();
+    P37RemoteProcess stdoutProcess=new P37RemoteProcess(UID,S,uid->{
+      if (throwOnCheck.get()) throw new IllegalStateException("verifier unavailable");
+      return uid==UID;
+    },stdoutPort);
+    ok(stdoutProcess.onAuthenticatedStdout(UID,S,
+          b("dsh web: http://127.0.0.1:3080/?token=synthetic-only\\n")),
+       "pre-failure frame accepted while native UID verifier healthy");
+    ok(!bufferZeroized(stdoutProcess.getInputStream()),
+       "pre-failure buffered READY synthetic positive control");
+    throwOnCheck.set(true);
+    ok(!stdoutProcess.onAuthenticatedStdout(UID,S,b("late frame")),
+       "throwing native UID verifier rejects stdout without escaping callback");
+    ok(stdoutProcess.terminalReason()==P37RemoteProcess.TerminalReason.IDENTITY_MISMATCH,
+       "runtime verifier error must publish identity failure terminal");
+    ok(stdoutProcess.waitFor()==125&&stdoutPort.kill==1,
+       "runtime verifier error requests one force stop");
+    ok(bufferZeroized(stdoutProcess.getInputStream())&&
+       stdoutProcess.getInputStream().read()==-1,
+       "runtime verifier failure discards unread token-bearing READY");
+    ok(!stdoutProcess.onAuthenticatedExit(UID,S,0),
+       "post-revocation authentic-looking clean exit cannot rewrite terminal");
+
+    AtomicBoolean exitVerifierFailure=new AtomicBoolean(false);
+    Port exitPort=new Port();
+    P37RemoteProcess exitProcess=new P37RemoteProcess(UID,S,uid->{
+      if(exitVerifierFailure.get())throw new IllegalArgumentException("temporary lookup failure");
+      return uid==UID;
+    },exitPort);
+    ok(exitProcess.onAuthenticatedStdout(UID,S,b("unread synthetic token\\n")),
+       "healthy verifier permits pre-exit stream");
+    exitVerifierFailure.set(true);
+    ok(!exitProcess.onAuthenticatedExit(UID,S,0),
+       "throwing verifier rejects exit without trusting zero status");
+    ok(exitProcess.terminalReason()==P37RemoteProcess.TerminalReason.IDENTITY_MISMATCH &&
+       exitProcess.waitFor()==125 && exitPort.kill==1,
+       "exit verifier exception revokes proxy instead of clean exit");
+    ok(bufferZeroized(exitProcess.getInputStream()),
+       "exit verifier exception removes unread stream bytes");
+    System.out.println("P37_UID_VERIFIER_RUNTIME_FAILURE_FAIL_CLOSED=PASS");
+  }
   public static void main(String[] args)throws Exception {
     testLifecycle();testIsolationAndReplay();testBoundedBuffer();
     testTimeoutAndDisconnect();testStdinAndFailures();
     testLocalReaderCloseKeepsChildAlive();
     testBufferedReadyTokenErasure();
     testExitFrameAtomicity();testOverflowExitAtomicity();
+    testVerifierExceptionFailsClosed();
     System.out.println("P37_JAVA_PROCESS_LIFECYCLE_PROXY_TESTS=PASS assertions="+checks);
     System.out.println("P37_ORIGINAL_ENGINEMANAGER_WIRING=NO");
     System.out.println("P37_ANDROID_BINDER_RUNTIME_E2E=NOT_TESTED");
