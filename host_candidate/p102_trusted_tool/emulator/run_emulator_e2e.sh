@@ -3,6 +3,22 @@ set -euo pipefail
 # P157: one E2E script, two independent emulator runners. Deny unknown API.
 P102_ANDROID_API="${P102_ANDROID_API:-35}"
 case "$P102_ANDROID_API" in 35|36) ;; *) echo P102_ANDROID_API_UNSUPPORTED=DENIED;exit 2;; esac
+# P166: this runs INSIDE the Android emulator action, after its QEMU ELF is
+# actually installed/booted. A closed loader is required before any consent.
+if [[ "$P102_ANDROID_API" == 36 ]];then
+  qemu_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+  qemu_binary="$qemu_root/emulator/qemu/linux-x86_64/qemu-system-x86_64"
+  if [[ ! -x "$qemu_binary" ]];then
+    echo P166_QEMU_POSTBOOT_ELF_UNAVAILABLE=FAIL;exit 1
+  fi
+  qemu_loader_report="$(ldd "$qemu_binary")" || {
+    echo P166_QEMU_POSTBOOT_LDD=FAIL;exit 1
+  }
+  if grep -Fq '=> not found' <<< "$qemu_loader_report";then
+    echo P166_QEMU_POSTBOOT_DEPENDENCY_MISSING=FAIL;exit 1
+  fi
+  echo P166_QEMU_POSTBOOT_FULL_LOADER_DEPENDENCIES=PASS
+fi
 # Isolate all ADB operations to the sole transient CI emulator serial.
 # Never resolve to a connected physical or user Android device.
 export ANDROID_SERIAL=emulator-5554

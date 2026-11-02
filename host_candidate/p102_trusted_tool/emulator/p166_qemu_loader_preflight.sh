@@ -26,42 +26,50 @@ p166_prepare_qemu_loader(){
         "${RUNNER_OS:-}" != Linux ]];then
     echo P166_NON_CI_OR_FOREIGN_REPO=DENIED;return 3
   fi
-  local sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
-  local binary="$sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64"
-  local before="${RUNNER_TEMP:-}/p166-qemu-ldd-before.txt"
-  local after="${RUNNER_TEMP:-}/p166-qemu-ldd-after.txt"
-  [[ -n "${RUNNER_TEMP:-}" && -x "$binary" && ! -L "$binary" ]] || {
-    echo P166_PINNED_QEMU_BINARY_UNAVAILABLE=DENIED;return 3;
-  }
-  ldd "$binary" > "$before" || {
-    echo P166_QEMU_LDD_BEFORE=DENIED;return 3;
-  }
-  local state=0
-  p166_classify_missing "$before" || state=$?
-  case "$state" in
-    0) echo P166_QEMU_LOADER=ALREADY_CLOSED;return 0;;
-    2) ;;
-    *) echo P166_QEMU_LOADER_UNEXPECTED_MISSING=DENIED;return 3;;
-  esac
-  # Ephemeral GitHub runner only, exact Ubuntu distribution package.
-  # No --yes-license, no Android sdkmanager, no user data or APK.
+  # reactivecircus/android-emulator-runner installs emulator binaries INSIDE
+  # its subsequent step, so a pre-step cannot require the QEMU ELF yet.
   if ! grep -q '^ID=ubuntu$' /etc/os-release ||
      ! grep -q '^VERSION_ID="24.04"$' /etc/os-release;then
     echo P166_UNSUPPORTED_RUNNER_DISTRIBUTION=DENIED;return 3
   fi
-  sudo env DEBIAN_FRONTEND=noninteractive apt-get -qq update
-  sudo env DEBIAN_FRONTEND=noninteractive apt-get -y -qq install --no-install-recommends libpulse0
-  ldd "$binary" > "$after" || {
-    echo P166_QEMU_LDD_AFTER=DENIED;return 3;
+  local sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+  local binary="$sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64"
+  local state=0 before="${RUNNER_TEMP:-}/p166-qemu-ldd-before.txt"
+  [[ -n "${RUNNER_TEMP:-}" ]] || { echo P166_RUNNER_TEMP_REQUIRED=DENIED;return 3; }
+  if [[ -x "$binary" ]];then
+    ldd "$binary" > "$before" || {
+      echo P166_QEMU_LDD_BEFORE=DENIED;return 3;
+    }
+    p166_classify_missing "$before" || state=$?
+    case "$state" in
+      0) echo P166_QEMU_LOADER_ALREADY_CLOSED=PASS;;
+      2) ;;
+      *) echo P166_QEMU_LOADER_UNEXPECTED_MISSING=DENIED;return 3;;
+    esac
+  else
+    echo P166_QEMU_ELF_STAGED_BY_ANDROID_EMULATOR_ACTION_LATER=YES
+  fi
+  # The actual prior graphical QEMU failure identified libpulse.so.0.
+  # One exact Ubuntu runtime package, transient runner only. Never Android
+  # sdkmanager --licenses, mobile devices, original APK or native approval.
+  local libs="${RUNNER_TEMP}/p166-ldconfig.txt"
+  ldconfig -p > "$libs" || {
+    echo P166_LDCONFIG_UNAVAILABLE=DENIED;return 3;
   }
-  state=0
-  p166_classify_missing "$after" || state=$?
-  [[ "$state" == 0 ]] || {
-    echo P166_GRAPHICAL_QEMU_LOADER_STILL_INCOMPLETE=DENIED;return 3;
-  }
-  echo P166_LIBPULSE_RUNTIME_REPAIRED_ON_EPHEMERAL_CI=PASS
-  echo P166_NATIVE_APPROVAL_AND_PRODUCTION_APK=UNTOUCHED
+  if ! grep -Eq '[[:space:]]libpulse\.so\.0[[:space:]]' "$libs";then
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get -qq update
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get -y -qq install --no-install-recommends libpulse0
+    ldconfig -p > "$libs" || {
+      echo P166_LDCONFIG_AFTER_INSTALL=DENIED;return 3;
+    }
+  fi
+  if ! grep -Eq '[[:space:]]libpulse\.so\.0[[:space:]]' "$libs";then
+    echo P166_LIBPULSE_RUNTIME_NOT_FOUND=DENIED;return 3
+  fi
+  echo P166_LIBPULSE_RUNTIME_AVAILABLE_BEFORE_EMULATOR_RUNNER=PASS
+  echo P166_QEMU_LOADER_FULL_CLOSURE_CHECK=REQUIRED_AFTER_EMULATOR_BOOT
 }
+
 if [[ "${BASH_SOURCE[0]}" == "$0" ]];then
   p166_prepare_qemu_loader
 fi
