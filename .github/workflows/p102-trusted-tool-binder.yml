@@ -47,6 +47,9 @@ jobs:
           bash -n host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
           bash host_candidate/p102_trusted_tool/emulator/p102_native_focus_gate.test.sh
           python3 host_candidate/p102_trusted_tool/emulator/p162_native_visible_rect.test.py
+          bash -n host_candidate/p102_trusted_tool/emulator/p164_emulator_screen_preflight.sh
+          bash -n host_candidate/p102_trusted_tool/emulator/p164_emulator_screen_preflight.test.sh
+          bash host_candidate/p102_trusted_tool/emulator/p164_emulator_screen_preflight.test.sh
       - name: Assert user phone diagnostic script is read-only and never deletes an APK
         shell: bash
         run: |

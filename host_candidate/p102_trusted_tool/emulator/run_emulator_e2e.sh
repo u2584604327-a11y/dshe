@@ -3,7 +3,12 @@ set -euo pipefail
 # P157: one E2E script, two independent emulator runners. Deny unknown API.
 P102_ANDROID_API="${P102_ANDROID_API:-35}"
 case "$P102_ANDROID_API" in 35|36) ;; *) echo P102_ANDROID_API_UNSUPPORTED=DENIED;exit 2;; esac
+# Isolate all ADB operations to the sole transient CI emulator serial.
+# Never resolve to a connected physical or user Android device.
+export ANDROID_SERIAL=emulator-5554
 adb wait-for-device
+source "$(dirname "$0")/p164_emulator_screen_preflight.sh"
+p164_prepare_disposable_emulator_ui "$P102_ANDROID_API"
 adb install -r .p102tmp/p102-emulator-only.apk
 adb logcat -c
 adb shell am force-stop com.dsh.p102.trustedtoolprobe || true
@@ -179,6 +184,13 @@ print("P102_UI_DIAG_ENABLED_APPROVAL_NODES="+str(len(enabled)))
     grep -E 'mResumedActivity=|topResumedActivity=|mFocusedApp=' |
     sed -E 's/.*(com\.dsh\.p102\.trustedtoolprobe|com\.android\.systemui|com\.android\.launcher[[:alnum:]_.]*).*/P102_UI_DIAG_FOCUS_PACKAGE=\1/' |
     grep '^P102_UI_DIAG_FOCUS_PACKAGE=' | head -n 3 || true
+  # P164: distinguish foreground Activity from real native window focus.
+  # Only count our own synthetic lab tag; no screenshots or raw UI content.
+  probe 'P102_PREAPPROVAL_REQUEST_GATE=PASS' || true
+  for focus in YES NO;do
+    echo "P164_UI_DIAG_NATIVE_WINDOW_FOCUS_${focus}=$(grep -Fc "P102_NATIVE_WINDOW_FOCUS=${focus}" .p102tmp/filtered-log.txt || true)"
+  done
+  echo "P164_UI_DIAG_VISIBLE_NATIVE_BUTTON_RECTS=$(grep -Fc 'P162_VISIBLE_NATIVE_APPROVAL_RECT=' .p102tmp/filtered-log.txt || true)"
   # Diagnostics are counts/categories from the lab-only log tag, never
   # original DSH chat, account data, model text, screenshots or raw UI XML.
   # Crucially, do not relaunch the Activity or attempt a blind approval.
