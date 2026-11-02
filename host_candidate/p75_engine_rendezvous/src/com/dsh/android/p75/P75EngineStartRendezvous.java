@@ -113,7 +113,11 @@ public final class P75EngineStartRendezvous {
     try{got=p.answered.await(WAIT_MILLIS,TimeUnit.MILLISECONDS);}
     catch(InterruptedException cancelled){
       Thread.currentThread().interrupt();
-      cancelSession("CANCELLED");
+      // P177: this engine thread owns p, NOT whatever global pending
+      // might have been created after its own lease was cancelled.
+      // The old cancelSession() could revoke a newer (even identical
+      // session-text) lease when an abandoned old thread wakes late.
+      cancelExactPending(p);
       throw new IOException("P75_ENGINE_START_INTERRUPTED",cancelled);
     }
     P37RemoteProcess abandoned=null;
@@ -140,24 +144,32 @@ public final class P75EngineStartRendezvous {
     if(returned==null)throw new IOException("P75_CHILD_ACK_MISSING_OR_TIMEOUT");
     return returned;
   }
-  public static void cancelSession(String category){
-    if(!"CANCELLED".equals(category) && !"BINDER_LOST".equals(category) &&
-       !"ACTIVITY_GONE".equals(category) && !"TIMEOUT".equals(category))
-      throw new IllegalArgumentException("P75_BOUNDED_REASON_REQUIRED");
+  // Identity-scoped interruption cleanup: an obsolete coroutine's
+  // cancellation may only affect its own exact pending generation.
+  // In particular it may not tear down a new lease after host re-arming.
+  private static void cancelExactPending(Pending target){
+    if(target==null)return;
     P37RemoteProcess undelivered=null;
     synchronized(LOCK) {
-      Pending p=pending;
-      if(p==null)return;
-      p.terminal=true;
+      if(pending!=target)return;
+      target.terminal=true;
       // A previously authenticated child must not survive cancellation
       // before the engine thread actually receives its Process facade.
-      undelivered=p.proxy;
-      p.proxy=null;
-      p.answered.countDown();
+      undelivered=target.proxy;
+      target.proxy=null;
+      target.answered.countDown();
       pending=null;
     }
     // Never invoke a potentially reentrant remote-control callback under LOCK.
     if(undelivered!=null)undelivered.destroyForcibly();
+  }
+  public static void cancelSession(String category){
+    if(!"CANCELLED".equals(category) && !"BINDER_LOST".equals(category) &&
+       !"ACTIVITY_GONE".equals(category) && !"TIMEOUT".equals(category))
+      throw new IllegalArgumentException("P75_BOUNDED_REASON_REQUIRED");
+    Pending target;
+    synchronized(LOCK){target=pending;}
+    cancelExactPending(target);
   }
   public static boolean isArmed() {
     synchronized(LOCK){return pending!=null;}

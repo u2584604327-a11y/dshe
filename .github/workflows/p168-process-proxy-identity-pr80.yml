@@ -39,6 +39,7 @@ jobs:
           grep -Fxq 'P75_REAL_PRODUCTION_NODE_AND_READY=NOT_TESTED' p168-result.txt
           grep -Fxq 'P170_CANCELLED_LEASE_REARM_SAME_SESSION_STALE_THREAD_DENIED=PASS' p168-result.txt
           grep -Fxq 'P171_ONE_PENDING_LEASE_EXACTLY_ONE_ENGINE_THREAD_CLAIM=PASS' p168-result.txt
+          grep -Fxq 'P177_INTERRUPTED_OLD_LEASE_CANNOT_REVOKE_NEW_SAME_SESSION=PASS' p168-result.txt
           bash host_candidate/p37_remote_process/run_contract_tests.sh | tee p37-result.txt
           grep -Eq '^P37_JAVA_PROCESS_LIFECYCLE_PROXY_TESTS=PASS assertions=[0-9]+$' p37-result.txt
           grep -Fxq 'P37_ORIGINAL_ENGINEMANAGER_WIRING=NO' p37-result.txt

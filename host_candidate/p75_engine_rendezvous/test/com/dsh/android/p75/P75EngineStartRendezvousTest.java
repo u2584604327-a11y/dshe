@@ -214,6 +214,33 @@ public final class P75EngineStartRendezvousTest {
     P75EngineStartRendezvous.cancelSession("BINDER_LOST");
     check(stops.get()==1,"duplicate_cancel_does_not_repeat_force_stop");
     check(!P75EngineStartRendezvous.isArmed(),"cancelled_lease_consumed");
+    // P177: deterministically exercise the exact generation cancellation
+    // helper invoked on interrupted old engine threads. The production
+    // interruption catch used to cancel the global pending by name and could
+    // revoke a fresh session armed after the old lease was abandoned.
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    Object oldLease=pendingField.get(null);
+    P75EngineStartRendezvous.cancelSession("CANCELLED");
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    Object freshLease=pendingField.get(null);
+    check(oldLease!=freshLease,"distinct_lease_objects_on_rearm");
+    java.lang.reflect.Method scopedCancel=P75EngineStartRendezvous.class
+        .getDeclaredMethod("cancelExactPending",oldLease.getClass());
+    scopedCancel.setAccessible(true);
+    scopedCancel.invoke(null,oldLease);
+    check(P75EngineStartRendezvous.isArmed(),
+          "interrupted_old_lease_cannot_revoke_new_same_session");
+    check(pendingField.get(null)==freshLease,
+          "interrupted_old_lease_keeps_exact_new_pending_identity");
+    check(!P75EngineStartRendezvous.authenticatedChildStarted(S,remote(),99055,UID),
+          "fresh_session_still_requires_own_engine_bridge");
+    scopedCancel.invoke(null,freshLease);
+    check(!P75EngineStartRendezvous.isArmed(),
+          "interrupted_current_lease_can_revoke_its_own_generation");
+    scopedCancel.invoke(null,oldLease);
+    check(!P75EngineStartRendezvous.isArmed(),
+          "duplicate_old_cancel_is_idempotent");
+    System.out.println("P177_INTERRUPTED_OLD_LEASE_CANNOT_REVOKE_NEW_SAME_SESSION=PASS");
     System.out.println("P175_CANCEL_UNDELIVERED_AUTHENTICATED_CHILD_REVOKED=PASS");
     System.out.println("P171_ONE_PENDING_LEASE_EXACTLY_ONE_ENGINE_THREAD_CLAIM=PASS");
     System.out.println("P170_CANCELLED_LEASE_REARM_SAME_SESSION_STALE_THREAD_DENIED=PASS");
