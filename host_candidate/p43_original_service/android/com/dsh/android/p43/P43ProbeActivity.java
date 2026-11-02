@@ -394,7 +394,16 @@ public final class P43ProbeActivity extends Activity {
     bound=bindService(new Intent(this,P43IsolatedWorker.class),
                       connection,Context.BIND_AUTO_CREATE);
     if(!bound)fail("BIND_FAILED");
-    main.postDelayed(()->{if(!received&&!failed)fail("BINDER_ACK_TIMEOUT");},12000);
+    // P167: the 57 MB original archive FD CI probe may cold-start an
+    // isolated worker slowly under disposable emulator resource pressure.
+    // Extend ONLY p76_archive's test Binder HELLO deadline; all unrelated
+    // P43 probes keep 12 s, and UID/session/hash/timeout fail-closed checks
+    // remain identical. This Activity is absent from any release APK.
+    final boolean p143ArchiveTest=getIntent()!=null &&
+        getIntent().getBooleanExtra("p76_archive",false);
+    final long binderAckBudgetMs=p143ArchiveTest?45000L:12000L;
+    main.postDelayed(()->{if(!received&&!failed)fail("BINDER_ACK_TIMEOUT");},
+                     binderAckBudgetMs);
   }
   @Override protected void onDestroy(){
     if(getIntent()!=null && getIntent().getBooleanExtra("p75_rendezvous",false))

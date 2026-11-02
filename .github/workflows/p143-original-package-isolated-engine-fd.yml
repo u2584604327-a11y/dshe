@@ -57,6 +57,18 @@ jobs:
           set -euo pipefail
           test "$P47_NO_HOST_FALLBACK" = 1 && test "$P49_NODE_STAGE" = 0 && test "$P51_SIDE_BY_SIDE" = 0
           bash -n host_candidate/p143_same_package_engine_fd/run_real_original_emulator.sh
+          # P167 test-only cold Binder ACK window: never loosen actual
+          # UID, session, hash, fail-closed or non-archive 12s budget.
+          python3 - <<'P167'
+          from pathlib import Path
+          src=Path('host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java').read_text()
+          assert 'getBooleanExtra("p76_archive",false)' in src
+          assert 'p143ArchiveTest?45000L:12000L' in src
+          assert 'if(!received&&!failed)fail("BINDER_ACK_TIMEOUT")' in src
+          assert 'android.os.Process.isIsolatedUid(m.sendingUid)' in src
+          assert '!session.equals(m.getData().getString("session"))' in src
+          print('P167_ONLY_P143_ARCHIVE_ACK_DEADLINE_EXTENDED_KEEP_UID_SESSION_DENY=PASS')
+          P167
           bash -n host_candidate/p159_emulator_root_reattach.sh
           bash host_candidate/p159_emulator_root_reattach.test.sh
           grep -Fq 'P144ScopedSourceBroker.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
