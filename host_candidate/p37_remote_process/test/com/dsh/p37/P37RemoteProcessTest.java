@@ -259,12 +259,57 @@ public final class P37RemoteProcessTest {
        "post-exit frame still rejected");
     System.out.println("P37_EXIT_FRAME_ORDER_SERIALIZED_WITH_TERMINAL=PASS");
   }
+  /** A full bounded stream must revoke the proxy before an authenticated
+   * clean EXIT can overtake its already-admitted invalid frame. The worker
+   * kill is requested outside lifecycle lock; no real Node/Android process.
+   */
+  private static void testOverflowExitAtomicity()throws Exception {
+    Port port=new Port();P37RemoteProcess p=start(port);
+    byte[] full=new byte[P37RemoteProcess.MAX_FRAME_BYTES];
+    Arrays.fill(full,(byte)'s');
+    for(int i=0;i<P37RemoteProcess.BUFFER_BYTES/full.length;i++)
+      ok(p.onAuthenticatedStdout(UID,S,full),"bounded buffer fill "+i);
+    java.lang.reflect.Field f=P37RemoteProcess.class.getDeclaredField("stdout");
+    f.setAccessible(true);
+    Object stream=f.get(p);
+    AtomicBoolean overflowAccepted=new AtomicBoolean(true);
+    AtomicBoolean exitAccepted=new AtomicBoolean(true);
+    AtomicReference<Throwable> failure=new AtomicReference<>();
+    Thread overflow=new Thread(()->{
+      try {overflowAccepted.set(p.onAuthenticatedStdout(UID,S,b("overflow"))); }
+      catch(Throwable t){failure.compareAndSet(null,t);}
+    },"p37-test-overflow");
+    Thread exiter=new Thread(()->{
+      try {exitAccepted.set(p.onAuthenticatedExit(UID,S,0));}
+      catch(Throwable t){failure.compareAndSet(null,t);}
+    },"p37-test-exit-after-overflow");
+    synchronized(stream) {
+      overflow.start();
+      awaitBlocked(overflow,"overflow waiting for full stream");
+      exiter.start();
+      awaitBlocked(exiter,"exit waiting behind overflow");
+      ok(p.terminalReason()==P37RemoteProcess.TerminalReason.RUNNING,
+         "no terminal event before contended overflow decision");
+    }
+    overflow.join(5000);exiter.join(5000);
+    ok(!overflow.isAlive()&&!exiter.isAlive(),"overflow and exit terminate");
+    ok(failure.get()==null,"overflow and exit callbacks do not throw");
+    ok(!overflowAccepted.get()&&!exitAccepted.get(),
+       "invalid frame denied and later clean EXIT rejected");
+    ok(p.terminalReason()==P37RemoteProcess.TerminalReason.BUFFER_OVERFLOW,
+       "overflow terminal cannot be overwritten by clean exit");
+    ok(p.waitFor()==125&&port.kill==1,
+       "overflow discards stream and requests exactly one force stop");
+    ok(p.getInputStream().read()==-1,
+       "overflow erases unread stream bytes before exit can publish READY");
+    System.out.println("P37_OVERFLOW_EXIT_ORDER_FAIL_CLOSED=PASS");
+  }
   public static void main(String[] args)throws Exception {
     testLifecycle();testIsolationAndReplay();testBoundedBuffer();
     testTimeoutAndDisconnect();testStdinAndFailures();
     testLocalReaderCloseKeepsChildAlive();
     testBufferedReadyTokenErasure();
-    testExitFrameAtomicity();
+    testExitFrameAtomicity();testOverflowExitAtomicity();
     System.out.println("P37_JAVA_PROCESS_LIFECYCLE_PROXY_TESTS=PASS assertions="+checks);
     System.out.println("P37_ORIGINAL_ENGINEMANAGER_WIRING=NO");
     System.out.println("P37_ANDROID_BINDER_RUNTIME_E2E=NOT_TESTED");

@@ -107,13 +107,18 @@ public final class P37RemoteProcess extends Process {
     // EXIT. Otherwise EXIT can publish REMOTE_EXIT while a prior callback is
     // waiting for the stream monitor, then that callback can append a frame
     // after terminal publication. Preserve lock order: lock -> stream.
+    boolean callKill;
     synchronized (lock) {
       if (reason != TerminalReason.RUNNING) return false;
       if (data != null && data.length >= 1 && data.length <= MAX_FRAME_BYTES &&
           stream.offer(data)) return true;
+      // An invalid/full frame must publish BUFFER_OVERFLOW before EXIT can
+      // commit REMOTE_EXIT. Never let a concurrent clean exit mask a
+      // fail-closed transport violation or expose buffered READY bytes.
+      callKill = failClosedUnderLock(TerminalReason.BUFFER_OVERFLOW);
     }
-    // Never call the remote kill control while holding the lifecycle lock.
-    failClosed(TerminalReason.BUFFER_OVERFLOW);
+    // Remote control may reenter the proxy; invoke it only outside lock.
+    if (callKill) requestForceStopSafely();
     return false;
   }
 
@@ -136,22 +141,28 @@ public final class P37RemoteProcess extends Process {
   public void onStopDeadlineExpired() { failClosed(TerminalReason.STOP_TIMEOUT); }
   public TerminalReason terminalReason() { return reason; }
 
+  /** Caller holds lifecycle lock; terminal reason and stream discard are
+   * one indivisible decision against authenticated EXIT. No remote callbacks.
+   */
+  private boolean failClosedUnderLock(TerminalReason cause) {
+    if (reason != TerminalReason.RUNNING) return false;
+    reason = cause;
+    exitCode = SUPERVISOR_FAILURE_EXIT_CODE;
+    stdout.finish(true); // Discard untrusted pending lines; never imply READY.
+    stderr.finish(true);
+    exited.countDown();
+    if (!killSent) { killSent = true; return true; }
+    return false;
+  }
+  private void requestForceStopSafely() {
+    try { control.requestForceStop(); } catch (RuntimeException ignored) {
+      // Failure is terminal; physical worker kill is NOT proven.
+    }
+  }
   private void failClosed(TerminalReason cause) {
-    boolean callKill = false;
-    synchronized (lock) {
-      if (reason != TerminalReason.RUNNING) return;
-      reason = cause;
-      exitCode = SUPERVISOR_FAILURE_EXIT_CODE;
-      stdout.finish(true); // Discard untrusted pending lines; never imply READY.
-      stderr.finish(true);
-      exited.countDown();
-      if (!killSent) { killSent = true; callKill = true; }
-    }
-    if (callKill) {
-      try { control.requestForceStop(); } catch (RuntimeException ignored) {
-        // Failure is already terminal; physical worker kill is NOT proven.
-      }
-    }
+    boolean callKill;
+    synchronized (lock) { callKill = failClosedUnderLock(cause); }
+    if (callKill) requestForceStopSafely();
   }
   @Override public InputStream getInputStream() { return stdout; }
   @Override public InputStream getErrorStream() { return stderr; }
