@@ -37,6 +37,10 @@ public final class P37RemoteProcessTest {
   }
   private static void testLifecycle()throws Exception {
     Port port=new Port(); P37RemoteProcess p=start(port);
+    ok(p.matchesBoundIdentity(UID,S),"same verified P37 bound identity");
+    ok(!p.matchesBoundIdentity(UID+1,S),"wrong platform UID cannot match");
+    ok(!p.matchesBoundIdentity(UID,S.replace('a','b')),"wrong session cannot match");
+    ok(!p.matchesBoundIdentity(UID,null),"missing host session cannot match");
     ok(p.isAlive(),"alive at create");
     try {p.exitValue();throw new AssertionError("exitValue did not throw");}
     catch(IllegalThreadStateException expected){checks.incrementAndGet();}

@@ -70,6 +70,15 @@ public final class P37RemoteProcess extends Process {
     if (mergeErrorToOutput) stderr.finish(false);
   }
 
+  /** Pure identity comparison; NOT proof that any caller controls Binder.
+   * Trust still requires a separately validated platform Message.sendingUid
+   * and the original P68/P53 authenticated child-start event. No session
+   * contents are exposed, and mismatch never tears down a live Process.
+   */
+  public boolean matchesBoundIdentity(int frameworkUid, String hostSession) {
+    return frameworkUid == boundUid && session.equals(hostSession);
+  }
+
   /** Caller MUST pass platform Message.sendingUid, never a Bundle UID. */
   private boolean authenticate(int frameworkUid, String incomingSession) {
     if (frameworkUid == boundUid && session.equals(incomingSession) &&

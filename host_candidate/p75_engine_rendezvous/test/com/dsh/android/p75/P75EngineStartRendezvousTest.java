@@ -8,12 +8,13 @@ public final class P75EngineStartRendezvousTest {
   static final P37RemoteProcess.IsolatedUidVerifier UID = u->u==99055;
   static int count;
   static void check(boolean yes,String why){count++;if(!yes)throw new AssertionError("P75_"+why);}
-  static P37RemoteProcess remote(){
-    return new P37RemoteProcess(99055,S,UID,new P37RemoteProcess.RemoteControl(){
+  static P37RemoteProcess remoteFor(String session,int uid){
+    return new P37RemoteProcess(uid,session,u->u==uid,new P37RemoteProcess.RemoteControl(){
       public void requestGracefulStop(){}
       public void requestForceStop(){}
     });
   }
+  static P37RemoteProcess remote(){return remoteFor(S,99055);}
   static ProcessBuilder fixture(){return new ProcessBuilder("/system/bin/id","-u").directory(new File("/"));}
   static String error(ProcessBuilder p){
     try{P75EngineStartRendezvous.startOrDeny(p);return "UNEXPECTED_SUCCESS";}
@@ -37,6 +38,15 @@ public final class P75EngineStartRendezvousTest {
     check(P75EngineStartRendezvous.awaitOriginalBridgeEntered(2000),"wait_entered");
     check(error(fixture()).equals("P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK"),
           "other_thread_not_authorized");
+    // P168 negative: the host session/UID in the callback can be correct
+    // while the remote Process proxy belongs to a different session/UID.
+    // Before the P168 fix these two forged-proxy calls were accepted.
+    check(!P75EngineStartRendezvous.authenticatedChildStarted(
+          S,remoteFor(S.replace('a','b'),99055),99055,UID),
+          "other_session_proxy_denied_even_when_callback_session_matches");
+    check(!P75EngineStartRendezvous.authenticatedChildStarted(
+          S,remoteFor(S,99056),99055,UID),
+          "other_uid_proxy_denied_even_when_callback_uid_isolated");
     check(!P75EngineStartRendezvous.authenticatedChildStarted(S,remote(),99056,UID),
           "wrong_framework_uid");
     check(!P75EngineStartRendezvous.authenticatedChildStarted(S+"bad",remote(),99055,UID),

@@ -62,7 +62,12 @@ public final class P75EngineStartRendezvous {
       if(p==null || p.terminal || !p.waiting || p.proxy!=null ||
          !p.session.equals(hostGeneratedSession) || remote==null ||
          !remote.isAlive() || platformSendingUid<0 || frameworkUidVerifier==null ||
-         !frameworkUidVerifier.isIsolatedUid(platformSendingUid))
+         !frameworkUidVerifier.isIsolatedUid(platformSendingUid) ||
+         // P168: exact P37 proxy identity must match the Binder UID and
+         // host-minted pending session, not just caller-supplied labels.
+         // Does NOT authorize arbitrary Node argv, bypass P68, or confer
+         // production EngineManager access.
+         !remote.matchesBoundIdentity(platformSendingUid,hostGeneratedSession))
         return false;
       // Caller MUST be P48's onLiveProxy callback after P68 verified
       // Binder Message.sendingUid, session, ordering and CHILD_STARTED.
