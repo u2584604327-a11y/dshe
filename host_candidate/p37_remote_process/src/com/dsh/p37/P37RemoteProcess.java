@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -216,7 +217,11 @@ public final class P37RemoteProcess extends Process {
       return true;
     }
     synchronized void finish(boolean discard) {
-      if (discard) { used = 0; first = 0; }
+      if (discard) {
+        // A revoked or locally closed stream may hold a token-bearing READY line.
+        Arrays.fill(buffer, (byte) 0);
+        used = 0; first = 0;
+      }
       done = true;
       notifyAll();
     }
@@ -243,7 +248,11 @@ public final class P37RemoteProcess extends Process {
       }
       if (used == 0) return -1;
       int amount = Math.min(used, len);
-      for (int i = 0; i < amount; i++) out[off+i] = buffer[(first+i)%buffer.length];
+      for (int i = 0; i < amount; i++) {
+        int slot = (first+i)%buffer.length;
+        out[off+i] = buffer[slot];
+        buffer[slot] = 0; // Erase consumed bytes, preserve stream ordering.
+      }
       first = (first+amount)%buffer.length;
       used -= amount;
       return amount;

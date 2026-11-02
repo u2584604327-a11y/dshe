@@ -36,6 +36,7 @@ jobs:
           set -euo pipefail
           bash host_candidate/p37_remote_process/run_contract_tests.sh | tee p37-result.txt
           grep -Eq '^P37_JAVA_PROCESS_LIFECYCLE_PROXY_TESTS=PASS assertions=[0-9]+$' p37-result.txt
+          grep -Fxq 'P37_BUFFERED_TOKEN_BYTES_ZEROIZED_AFTER_READ_DISCARD=PASS' p37-result.txt
           grep -Fxq 'P37_ORIGINAL_ENGINEMANAGER_WIRING=NO' p37-result.txt
           grep -Fxq 'P37_ANDROID_BINDER_RUNTIME_E2E=NOT_TESTED' p37-result.txt
           grep -Fxq 'P37_V139_RELEASE=BLOCKED' p37-result.txt

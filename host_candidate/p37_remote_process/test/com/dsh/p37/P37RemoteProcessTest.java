@@ -154,10 +154,64 @@ public final class P37RemoteProcessTest {
         spoofed.terminalReason()==P37RemoteProcess.TerminalReason.IDENTITY_MISMATCH,
         "wrong UID still fails closed");
   }
+  /** Synthetic token only; inspect private buffer without exposing its contents. */
+  private static boolean bufferZeroized(InputStream stream)throws Exception {
+    java.lang.reflect.Field f=stream.getClass().getDeclaredField("buffer");
+    f.setAccessible(true);
+    for(byte value:(byte[])f.get(stream))if(value!=0)return false;
+    return true;
+  }
+  private static void testBufferedReadyTokenErasure()throws Exception {
+    byte[] token=b("dsh web: http://127.0.0.1:3080/?token=synthetic-test-only\n");
+    Port livePort=new Port();P37RemoteProcess live=start(livePort);
+    ok(live.onAuthenticatedStdout(UID,S,token),"synthetic READY buffered");
+    ok(!bufferZeroized(live.getInputStream()),"buffer positive control");
+    byte[] read=new byte[token.length];
+    ok(live.getInputStream().read(read)==token.length && Arrays.equals(read,token),
+       "valid READY delivered intact");
+    ok(bufferZeroized(live.getInputStream()),"consumed READY bytes zeroized");
+    ok(live.isAlive()&&livePort.kill==0,"read zeroization cannot kill child");
+    live.onAuthenticatedExit(UID,S,0);
+    ok(live.waitFor()==0,"authentic exit after erasure");
+
+    Port closePort=new Port();P37RemoteProcess closed=start(closePort);
+    ok(closed.onAuthenticatedStdout(UID,S,token),"close fixture");
+    ok(closed.getInputStream().read()==(token[0]&255),"partial read");
+    closed.getInputStream().close();
+    ok(bufferZeroized(closed.getInputStream()),"close zeroizes unread token");
+    ok(closed.isAlive()&&closePort.kill==0,"local close cannot revoke child");
+    closed.onAuthenticatedExit(UID,S,0);
+
+    Port lostPort=new Port();P37RemoteProcess lost=start(lostPort);
+    ok(lost.onAuthenticatedStdout(UID,S,token),"transport loss fixture");
+    lost.onTransportLost();
+    ok(bufferZeroized(lost.getInputStream()),"transport loss zeroizes token");
+    ok(lost.waitFor()==125&&lostPort.kill==1,"transport loss still revokes");
+
+    Port exitPort=new Port();P37RemoteProcess exited=start(exitPort);
+    ok(exited.onAuthenticatedStdout(UID,S,token),"clean exit fixture");
+    ok(exited.onAuthenticatedExit(UID,S,0),"clean exit authenticated");
+    ok(!bufferZeroized(exited.getInputStream()),"clean exit preserves unread bytes");
+    byte[] afterExit=new byte[token.length];
+    ok(exited.getInputStream().read(afterExit)==token.length &&
+       Arrays.equals(afterExit,token),"unread READY delivered after exit");
+    ok(bufferZeroized(exited.getInputStream()),"post-exit read erases bytes");
+
+    Port mergedPort=new Port();
+    P37RemoteProcess merged=new P37RemoteProcess(UID,S,uid->uid==UID,mergedPort,true);
+    ok(merged.onAuthenticatedStderr(UID,S,token),"merged stderr fixture");
+    byte[] mergedRead=new byte[token.length];
+    ok(merged.getInputStream().read(mergedRead)==token.length &&
+       Arrays.equals(mergedRead,token),"merged stderr order preserved");
+    ok(bufferZeroized(merged.getInputStream()),"merged stderr bytes zeroized");
+    merged.onAuthenticatedExit(UID,S,0);
+    System.out.println("P37_BUFFERED_TOKEN_BYTES_ZEROIZED_AFTER_READ_DISCARD=PASS");
+  }
   public static void main(String[] args)throws Exception {
     testLifecycle();testIsolationAndReplay();testBoundedBuffer();
     testTimeoutAndDisconnect();testStdinAndFailures();
     testLocalReaderCloseKeepsChildAlive();
+    testBufferedReadyTokenErasure();
     System.out.println("P37_JAVA_PROCESS_LIFECYCLE_PROXY_TESTS=PASS assertions="+checks);
     System.out.println("P37_ORIGINAL_ENGINEMANAGER_WIRING=NO");
     System.out.println("P37_ANDROID_BINDER_RUNTIME_E2E=NOT_TESTED");
