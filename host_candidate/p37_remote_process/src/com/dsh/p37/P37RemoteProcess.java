@@ -192,8 +192,12 @@ public final class P37RemoteProcess extends Process {
     private final byte[] buffer;
     private int first = 0, used = 0;
     private boolean done = false;
+    // A local Process InputStream.close() must not kill the remote child.
+    // Keep validating each authenticated bounded frame, then discard it.
+    private boolean closedByReader = false;
     BoundedStream(int cap) { buffer = new byte[cap]; }
     synchronized boolean offer(byte[] source) {
+      if (closedByReader) return true;
       if (done || source.length > buffer.length - used) return false;
       for (byte b : source) {
         buffer[(first + used) % buffer.length] = b;
@@ -235,6 +239,9 @@ public final class P37RemoteProcess extends Process {
       used -= amount;
       return amount;
     }
-    @Override public void close() { finish(true); }
+    @Override public synchronized void close() {
+      closedByReader = true;
+      finish(true);
+    }
   }
 }

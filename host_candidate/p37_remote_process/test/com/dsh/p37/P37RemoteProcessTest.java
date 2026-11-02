@@ -108,9 +108,52 @@ public final class P37RemoteProcessTest {
     try {new P37RemoteProcess(10000,S,uid->false,invalid);throw new AssertionError("wrong uid accepted");}
     catch(IllegalArgumentException expected){checks.incrementAndGet();}
   }
+  private static void testLocalReaderCloseKeepsChildAlive()throws Exception {
+    Port port=new Port();P37RemoteProcess p=start(port);
+    p.getInputStream().close();
+    ok(p.getInputStream().read()==-1,"closed stdout stays EOF");
+    ok(p.onAuthenticatedStdout(UID,S,b("discard after close\\n")),
+        "valid bounded stdout after reader close is discarded");
+    ok(p.onAuthenticatedStderr(UID,S,b("still readable\\n")),
+        "other stream remains live");
+    ok(p.isAlive()&&port.kill==0,"reader close must not terminate child");
+    ok(p.onAuthenticatedExit(UID,S,0)&&p.waitFor()==0,
+        "actual child exit remains authoritative after reader close");
+    ok("still readable\\n".equals(readAll(p.getErrorStream())),
+        "stderr retained independently");
+
+    Port mergedPort=new Port();
+    P37RemoteProcess merged=new P37RemoteProcess(UID,S,uid->uid==UID,mergedPort,true);
+    merged.getInputStream().close();
+    ok(merged.onAuthenticatedStderr(UID,S,b("merged after close\\n")),
+        "merged stderr follows closed stdout discard");
+    ok(merged.getErrorStream().read()==-1,"merged error pipe stays EOF");
+    ok(merged.isAlive()&&mergedPort.kill==0,
+        "closing merged reader does not kill isolated child");
+    ok(merged.onAuthenticatedExit(UID,S,0)&&merged.waitFor()==0,
+        "merged child exit remains authentic");
+
+    Port oversizedPort=new Port();P37RemoteProcess oversized=start(oversizedPort);
+    oversized.getInputStream().close();
+    ok(!oversized.onAuthenticatedStdout(UID,S,
+        new byte[P37RemoteProcess.MAX_FRAME_BYTES+1]),
+        "reader close cannot bypass frame-size cap");
+    ok(oversized.waitFor()==125&&oversizedPort.kill==1&&
+        oversized.terminalReason()==P37RemoteProcess.TerminalReason.BUFFER_OVERFLOW,
+        "oversized frame still fails closed");
+
+    Port spoofedPort=new Port();P37RemoteProcess spoofed=start(spoofedPort);
+    spoofed.getInputStream().close();
+    ok(!spoofed.onAuthenticatedStdout(UID+1,S,b("spoofed")),
+        "reader close cannot bypass Binder identity");
+    ok(spoofed.waitFor()==125&&spoofedPort.kill==1&&
+        spoofed.terminalReason()==P37RemoteProcess.TerminalReason.IDENTITY_MISMATCH,
+        "wrong UID still fails closed");
+  }
   public static void main(String[] args)throws Exception {
     testLifecycle();testIsolationAndReplay();testBoundedBuffer();
     testTimeoutAndDisconnect();testStdinAndFailures();
+    testLocalReaderCloseKeepsChildAlive();
     System.out.println("P37_JAVA_PROCESS_LIFECYCLE_PROXY_TESTS=PASS assertions="+checks);
     System.out.println("P37_ORIGINAL_ENGINEMANAGER_WIRING=NO");
     System.out.println("P37_ANDROID_BINDER_RUNTIME_E2E=NOT_TESTED");
