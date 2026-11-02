@@ -244,6 +244,17 @@ jobs:
           echo P157_ANDROID36_SYNTHETIC_ZERO_PERMISSIONS=PASS
       - name: P157 independent Android36 emulator hardware acceleration
         run: if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      # P165: one bounded Android36 *graphical-window* environment trial.
+      # Prior P164 -no-window run had zero real onWindowFocusChanged YES/NO
+      # callbacks; do not weaken the Android-native consent checks.
+      - name: P165 bounded virtual display safety and static negative gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash host_candidate/p102_trusted_tool/emulator/p165_android36_virtual_display.test.sh
+      - name: P165 launch isolated Xvfb graphical display for Android36
+        shell: bash
+        run: bash host_candidate/p102_trusted_tool/emulator/p165_android36_virtual_display.sh
       - name: Android36 real framework isolated Messenger and explicit native approval
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -252,7 +263,8 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          # Deliberately omit -no-window on the Xvfb-only Android36 job.
+          emulator-options: -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
           script: P102_ANDROID_API=36 bash host_candidate/p102_trusted_tool/emulator/run_emulator_e2e.sh
       - name: P157 cleanup and preserve production denial
         if: always()
