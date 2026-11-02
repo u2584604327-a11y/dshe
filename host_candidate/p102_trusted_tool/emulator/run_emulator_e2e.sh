@@ -219,6 +219,15 @@ print("P102_UI_DIAG_ENABLED_APPROVAL_NODES="+str(len(enabled)))
     grep -E 'mResumedActivity=|topResumedActivity=|mFocusedApp=' |
     sed -E 's/.*(com\.dsh\.p102\.trustedtoolprobe|com\.android\.systemui|com\.android\.launcher[[:alnum:]_.]*).*/P102_UI_DIAG_FOCUS_PACKAGE=\1/' |
     grep '^P102_UI_DIAG_FOCUS_PACKAGE=' | head -n 3 || true
+  # P174: read-only WindowManager focus classification when normal native
+  # consent gate has ALREADY failed. Never log raw dumps/tokens or alter UI.
+  if wm_snapshot="$(adb shell dumpsys window windows 2>/dev/null)";then
+    printf '%s\n' "$wm_snapshot" |
+      python3 "$(dirname "$0")/p174_window_manager_focus.py" ||
+      echo P174_WINDOW_FOCUS_DIAGNOSTIC=UNAVAILABLE
+  else
+    echo P174_WINDOW_FOCUS_DIAGNOSTIC=UNAVAILABLE
+  fi
   # P164: distinguish foreground Activity from real native window focus.
   # Only count our own synthetic lab tag; no screenshots or raw UI content.
   probe 'P102_PREAPPROVAL_REQUEST_GATE=PASS' || true
