@@ -148,14 +148,11 @@ if test -n "$instrument_apk"; then
   test_status=$?
   set -e
   printf '%s\\n' "$test_output" | head -c 4000
-  if test "$test_status" -ne 0 || \
-    ! printf '%s\\n' "$test_output" | grep -q 'P5_NATIVE_UI_REAL_ACTIVITY=PASS_INSTRUMENTATION' || \
-    ! printf '%s\\n' "$test_output" | grep -q 'P120_ORIGINAL_HOST_ISOLATED_UID=PASS_REAL_ANDROID_BINDER' || \
-    ! printf '%s\\n' "$test_output" | grep -q 'P121_ORIGINAL_ENGINE_FD_PREFIX=PASS_REAL_ANDROID_UID_HASH_AND_DENY' || \
-    ! printf '%s\\n' "$test_output" | grep -q 'P122_FULL_ENGINE_FD_SHA256=PASS_FULL_57724933_AND_CORRUPTED_REJECTED_NO_EXEC' || \
-    ! printf '%s\\n' "$test_output" | grep -q 'P124_FIXED_CHILD_ISOLATED_UID=PASS_SYSTEM_ID_CHILD_MATCHES_FRAMEWORK_ISOLATED_UID_DENY_ALL' || \
-    ! printf '%s\\n' "$test_output" | grep -q 'P5_UNTRUSTED_SCHEMA_REJECTION=PASS_ANDROID_FIXTURE' || \
-    ! printf '%s\\n' "$test_output" | grep -q 'INSTRUMENTATION_CODE: -1'; then
+  # P163: do not conflate present instrumentation PASS markers with
+  # adb transport exit status or printf|grep -q SIGPIPE. Keep the same
+  # seven mandatory gates, never accept nonzero adb or missing evidence.
+  source "$(dirname "$0")/p163_p5_instrumentation_evidence.sh"
+  if ! p163_check_p5_instrumentation "$test_status" "$test_output"; then
     echo "::error::P5 NativeDiagnosticReview real Activity UI smoke FAILED"
     exit 1
   fi
