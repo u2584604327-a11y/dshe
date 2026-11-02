@@ -36,6 +36,25 @@ display_record=("WINDOW MANAGER DISPLAY CONTENTS\n  DisplayContent{a displayId=0
                 "      mCurrentFocus=Window{11 u0 com.android.systemui/keyguard.KeyguardView}\n"
                 "      mFocusedApp=ActivityRecord{22 u0 "+lab+"/.P102FixtureActivity t1}\n")
 assert mod.summarize(display_record)==("KEYGUARD","LAB","UNKNOWN")
+# P176: requires all three independent genuine OS WMS predicates,
+# OS ActivityManager top-resumed, and a once-only delayed trial inside the
+# Android36 branch. This statusbar command is NOT approval, input tap,
+# activity start, synthetic focus or privilege grant.
+assert script.count('adb shell cmd statusbar collapse')==1
+p176=script[script.index('    # P176:'):script.index('    if COORDS="$(python3')]
+assert '[[ "$attempt" == 12 ]] && p162_os_resumed_app' in p176
+assert "adb shell dumpsys window displays 2>/dev/null" in p176
+assert "P174_WM_CURRENT_FOCUS_CATEGORY=SYSTEMUI" in p176
+assert "P174_WM_FOCUSED_APP_CATEGORY=LAB" in p176
+assert "P174_WM_KEYGUARD_SHOWING=NO" in p176
+assert "P176_SYSTEMUI_SHADE_COLLAPSE_REQUESTED=PASS_REQUEST_ONLY" in p176
+assert "P176_SYSTEMUI_SHADE_COLLAPSE=SKIPPED_NOT_PROVEN" in p176
+assert "P102_PREAPPROVAL_REQUEST_GATE=PASS" in p176
+assert 'P102_TRUSTED_EXECUTION_COUNT=' in p176
+assert "adb shell input tap" not in p176
+assert "am start" not in p176 and "wm dismiss-keyguard" not in p176
+assert script.count('adb shell input tap "$X" "$Y"')==1
+print("P176_ONCE_ONLY_SYSTEMUI_SHADE_RECOVERY_NEVER_GRANTS_CONSENT=PASS")
 print("P175_ANDROID16_WINDOW_DISPLAYS_FOCUS_SOURCE_FIRST_AND_LEGACY_FALLBACK=PASS")
 assert "adb shell input tap \"$X\" \"$Y\"" in script
 assert "p102_native_focus_gate .p102tmp/filtered-log.txt" in script

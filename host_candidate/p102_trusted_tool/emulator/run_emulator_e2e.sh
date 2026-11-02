@@ -99,6 +99,38 @@ for attempt in $(seq 1 35); do
   # Instead require true native visible button rect AND OS top-resumed app
   # before any real input. No blind screen-center or repeated taps.
   if [[ "$P102_ANDROID_API" == 36 ]]; then
+    # P176: one bounded non-consent SystemUI environment repair, supported
+    # by P175's actual failing Android36 WMS evidence:
+    # current focus=SYSTEMUI, focused app=LAB, keyguard=NO.
+    # Do not guess a tap, start/stop Activity, synthesize focus, unlock,
+    # grant anything or bypass P161/P162. A "collapse" only requests the
+    # notification/quick-settings shade to close; real native focus still
+    # determines whether the ONLY permitted approval click may occur.
+    if [[ "$attempt" == 12 ]] && p162_os_resumed_app;then
+      wm_before="$(adb shell dumpsys window displays 2>/dev/null)" || wm_before=""
+      if [[ -n "$wm_before" ]];then
+        wm_categories="$(printf '%s\n' "$wm_before" |
+          python3 "$(dirname "$0")/p174_window_manager_focus.py")" || wm_categories=""
+        if grep -Fxq 'P174_WM_CURRENT_FOCUS_CATEGORY=SYSTEMUI' <<< "$wm_categories" &&
+           grep -Fxq 'P174_WM_FOCUSED_APP_CATEGORY=LAB' <<< "$wm_categories" &&
+           grep -Fxq 'P174_WM_KEYGUARD_SHOWING=NO' <<< "$wm_categories";then
+          # One attempt only, on this disposable already-attested emulator.
+          if ! adb shell cmd statusbar collapse >/dev/null 2>&1;then
+            echo P176_SYSTEMUI_SHADE_COLLAPSE_UNAVAILABLE=FAIL;exit 1
+          fi
+          echo P176_SYSTEMUI_SHADE_COLLAPSE_REQUESTED=PASS_REQUEST_ONLY
+          sleep 1
+          probe 'P102_PREAPPROVAL_REQUEST_GATE=PASS' || {
+            echo P176_PENDING_LOST_AFTER_SHADE_COLLAPSE=FAIL;exit 1
+          }
+          if grep -Fq 'P102_TRUSTED_EXECUTION_COUNT=' .p102tmp/filtered-log.txt;then
+            echo P176_PREAPPROVAL_EXECUTION=FAIL;exit 1
+          fi
+        else
+          echo P176_SYSTEMUI_SHADE_COLLAPSE=SKIPPED_NOT_PROVEN
+        fi
+      fi
+    fi
     if COORDS="$(python3 "$(dirname "$0")/p162_native_visible_rect.py" .p102tmp/filtered-log.txt 2> .p102tmp/ui-selection-reason.txt)";then
       after_revoke="$(grep -Fc 'P102_NATIVE_BACKGROUND_REVOKE=PASS' .p102tmp/filtered-log.txt || true)"
       after_pending="$(grep -Fc 'P102_REAL_BINDER_PENDING_NATIVE_APPROVAL=PASS' .p102tmp/filtered-log.txt || true)"
