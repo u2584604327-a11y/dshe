@@ -191,6 +191,30 @@ public final class P75EngineStartRendezvousTest {
           ownerProcess.get()==legitimate,
           "original_engine_receives_exact_child_not_competitor");
     check(!P75EngineStartRendezvous.isArmed(),"race_consumed_once");
+    // P175: pin the authenticated-but-undelivered pending state without
+    // a timing-sensitive race. Earlier cases validate the real Binder callback;
+    // reflection here is restricted to the JVM cancellation-boundary test.
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    java.lang.reflect.Field pendingField=
+        P75EngineStartRendezvous.class.getDeclaredField("pending");
+    pendingField.setAccessible(true);
+    Object lease=pendingField.get(null);
+    java.lang.reflect.Field proxyField=lease.getClass().getDeclaredField("proxy");
+    proxyField.setAccessible(true);
+    java.util.concurrent.atomic.AtomicInteger stops=
+        new java.util.concurrent.atomic.AtomicInteger();
+    P37RemoteProcess undelivered=new P37RemoteProcess(99055,S,UID,
+        new P37RemoteProcess.RemoteControl(){
+          public void requestGracefulStop(){}
+          public void requestForceStop(){stops.incrementAndGet();}
+        });
+    proxyField.set(lease,undelivered);
+    P75EngineStartRendezvous.cancelSession("BINDER_LOST");
+    check(stops.get()==1,"cancel_reclaims_undelivered_child");
+    P75EngineStartRendezvous.cancelSession("BINDER_LOST");
+    check(stops.get()==1,"duplicate_cancel_does_not_repeat_force_stop");
+    check(!P75EngineStartRendezvous.isArmed(),"cancelled_lease_consumed");
+    System.out.println("P175_CANCEL_UNDELIVERED_AUTHENTICATED_CHILD_REVOKED=PASS");
     System.out.println("P171_ONE_PENDING_LEASE_EXACTLY_ONE_ENGINE_THREAD_CLAIM=PASS");
     System.out.println("P170_CANCELLED_LEASE_REARM_SAME_SESSION_STALE_THREAD_DENIED=PASS");
     System.out.println("P75_CROSS_THREAD_ENGINE_BINDER_RENDEZVOUS_JVM=PASS assertions="+count);

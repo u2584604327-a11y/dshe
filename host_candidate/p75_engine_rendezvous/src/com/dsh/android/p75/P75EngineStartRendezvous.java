@@ -116,35 +116,48 @@ public final class P75EngineStartRendezvous {
       cancelSession("CANCELLED");
       throw new IOException("P75_ENGINE_START_INTERRUPTED",cancelled);
     }
+    P37RemoteProcess abandoned=null;
+    Process returned=null;
     synchronized(LOCK){
-      // ProcessBuilder.start() may return a Process whose short-lived child
-      // exited after authenticated CHILD_STARTED. REMOTE_EXIT is legitimate;
-      // identity loss, kill, buffer failure and transport loss are NOT.
+      // REMOTE_EXIT is legitimate after CHILD_STARTED; identity/transport
+      // failures are not. A child can race an expired await() before LOCK.
       P37RemoteProcess.TerminalReason reason=p.proxy==null ? null : p.proxy.terminalReason();
       if(!got || p.terminal || p.proxy==null ||
          (reason!=P37RemoteProcess.TerminalReason.RUNNING &&
           reason!=P37RemoteProcess.TerminalReason.REMOTE_EXIT)) {
         if(pending==p)pending=null;
         p.terminal=true;
-        throw new IOException("P75_CHILD_ACK_MISSING_OR_TIMEOUT");
+        abandoned=p.proxy;
+        p.proxy=null;
+      } else {
+        returned=p.proxy;
+        p.terminal=true;
+        if(pending==p)pending=null;
       }
-      Process returned=p.proxy;
-      p.terminal=true;
-      if(pending==p)pending=null;
-      return returned;
     }
+    // Remote callbacks may reenter the rendezvous; never stop under LOCK.
+    if(abandoned!=null)abandoned.destroyForcibly();
+    if(returned==null)throw new IOException("P75_CHILD_ACK_MISSING_OR_TIMEOUT");
+    return returned;
   }
   public static void cancelSession(String category){
     if(!"CANCELLED".equals(category) && !"BINDER_LOST".equals(category) &&
        !"ACTIVITY_GONE".equals(category) && !"TIMEOUT".equals(category))
       throw new IllegalArgumentException("P75_BOUNDED_REASON_REQUIRED");
+    P37RemoteProcess undelivered=null;
     synchronized(LOCK) {
       Pending p=pending;
       if(p==null)return;
       p.terminal=true;
+      // A previously authenticated child must not survive cancellation
+      // before the engine thread actually receives its Process facade.
+      undelivered=p.proxy;
+      p.proxy=null;
       p.answered.countDown();
       pending=null;
     }
+    // Never invoke a potentially reentrant remote-control callback under LOCK.
+    if(undelivered!=null)undelivered.destroyForcibly();
   }
   public static boolean isArmed() {
     synchronized(LOCK){return pending!=null;}
