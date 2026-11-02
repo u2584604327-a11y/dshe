@@ -31,5 +31,11 @@ echo P166_CLOSED_PULSE_UNKNOWN_AND_NON_CI_NEGATIVES=PASS
 # Confirm the helper does not mistakenly require a preinstalled QEMU ELF.
 grep -Fq 'P166_QEMU_ELF_STAGED_BY_ANDROID_EMULATOR_ACTION_LATER=YES' "$(dirname "$0")/p166_qemu_loader_preflight.sh"
 grep -Fq 'P166_QEMU_POSTBOOT_FULL_LOADER_DEPENDENCIES=PASS' "$(dirname "$0")/run_emulator_e2e.sh"
+# Live QEMU proof must explicitly refuse missing binary without booting.
+if p166_require_live_booted_qemu "$tmp/not-a-qemu" >/dev/null 2>&1;then
+  echo P166_LIVE_QEMU_MISSING_BINARY_FALSE_PASS=FAIL;exit 1
+fi
+grep -Fq 'p166_require_live_booted_qemu "$qemu_binary"' "$(dirname "$0")/run_emulator_e2e.sh"
+echo P166_LIVE_QEMU_AND_BOOT_REQUIRED_AFTER_ACTION=PASS
 echo P166_EMULATOR_ACTION_STAGING_ORDER_REGRESSION=PASS
 echo P166_NO_PACKAGE_INSTALL_IN_UNIT_TEST=YES

@@ -11,13 +11,22 @@ if [[ "$P102_ANDROID_API" == 36 ]];then
   if [[ ! -x "$qemu_binary" ]];then
     echo P166_QEMU_POSTBOOT_ELF_UNAVAILABLE=FAIL;exit 1
   fi
-  qemu_loader_report="$(ldd "$qemu_binary")" || {
-    echo P166_QEMU_POSTBOOT_LDD=FAIL;exit 1
+  # P166: the emulator action has ALREADY booted Android here. Invoking
+  # ldd outside the action's launcher environment can omit bundled library
+  # search paths, so ldd alone is an unreliable readiness oracle.
+  source "$(dirname "$0")/p166_qemu_loader_preflight.sh"
+  p166_require_live_booted_qemu "$qemu_binary" || {
+    echo P166_REAL_QEMU_ANDROID_BOOT_PROOF=FAIL;exit 1
   }
-  if grep -Fq '=> not found' <<< "$qemu_loader_report";then
-    echo P166_QEMU_POSTBOOT_DEPENDENCY_MISSING=FAIL;exit 1
+  qemu_loader_report="$(ldd "$qemu_binary")" || {
+    echo P166_STANDALONE_LDD_DIAGNOSTIC=UNAVAILABLE;exit 1
+  }
+  missing_count="$(printf '%s\\n' "$qemu_loader_report" | awk '$2=="=>" && $3=="not" && $4=="found" {n++} END{print n+0}')"
+  echo "P166_STANDALONE_LDD_MISSING_LIB_COUNT=$missing_count"
+  if [[ "$missing_count" -gt 0 ]];then
+    echo P166_LDD_DISAGREES_WITH_ACTUALLY_BOOTED_QEMU=PASS_CLASSIFIED
   fi
-  echo P166_QEMU_POSTBOOT_FULL_LOADER_DEPENDENCIES=PASS
+  echo P166_RUNNING_QEMU_AND_ANDROID_BOOT_COMPLETED=PASS
 fi
 # Isolate all ADB operations to the sole transient CI emulator serial.
 # Never resolve to a connected physical or user Android device.

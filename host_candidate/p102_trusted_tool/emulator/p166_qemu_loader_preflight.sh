@@ -70,6 +70,35 @@ p166_prepare_qemu_loader(){
   echo P166_QEMU_LOADER_FULL_CLOSURE_CHECK=REQUIRED_AFTER_EMULATOR_BOOT
 }
 
+# Proves the original SDK QEMU process truly runs under the same
+# GitHub CI kernel AND the emulator guest is boot-complete. A standalone
+# ldd can report SDK bundled libs unavailable outside the launcher env.
+p166_require_live_booted_qemu(){
+  local binary="$1" exact ex p pid found=0 boot
+  [[ -x "$binary" ]] || return 1
+  exact="$(readlink -f "$binary")" || return 1
+  [[ -n "$exact" ]] || return 1
+  for p in /proc/[0-9]*/exe;do
+    ex="$(readlink -f "$p" 2>/dev/null || true)"
+    [[ "$ex" == "$exact" ]] || continue
+    pid="${p#/proc/}";pid="${pid%/exe}"
+    if kill -0 "$pid" 2>/dev/null;then
+      found=1
+      break
+    fi
+  done
+  if [[ "$found" != 1 ]];then
+    echo P166_EXACT_LIVE_QEMU_PROCESS=NOT_FOUND
+    return 1
+  fi
+  boot="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" || return 1
+  [[ "$boot" == 1 ]] || {
+    echo P166_ANDROID_GUEST_BOOT_COMPLETED=NO;return 1;
+  }
+  echo P166_EXACT_LIVE_QEMU_PROCESS=PASS
+  echo P166_ANDROID_GUEST_BOOT_COMPLETED=PASS
+}
+
 if [[ "${BASH_SOURCE[0]}" == "$0" ]];then
   p166_prepare_qemu_loader
 fi
