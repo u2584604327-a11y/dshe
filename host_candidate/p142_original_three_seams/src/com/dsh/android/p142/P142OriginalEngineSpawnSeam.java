@@ -35,6 +35,16 @@ public final class P142OriginalEngineSpawnSeam {
         (!"web".equals(c.get(3)) && !"rescue".equals(c.get(3))) ||
         builder.redirectErrorStream() != (kind != 2))
       throw new IOException("P142_ORIGINAL_LAUNCH_SHAPE_DRIFT");
+    // The pinned original EngineManager only uses default PIPE redirects:
+    // probe/main merge stderr into stdout, config consumes separate stdout
+    // and stderr pipes. Redirecting any one of them to/from host files,
+    // INHERIT or DISCARD is outside the original Process contract. In
+    // particular, P149's HMAC only authenticates a local snapshot and
+    // must not treat an already redirected builder as authorized.
+    if (builder.redirectInput() != ProcessBuilder.Redirect.PIPE ||
+        builder.redirectOutput() != ProcessBuilder.Redirect.PIPE ||
+        builder.redirectError() != ProcessBuilder.Redirect.PIPE)
+      throw new IOException("P142_UNSAFE_ORIGINAL_STDIO_REDIRECT");
     if (kind == 2) {
       if (c.size() != 5 || !"web".equals(c.get(3)) ||
           !"--dump-config".equals(c.get(4)))

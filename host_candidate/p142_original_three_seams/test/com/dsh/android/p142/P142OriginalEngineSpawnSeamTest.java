@@ -58,6 +58,42 @@ public final class P142OriginalEngineSpawnSeamTest {
                                  "../relative", "--no-open");
     injected.redirectErrorStream(true);
     mustDeny(injected,3,"P142_PATCH_PATH_SHAPE_DRIFT");
+    // P173: original EngineManager uses inherited *pipe* handles only.
+    // File/INHERIT redirects could read or overwrite a private host file
+    // if later handed to a production Broker. Setting these Redirects
+    // doesn't spawn a process, open or create a file.
+    ProcessBuilder probeInput=make(NODE,JS,"--profile","web",
+        "--port","0","--no-open");
+    probeInput.redirectErrorStream(true);
+    probeInput.redirectInput(ProcessBuilder.Redirect.INHERIT);
+    mustDeny(probeInput,1,"P142_UNSAFE_ORIGINAL_STDIO_REDIRECT");
+    ProcessBuilder probeOutput=make(NODE,JS,"--profile","web",
+        "--port","0","--no-open");
+    probeOutput.redirectErrorStream(true);
+    probeOutput.redirectOutput(ProcessBuilder.Redirect.to(new File("/p173-disallowed-out")));
+    mustDeny(probeOutput,1,"P142_UNSAFE_ORIGINAL_STDIO_REDIRECT");
+    ProcessBuilder configError=make(NODE,JS,"--profile","web","--dump-config");
+    configError.redirectError(ProcessBuilder.Redirect.to(new File("/p173-disallowed-err")));
+    mustDeny(configError,2,"P142_UNSAFE_ORIGINAL_STDIO_REDIRECT");
+    ProcessBuilder configInput=make(NODE,JS,"--profile","web","--dump-config");
+    configInput.redirectInput(ProcessBuilder.Redirect.from(new File("/p173-disallowed-in")));
+    mustDeny(configInput,2,"P142_UNSAFE_ORIGINAL_STDIO_REDIRECT");
+    ProcessBuilder mainOutput=make(NODE,JS,"--profile","rescue","--no-open");
+    mainOutput.redirectErrorStream(true);
+    mainOutput.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+    mustDeny(mainOutput,3,"P142_UNSAFE_ORIGINAL_STDIO_REDIRECT");
+    ProcessBuilder mainError=make(NODE,JS,"--profile","web","--no-open");
+    mainError.redirectErrorStream(true);
+    mainError.redirectError(ProcessBuilder.Redirect.to(new File("/p173-disallowed-merged-err")));
+    mustDeny(mainError,3,"P142_UNSAFE_ORIGINAL_STDIO_REDIRECT");
+    ProcessBuilder defaultPipes=make(NODE,JS,"--profile","web","--dump-config");
+    ok(defaultPipes.redirectInput()==ProcessBuilder.Redirect.PIPE &&
+       defaultPipes.redirectOutput()==ProcessBuilder.Redirect.PIPE &&
+       defaultPipes.redirectError()==ProcessBuilder.Redirect.PIPE,
+       "original_config_uses_unredirected_pipes");
+    mustDeny(defaultPipes,2,"P142_ISOLATED_PRODUCTION_BROKER_UNAVAILABLE_NO_HOST_FALLBACK");
+    System.out.println("P173_THREE_ORIGINAL_ENGINEMANAGER_STDIO_PIPE_SHAPES=PASS");
+    System.out.println("P173_NO_HOST_REDIRECT_FILE_OPEN_OR_SPAWN=YES");
     ProcessBuilder empty=new ProcessBuilder("/bin/false");
     mustDeny(empty,1,"P142_MISSING_ORIGINAL_BUILDER");
     ProcessBuilder unset=make(NODE,JS,"--profile","web","--no-open");
