@@ -28,6 +28,9 @@ public final class P75EngineStartRendezvous {
     final CountDownLatch entered=new CountDownLatch(1);
     final CountDownLatch answered=new CountDownLatch(1);
     boolean waiting,terminal;
+    // One lease can belong to one actual engine call thread only.
+    // Session contents do not prove thread ownership.
+    Thread claimedThread;
     P37RemoteProcess proxy;
     Pending(String s){session=s;}
   }
@@ -45,8 +48,10 @@ public final class P75EngineStartRendezvous {
   public static void claimOnEngineThread(String session){
     synchronized(LOCK) {
       if(pending==null || pending.terminal ||
-         !pending.session.equals(session) || trustedCall.get()!=null)
+         !pending.session.equals(session) || trustedCall.get()!=null ||
+         pending.claimedThread!=null)
         throw new SecurityException("P75_UNAUTHORIZED_ENGINE_THREAD");
+      pending.claimedThread=Thread.currentThread();
       trustedCall.set(pending);
     }
   }
@@ -85,7 +90,8 @@ public final class P75EngineStartRendezvous {
     trustedCall.remove();
     synchronized(LOCK) {
       p=pending;
-      if(p==null || p.terminal || claimed!=p || p.waiting)
+      if(p==null || p.terminal || claimed!=p ||
+         p.claimedThread!=Thread.currentThread() || p.waiting)
         throw new IOException(DENY);
       // Reject unknown engine argv BEFORE any waiting or receipt of child.
       List<String> args=requested==null?null:requested.command();

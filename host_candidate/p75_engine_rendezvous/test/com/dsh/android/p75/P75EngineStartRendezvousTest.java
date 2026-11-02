@@ -143,6 +143,55 @@ public final class P75EngineStartRendezvousTest {
           "fresh_generation_child_not_accepted_without_fresh_bridge_call");
     P75EngineStartRendezvous.cancelSession("CANCELLED");
     check(!P75EngineStartRendezvous.isArmed(),"fresh_generation_can_be_cancelled");
+    // P171: a one-shot pending lease must have EXACTLY ONE engine-thread
+    // claimant. A second thread with the same host session cannot race the
+    // authentic original-engine caller or consume its Process handoff.
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    CountDownLatch ownerClaimed=new CountDownLatch(1);
+    CountDownLatch ownerGo=new CountDownLatch(1);
+    AtomicReference<Process> ownerProcess=new AtomicReference<>();
+    AtomicReference<Throwable> ownerError=new AtomicReference<>();
+    Thread owner=new Thread(()->{
+      try{
+        P75EngineStartRendezvous.claimOnEngineThread(S);
+        ownerClaimed.countDown();
+        if(!ownerGo.await(3,TimeUnit.SECONDS))
+          throw new AssertionError("owner coordination timeout");
+        ownerProcess.set(P75EngineStartRendezvous.startOrDeny(fixture()));
+      }catch(Throwable e){ownerError.set(e);}
+    },"p171-legitimate-engine-lease-owner");
+    owner.start();
+    check(ownerClaimed.await(2,TimeUnit.SECONDS),"one_engine_claimed");
+    CountDownLatch contenderDone=new CountDownLatch(1);
+    AtomicReference<String> contenderResult=new AtomicReference<>();
+    Thread contender=new Thread(()->{
+      try{
+        P75EngineStartRendezvous.claimOnEngineThread(S);
+        contenderResult.set("UNEXPECTED_SECOND_THREAD_CLAIM");
+      }catch(SecurityException expected){
+        contenderResult.set(expected.getMessage());
+      }finally{contenderDone.countDown();}
+    },"p171-competing-engine-thread");
+    contender.start();
+    check(contenderDone.await(2,TimeUnit.SECONDS),"contender_finished_before_valid_engine");
+    contender.join(2500);
+    check("P75_UNAUTHORIZED_ENGINE_THREAD".equals(contenderResult.get()),
+          "second_thread_cannot_claim_exact_pending_lease");
+    check(!P75EngineStartRendezvous.authenticatedChildStarted(S,remote(),99055,UID),
+          "contender_did_not_create_pending_child_wait");
+    check(P75EngineStartRendezvous.isArmed(),"legitimate_pending_not_consumed");
+    ownerGo.countDown();
+    check(P75EngineStartRendezvous.awaitOriginalBridgeEntered(2000),
+          "original_engine_still_enters_its_rendezvous");
+    P37RemoteProcess legitimate=remote();
+    check(P75EngineStartRendezvous.authenticatedChildStarted(S,legitimate,99055,UID),
+          "original_engine_owns_authentic_child");
+    owner.join(2500);
+    check(!owner.isAlive() && ownerError.get()==null &&
+          ownerProcess.get()==legitimate,
+          "original_engine_receives_exact_child_not_competitor");
+    check(!P75EngineStartRendezvous.isArmed(),"race_consumed_once");
+    System.out.println("P171_ONE_PENDING_LEASE_EXACTLY_ONE_ENGINE_THREAD_CLAIM=PASS");
     System.out.println("P170_CANCELLED_LEASE_REARM_SAME_SESSION_STALE_THREAD_DENIED=PASS");
     System.out.println("P75_CROSS_THREAD_ENGINE_BINDER_RENDEZVOUS_JVM=PASS assertions="+count);
     System.out.println("P75_NON_MAIN_LAUNCH_WAITS_FOR_AUTHENTICATED_CHILD=PASS");
