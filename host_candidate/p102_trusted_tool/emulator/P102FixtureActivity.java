@@ -82,6 +82,14 @@ public final class P102FixtureActivity extends Activity {
   };
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
+    // P169: only disposable Android35/36 zero-permission synthetic lab.
+    // Android36 may resume a newly-launched Activity without granting its
+    // actual window focus if display sleep races with startup. Ask Android
+    // to wake the Activity and retain the screen for this short lab test.
+    // This does NOT grant focus or trust: P161 still requires the genuine
+    // onWindowFocusChanged(YES) and same pending native Binder generation.
+    setTurnScreenOn(true);
+    getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     approveButton=new Button(this);
     approveButton.setAllCaps(false);
     approveButton.setText("P102 standalone lab\nWaiting for isolated Binder request\nNo access to original DSH");

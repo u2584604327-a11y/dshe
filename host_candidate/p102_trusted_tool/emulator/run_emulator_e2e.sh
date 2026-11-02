@@ -37,7 +37,17 @@ p164_prepare_disposable_emulator_ui "$P102_ANDROID_API"
 adb install -r .p102tmp/p102-emulator-only.apk
 adb logcat -c
 adb shell am force-stop com.dsh.p102.trustedtoolprobe || true
-adb shell am start -n com.dsh.p102.trustedtoolprobe/.P102FixtureActivity
+# P169: wait for the ONE real Activity launch on this disposable verified
+# emulator. Do not relaunch/poll with am start, inject focus events or tap.
+# Activity-manager launch success is NOT native window-focus proof.
+p169_launch="$(adb shell am start -W -n com.dsh.p102.trustedtoolprobe/.P102FixtureActivity)" || {
+  echo P169_SYNTHETIC_ACTIVITY_START_WAIT=DENIED;exit 1
+}
+if ! grep -Eq '(^|[[:space:]])Status: ok' <<< "$p169_launch";then
+  echo P169_SYNTHETIC_ACTIVITY_LAUNCH_STATUS_NOT_OK=DENIED;exit 1
+fi
+echo P169_ONLY_ONE_SYNTHETIC_ACTIVITY_START_WAIT=PASS
+echo P169_NATIVE_WINDOW_FOCUS_STILL_REQUIRED=YES
 # Source pure lab-native consent gate; never approves on its own.
 source "$(dirname "$0")/p102_native_focus_gate.sh"
 p162_os_resumed_app(){
