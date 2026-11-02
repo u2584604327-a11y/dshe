@@ -19,9 +19,24 @@ for raw,expected in cases:
     assert mod.summarize(raw)==expected,(expected,mod.summarize(raw))
 assert mod.summarize("A"*(mod.MAX_BYTES+1))==("OVERSIZE","OVERSIZE","UNKNOWN")
 script=Path(__file__).with_name("run_emulator_e2e.sh").read_text()
+# The Android16 WMS focus declarations may be in displays, not windows.
+# Assert a single read-only DISPLAY query FIRST, then a legacy WINDOWS
+# fallback on absent declarations, all entirely inside the existing hard-
+# failure path. The parser emits only allowlisted categorical labels.
+assert script.count('adb shell dumpsys window displays 2>/dev/null')==1
 assert script.count('adb shell dumpsys window windows 2>/dev/null')==1
 assert 'python3 "$(dirname "$0")/p174_window_manager_focus.py"' in script
-assert script.index("P102_NATIVE_BUTTON_UNAVAILABLE_AFTER_BOUNDED_POLL") < script.index("adb shell dumpsys window windows 2>/dev/null") < script.index("  exit 1\nfi\nread -r X Y")
+assert script.index("P102_NATIVE_BUTTON_UNAVAILABLE_AFTER_BOUNDED_POLL") < script.index("adb shell dumpsys window displays 2>/dev/null") < script.index("adb shell dumpsys window windows 2>/dev/null") < script.index("  exit 1\nfi\nread -r X Y")
+assert script.index("P175_WM_FOCUS_SOURCE=DISPLAYS") < script.index("P175_WM_FOCUS_SOURCE=WINDOWS") < script.index("P175_WM_FOCUS_SOURCE=UNAVAILABLE")
+assert script.count("P175_WM_FOCUS_SOURCE=")==3
+assert "grep -Eq '^[[:space:]]*m(CurrentFocus|FocusedApp)[[:space:]]*='" in script
+for unsafe in ("adb shell am start", "adb shell input tap"):
+    assert unsafe not in script[script.index("  # P175:"):script.index("  # P164:",script.index("  # P175:"))]
+display_record=("WINDOW MANAGER DISPLAY CONTENTS\n  DisplayContent{a displayId=0}\n"
+                "      mCurrentFocus=Window{11 u0 com.android.systemui/keyguard.KeyguardView}\n"
+                "      mFocusedApp=ActivityRecord{22 u0 "+lab+"/.P102FixtureActivity t1}\n")
+assert mod.summarize(display_record)==("KEYGUARD","LAB","UNKNOWN")
+print("P175_ANDROID16_WINDOW_DISPLAYS_FOCUS_SOURCE_FIRST_AND_LEGACY_FALLBACK=PASS")
 assert "adb shell input tap \"$X\" \"$Y\"" in script
 assert "p102_native_focus_gate .p102tmp/filtered-log.txt" in script
 assert "P102_TRUSTED_EXECUTION_COUNT=1" in script

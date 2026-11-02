@@ -219,9 +219,24 @@ print("P102_UI_DIAG_ENABLED_APPROVAL_NODES="+str(len(enabled)))
     grep -E 'mResumedActivity=|topResumedActivity=|mFocusedApp=' |
     sed -E 's/.*(com\.dsh\.p102\.trustedtoolprobe|com\.android\.systemui|com\.android\.launcher[[:alnum:]_.]*).*/P102_UI_DIAG_FOCUS_PACKAGE=\1/' |
     grep '^P102_UI_DIAG_FOCUS_PACKAGE=' | head -n 3 || true
-  # P174: read-only WindowManager focus classification when normal native
-  # consent gate has ALREADY failed. Never log raw dumps/tokens or alter UI.
-  if wm_snapshot="$(adb shell dumpsys window windows 2>/dev/null)";then
+  # P175: Android16/SDK36 may place WMS mCurrentFocus/mFocusedApp
+  # under "displays" rather than "windows". The earlier P174 WMS output
+  # was UNAVAILABLE for BOTH fields, so its source section was incomplete.
+  # Read one DISPLAY snapshot first; use legacy WINDOWS only when the
+  # DISPLAY section declares neither focus. No raw dumps, clicks, starts,
+  # focus injections, elevated permissions or native approval changes.
+  wm_snapshot="$(adb shell dumpsys window displays 2>/dev/null)" || wm_snapshot=""
+  if grep -Eq '^[[:space:]]*m(CurrentFocus|FocusedApp)[[:space:]]*=' <<< "$wm_snapshot";then
+    echo P175_WM_FOCUS_SOURCE=DISPLAYS
+  else
+    wm_snapshot="$(adb shell dumpsys window windows 2>/dev/null)" || wm_snapshot=""
+    if grep -Eq '^[[:space:]]*m(CurrentFocus|FocusedApp)[[:space:]]*=' <<< "$wm_snapshot";then
+      echo P175_WM_FOCUS_SOURCE=WINDOWS
+    else
+      echo P175_WM_FOCUS_SOURCE=UNAVAILABLE
+    fi
+  fi
+  if [[ -n "$wm_snapshot" ]];then
     printf '%s\n' "$wm_snapshot" |
       python3 "$(dirname "$0")/p174_window_manager_focus.py" ||
       echo P174_WINDOW_FOCUS_DIAGNOSTIC=UNAVAILABLE
