@@ -59,6 +59,7 @@ jobs:
           set -euo pipefail
           test "$P47_NO_HOST_FALLBACK" = 1 && test "$P181_THREE_ORIGINAL_START_DENY" = 1 && test "$P49_NODE_STAGE" = 0 && test "$P51_SIDE_BY_SIDE" = 0
           python3 -m py_compile host_candidate/p47_no_fallback/p47_gate.py
+          grep -Fq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' host_candidate/p47_no_fallback/p47_gate.py
           bash -n host_candidate/p143_same_package_engine_fd/run_real_original_emulator.sh
           # P167 test-only cold Binder ACK window: never loosen actual
           # UID, session, hash, fail-closed or non-archive 12s budget.
@@ -101,7 +102,9 @@ jobs:
             host_candidate/p151_original_state_probe/test/com/dsh/android/p151/P151SyntheticStateTest.java \
             host_candidate/p150_original_coroutine/test/com/dsh/android/p150/P150OriginTest.java \
             host_candidate/p149_prelaunch_witness/test/com/dsh/android/p149/P149WitnessTest.java \
-            host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java
+            host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java \
+            host_candidate/p47_no_fallback/test/com/dsh/android/p47/P182TripleModeTest.java
+          java -cp .p149classes com.dsh.android.p47.P182TripleModeTest
           java -cp .p149classes com.dsh.android.p149.P149WitnessTest
           java -cp .p149classes com.dsh.android.p150.P150OriginTest
           java -cp .p149classes com.dsh.android.p151.P151SyntheticStateTest
@@ -148,6 +151,7 @@ jobs:
           grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p143_build.log
           grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p143_build.log
           grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p143_build.log
+          grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p143_build.log
           grep -Fxq 'P43_APK_ORIGINAL_COMPONENTS_AND_APPLICATION_PRESERVED=PASS_STATIC' .p143_build.log
           echo P143_PINNED_ORIGINAL_DSH_TEST_APK_BUNDLE=PASS
       - name: Enable ephemeral emulator KVM

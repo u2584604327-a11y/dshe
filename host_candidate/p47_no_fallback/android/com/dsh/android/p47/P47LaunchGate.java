@@ -58,4 +58,30 @@ public final class P47LaunchGate {
     P149OriginalBuilderWitness.observeWithoutLaunch(builder,3);
     throw new IOException("P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK");
   }
+
+  /** P182: original v138 probe/config mode is selected by the exact DEX
+   * callsite, never by an untrusted Bundle, command flag or env override.
+   * Both modes remain strictly DENY; no Broker/Node is executed.
+   */
+  private static Process secondaryDeny(ProcessBuilder builder,int mode)
+      throws IOException {
+    Shape shape=categorize(builder);
+    if (shape.argvCount<1 || shape.argvCount>128)
+      throw new IOException("P47_INVALID_ORIGINAL_LAUNCH_SHAPE");
+    if (shape.stderrMerged!=(mode==1))
+      throw new IOException("P182_ORIGINAL_MODE_STDERR_DRIFT");
+    if (builder.redirectInput()!=ProcessBuilder.Redirect.PIPE ||
+        builder.redirectOutput()!=ProcessBuilder.Redirect.PIPE ||
+        builder.redirectError()!=ProcessBuilder.Redirect.PIPE)
+      throw new IOException("P182_ORIGINAL_MODE_STDIO_REDIRECT_DENIED");
+    P149OriginalBuilderWitness.observeWithoutLaunch(builder,mode);
+    throw new IOException("P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK");
+  }
+
+  public static Process probeOrDeny(ProcessBuilder builder) throws IOException {
+    return secondaryDeny(builder,1);
+  }
+  public static Process configOrDeny(ProcessBuilder builder) throws IOException {
+    return secondaryDeny(builder,2);
+  }
 }
