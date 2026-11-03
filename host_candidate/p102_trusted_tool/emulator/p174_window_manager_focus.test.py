@@ -18,6 +18,36 @@ cases=[
 for raw,expected in cases:
     assert mod.summarize(raw)==expected,(expected,mod.summarize(raw))
 assert mod.summarize("A"*(mod.MAX_BYTES+1))==("OVERSIZE","OVERSIZE","UNKNOWN")
+# P180 WMS subtype evidence: no trust escalation, and no arbitrary raw
+# WindowState/user text must be included in any published diagnostic.
+kind_cases=[
+ ("com.android.systemui/NotificationShade", "NOTIFICATION_SHADE"),
+ ("com.android.systemui/QuickSettingsPanel", "NOTIFICATION_SHADE"),
+ ("com.android.systemui/StatusBarWindow", "STATUS_BAR"),
+ ("com.android.systemui/NavigationBar", "NAVIGATION_BAR"),
+ ("com.android.systemui/ScreenDecorOverlay", "SCREEN_DECOR"),
+ ("com.android.systemui/VolumeDialog", "VOLUME_DIALOG"),
+ ("com.android.systemui/GlobalActionsDialog", "GLOBAL_ACTIONS"),
+ ("com.android.systemui/Recents", "RECENTS"),
+ ("com.android.systemui/Unrecognized SecretOrder-54321", "OTHER_SYSTEMUI"),
+ ("com.android.systemui/keyguard.KeyguardView", "KEYGUARD"),
+ ("com.private.bank/SecretPassword-888", "NOT_SYSTEMUI"),
+ ("null", "NOT_SYSTEMUI"),
+]
+allowed={y for _,y in kind_cases}|{"OVERSIZE","UNAVAILABLE"}
+for window,expect in kind_cases:
+    raw="mCurrentFocus=Window{private u0 "+window+"}\\n"
+    actual=mod.focused_window_kind(raw)
+    assert actual==expect,(window,actual,expect)
+    assert actual in allowed and "Secret" not in actual
+assert mod.focused_window_kind("")=="UNAVAILABLE"
+assert mod.focused_window_kind("A"*(mod.MAX_BYTES+1))=="OVERSIZE"
+assert mod.focused_window_kind(
+    "mCurrentFocus=Window{u0 com.android.systemui/NotificationShade}\\n"
+    "mCurrentFocus=Window{u0 com.android.systemui/NavigationBar}\\n"
+)=="NAVIGATION_BAR"
+assert 'P180_WM_FOCUSED_WINDOW_KIND=' in p.read_text()
+print("P180_ANDROID36_SYSTEMUI_SUBTYPE_PRIVACY_REDACTED_READONLY=PASS")
 script=Path(__file__).with_name("run_emulator_e2e.sh").read_text()
 # The Android16 focus evidence is independently read at TWO scoped points:
 # P176's sole non-consent SYSTEMUI environment candidate, then P175's final
