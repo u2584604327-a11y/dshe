@@ -36,15 +36,15 @@ kind_cases=[
 ]
 allowed={y for _,y in kind_cases}|{"OVERSIZE","UNAVAILABLE"}
 for window,expect in kind_cases:
-    raw="mCurrentFocus=Window{private u0 "+window+"}\\n"
+    raw="mCurrentFocus=Window{private u0 "+window+"}\n"
     actual=mod.focused_window_kind(raw)
     assert actual==expect,(window,actual,expect)
     assert actual in allowed and "Secret" not in actual
 assert mod.focused_window_kind("")=="UNAVAILABLE"
 assert mod.focused_window_kind("A"*(mod.MAX_BYTES+1))=="OVERSIZE"
 assert mod.focused_window_kind(
-    "mCurrentFocus=Window{u0 com.android.systemui/NotificationShade}\\n"
-    "mCurrentFocus=Window{u0 com.android.systemui/NavigationBar}\\n"
+    "mCurrentFocus=Window{u0 com.android.systemui/NotificationShade}\n"
+    "mCurrentFocus=Window{u0 com.android.systemui/NavigationBar}\n"
 )=="NAVIGATION_BAR"
 assert 'P180_WM_FOCUSED_WINDOW_KIND=' in p.read_text()
 print("P180_ANDROID36_SYSTEMUI_SUBTYPE_PRIVACY_REDACTED_READONLY=PASS")
