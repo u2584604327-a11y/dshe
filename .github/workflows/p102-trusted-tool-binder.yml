@@ -261,6 +261,7 @@ jobs:
           bash host_candidate/p102_trusted_tool/emulator/p166_qemu_loader_preflight.test.sh
           python3 host_candidate/p102_trusted_tool/emulator/p172_graphics_backend_contract.test.py
           python3 host_candidate/p102_trusted_tool/emulator/p174_window_manager_focus.test.py
+          python3 host_candidate/p102_trusted_tool/emulator/p179_android36_prelaunch_home.test.py
       - name: P166 provide confirmed libpulse runtime before Android36 QEMU is installed by action
         shell: bash
         run: bash host_candidate/p102_trusted_tool/emulator/p166_qemu_loader_preflight.sh

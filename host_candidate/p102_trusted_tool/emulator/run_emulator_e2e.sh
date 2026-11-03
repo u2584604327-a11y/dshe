@@ -37,6 +37,24 @@ p164_prepare_disposable_emulator_ui "$P102_ANDROID_API"
 adb install -r .p102tmp/p102-emulator-only.apk
 adb logcat -c
 adb shell am force-stop com.dsh.p102.trustedtoolprobe || true
+# P179: one OS Home navigation in the ATTESTED disposable Android36 emulator
+# BEFORE the sole Activity start, and strictly before any pending native grant.
+# Reset a boot-time SystemUI transient foreground owner without interacting
+# with the eventual consent window. No synthetic native focus, app relaunch,
+# statusbar collapse retry, guessed tap or tool execution. This is a bounded
+# environment hypothesis; real P161/P162 focus remains mandatory.
+if [[ "$P102_ANDROID_API" == 36 ]];then
+  if [[ "${ANDROID_SERIAL:-}" != emulator-5554 ]] ||
+     [[ "$(adb shell getprop ro.kernel.qemu | tr -d '\r')" != 1 ]] ||
+     [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" != 1 ]];then
+    echo P179_EMULATOR_ONLY_PRELAUNCH_RESET_DENIED=FAIL;exit 1
+  fi
+  adb shell input keyevent KEYCODE_HOME >/dev/null || {
+    echo P179_ANDROID36_PRELAUNCH_HOME_UNAVAILABLE=FAIL;exit 1
+  }
+  echo P179_ANDROID36_PRELAUNCH_HOME_REQUESTED=PASS_REQUEST_ONLY
+  sleep 2
+fi
 # P169: wait for the ONE real Activity launch on this disposable verified
 # emulator. Do not relaunch/poll with am start, inject focus events or tap.
 # Activity-manager launch success is NOT native window-focus proof.
