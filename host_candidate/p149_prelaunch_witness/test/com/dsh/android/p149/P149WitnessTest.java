@@ -23,6 +23,43 @@ public final class P149WitnessTest {
     b.environment().put("P149_TEST_HEADER","secret-not-logged");
     return b;
   }
+  /** The closeable witness must erase its HMAC material after success,
+   * after a bad mode, and after any one-shot mismatch or explicit close.
+   * No actual command or environment value is logged or executed.
+   */
+  private static void zeroized(P149OriginalBuilderWitness.Witness w)
+      throws Exception {
+    for(String name:new String[]{"key","tag"}) {
+      java.lang.reflect.Field f=w.getClass().getDeclaredField(name);
+      f.setAccessible(true);
+      byte[] values=(byte[])f.get(w);
+      yes(values!=null && values.length==32);
+      for(byte value:values)yes(value==0);
+    }
+  }
+  private static void testWipesAndInvalidBuilder()throws Exception {
+    ProcessBuilder b=builder();
+    P149OriginalBuilderWitness.Witness successful=
+        P149OriginalBuilderWitness.capture(b,3,S,91);
+    successful.matchOnce(b,3,S,91);
+    zeroized(successful);
+    P149OriginalBuilderWitness.Witness rejected=
+        P149OriginalBuilderWitness.capture(b,3,S,92);
+    denied(()->rejected.matchOnce(b,2,S,92),
+        "P149_SESSION_MODE_OR_SEQUENCE_DRIFT");
+    zeroized(rejected);
+    P149OriginalBuilderWitness.Witness manuallyClosed=
+        P149OriginalBuilderWitness.capture(b,3,S,93);
+    manuallyClosed.close();
+    zeroized(manuallyClosed);
+    // This intentionally malformed builder must fail during bounded()
+    // before the constructor generates any HMAC key.
+    b.command().set(4,"ill-formed-"+(char)0xd800);
+    denied(()->P149OriginalBuilderWitness.capture(b,3,S,94),
+        "P149_MALFORMED_UTF8");
+    b.command().set(4,"--no-open");
+    System.out.println("P149_WITNESS_KEY_TAG_ZEROIZED_AND_PREKEY_VALIDATION=PASS");
+  }
   private static void negative(int n)throws IOException {
     ProcessBuilder b=builder();
     try(P149OriginalBuilderWitness.Witness w=
@@ -51,6 +88,7 @@ public final class P149WitnessTest {
       P149OriginalBuilderWitness.observeWithoutLaunch(b,mode);
     }
     for(int i=1;i<=5;i++)negative(i);
+    testWipesAndInvalidBuilder();
     ProcessBuilder b=builder();
     try(P149OriginalBuilderWitness.Witness w=
           P149OriginalBuilderWitness.capture(b,3,S,24)){

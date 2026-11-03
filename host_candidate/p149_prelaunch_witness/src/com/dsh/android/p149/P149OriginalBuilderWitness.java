@@ -109,10 +109,26 @@ public final class P149OriginalBuilderWitness {
     private Witness(ProcessBuilder builder,int kind,String s,long sequence)
         throws IOException {
       mode=kind;seq=sequence;session=s;
-      RANDOM.nextBytes(key);
+      // Validate/serialize the complete bounded builder BEFORE generating a
+      // live secret. Malformed argv/env must not leave a generated HMAC key
+      // in a constructor that can never return a closeable Witness.
       byte[] payload=bounded(builder,kind,s,sequence);
-      try {tag=mac(key,payload);}
-      finally {Arrays.fill(payload,(byte)0);}
+      byte[] computed=null;
+      try {
+        RANDOM.nextBytes(key);
+        computed=mac(key,payload);
+        if(computed==null || computed.length!=32)
+          throw new IOException("P149_HMAC_TAG_LENGTH_DRIFT");
+        tag=computed;
+      }finally {
+        Arrays.fill(payload,(byte)0);
+        // A failed constructor cannot be closed by its caller: erase its
+        // generated secret immediately, including HMAC/provider failure.
+        if(computed==null || computed.length!=32){
+          Arrays.fill(key,(byte)0);
+          if(computed!=null)Arrays.fill(computed,(byte)0);
+        }
+      }
     }
     /** One attempt only; fail-closed even after a mismatch. */
     public synchronized void matchOnce(ProcessBuilder builder,int kind,String s,long sequence)
