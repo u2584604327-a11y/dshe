@@ -31,6 +31,13 @@ python host_candidate/p40_exact_trampoline.py patch "$ORIGINAL" "$DIR/decoded" \
 if test "${P47_NO_HOST_FALLBACK:-0}" = 1; then
   python host_candidate/p47_no_fallback/p47_gate.py patch "$DIR/decoded"
 fi
+# When P181=1, P47's offline patch also interposes the two real v138
+# helper starts. No real Node or host fallback can be granted by this flag.
+if test "${P181_THREE_ORIGINAL_START_DENY:-0}" = 1; then
+  test "${P47_NO_HOST_FALLBACK:-0}" = 1 && test "${P51_SIDE_BY_SIDE:-0}" = 0 || {
+    echo P181_BOUNDED_REAL_V138_DENY_ONLY_REQUIRED;exit 1
+  }
+fi
 if test "${P72_ACCESSOR_FIXTURE_ONLY:-0}" = 1; then
   test "${P51_SIDE_BY_SIDE:-0}" = 1 || { echo 'P72_BLOCKED_NOT_SIDECAR';exit 1; }
   python host_candidate/p72_webview_access/patch_exact_webview_accessor.py patch "$DIR/decoded"
