@@ -22,6 +22,8 @@ on:
       - 'host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java'
       - 'host_candidate/p77_engine_tar_audit/src/com/dsh/android/p77/P77TarAudit.java'
       - 'host_candidate/p43_original_service/build_embedded_emulator_apk.sh'
+      - 'host_candidate/p83_hidden_browser/android/com/dsh/android/p83/P83HiddenBrowserPane.java'
+      - 'host_candidate/p185_manual_verification/**'
       - '.github/workflows/p143-original-package-isolated-engine-fd.yml'
 permissions:
   contents: read
@@ -105,6 +107,13 @@ jobs:
             host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java \
             host_candidate/p47_no_fallback/test/com/dsh/android/p47/P182TripleModeTest.java
           java -cp .p149classes com.dsh.android.p47.P182TripleModeTest
+          mkdir -p .p185classes
+          javac --release 8 -d .p185classes \
+            host_candidate/p185_manual_verification/src/com/dsh/android/p185/P185ManualVerificationState.java \
+            host_candidate/p185_manual_verification/test/com/dsh/android/p185/P185ManualVerificationStateTest.java
+          java -cp .p185classes com.dsh.android.p185.P185ManualVerificationStateTest > .p185-tests.log
+          grep -Fxq 'P185_OPTIONAL_MANUAL_WEBVIEW_STATE=PASS checks=19' .p185-tests.log
+          rm -rf .p185classes .p185-tests.log
           java -cp .p149classes com.dsh.android.p149.P149WitnessTest
           java -cp .p149classes com.dsh.android.p150.P150OriginTest
           java -cp .p149classes com.dsh.android.p151.P151SyntheticStateTest

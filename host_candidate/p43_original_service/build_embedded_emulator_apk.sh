@@ -142,6 +142,7 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p147_relative_candidate_lease/src/com/dsh/android/p147/P147ScopedCandidateLease.java \
   host_candidate/p79_browser_native_mailbox/android/com/dsh/android/p79/P79NativeBrowserMailboxProbe.java \
   host_candidate/p83_hidden_browser/android/com/dsh/android/p83/P83HiddenBrowserPane.java \
+  host_candidate/p185_manual_verification/src/com/dsh/android/p185/P185ManualVerificationState.java \
   host_candidate/p85_durable_reply/android/com/dsh/android/p85/P85DurableReplyJournal.java \
   host_candidate/p85_durable_reply/android/com/dsh/android/p85/P85RestartProbe.java \
   host_candidate/p87_omnigate_sse/src/com/dsh/android/p87/P87SseDecoder.java \
@@ -243,6 +244,7 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p78/P78ModuleSlot;',
                   'Lcom/dsh/android/p79/P79NativeBrowserMailboxProbe;',
                   'Lcom/dsh/android/p83/P83HiddenBrowserPane;',
+                  'Lcom/dsh/android/p185/P185ManualVerificationState;',
                   'Lcom/dsh/android/p85/P85DurableReplyJournal;',
                   'Lcom/dsh/android/p85/P85RestartProbe;',
                   'Lcom/dsh/android/p87/P87SseDecoder;',
