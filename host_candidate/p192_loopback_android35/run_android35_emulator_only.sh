@@ -13,7 +13,8 @@ qemu="$(adb -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r\n')"
 if [[ "$qemu" != 1 ]]; then
   echo 'P187B_STOP_NOT_ANDROID_EMULATOR'; exit 2
 fi
-if ! adb -s "$serial" shell pm path com.dsh.android | grep -Fq 'package:'; then
+installed_paths="$(adb -s "$serial" shell pm path com.dsh.android)"
+if [[ "$installed_paths" != *package:* ]]; then
   echo 'P187B_STOP_P43_APP_MISSING'; exit 2
 fi
 # Non-sensitive random one-run marker, put in log before the test. Do not clear logs.

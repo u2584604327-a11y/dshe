@@ -13,7 +13,8 @@ apk=.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
 sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
 aapt="$sdk/build-tools/35.0.0/aapt"
 [[ -x "$aapt" ]]
-"$aapt" dump badging "$apk" | grep -Fq "package: name='com.dsh.android'"
+badging="$("$aapt" dump badging "$apk")"
+[[ "$badging" == *"package: name='com.dsh.android'"* ]]
 cleanup() {
   adb -s "$serial" shell am force-stop com.dsh.android >/dev/null 2>&1 || true
   if [[ -n "${uid:-}" ]]; then
@@ -24,19 +25,25 @@ cleanup() {
   adb -s "$serial" shell pm uninstall com.dsh.android >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
-adb -s "$serial" install "$apk" | grep -Fxq Success
-uid="$(adb -s "$serial" shell pm list packages -U com.dsh.android | sed -n -E 's/^package:com\.dsh\.android uid:([0-9]+).*/\1/p' | tr -d '\r' | head -n1)"
+installed="$(adb -s "$serial" install "$apk")"
+[[ "$installed" == "Success" ]]
+packages="$(adb -s "$serial" shell pm list packages -U com.dsh.android | tr -d '\r')"
+uid="$(sed -n -E 's/^package:com\.dsh\.android uid:([0-9]+).*/\1/p' <<< "$packages")"
 [[ "$uid" =~ ^[0-9]+$ ]]
 # Reject all egress for the host UID, except its own IPv4 loopback path.
 # Never grant permissions to isolated UID or allow remote network access.
 adb -s "$serial" shell iptables -w -I OUTPUT 1 -m owner --uid-owner "$uid" -j REJECT
 adb -s "$serial" shell ip6tables -w -I OUTPUT 1 -m owner --uid-owner "$uid" -j REJECT
 adb -s "$serial" shell iptables -w -I OUTPUT 1 -o lo -d 127.0.0.1/32 -m owner --uid-owner "$uid" -j ACCEPT
-adb -s "$serial" shell iptables -S OUTPUT | grep -F -- "--uid-owner $uid" | grep -Fq -- '-j REJECT'
-adb -s "$serial" shell iptables -S OUTPUT | grep -F -- "--uid-owner $uid" | grep -Fq -- '-j ACCEPT'
-launch="$("$aapt" dump badging "$apk" | sed -n "s/^launchable-activity: name=\x27\([^\x27]*\)\x27.*/\1/p" | head -n1)"
+# Consume the entire rules output before checking: grep -q under pipefail
+# can SIGPIPE an upstream aapt/adb command after matching the first line.
+rules="$(adb -s "$serial" shell iptables -S OUTPUT)"
+[[ "$rules" == *"--uid-owner $uid"*"-j REJECT"* ]]
+[[ "$rules" == *"--uid-owner $uid"*"-j ACCEPT"* ]]
+launch="$(sed -n "s/^launchable-activity: name=\x27\([^\x27]*\)\x27.*/\1/p" <<< "$badging")"
 [[ -n "$launch" ]]
-adb -s "$serial" shell am start -W -n "com.dsh.android/$launch" | grep -Eq 'Status: ok|Status: warning'
+activity_start="$(adb -s "$serial" shell am start -W -n "com.dsh.android/$launch")"
+[[ "$activity_start" =~ Status:\ (ok|warning) ]]
 adb -s "$serial" shell pidof com.dsh.android >/dev/null
 # Strict harness writes a new run boundary; old PASS logs are not admissible.
 bash host_candidate/p192_loopback_android35/run_android35_emulator_only.sh "$serial"
