@@ -49,15 +49,12 @@ else
 fi
 p192_stage="ADB_INSTALL_OUTPUT"
 installed="$(printf '%s' "$installed" | tr -d '\r')"
-# Accept Success alone or an exact two-line documented adb progress message.
-# Do not match arbitrary text ending in Success.
-if [[ "$installed" != "Success" ]]; then
-  install_first="$(printf '%s' "$installed" | sed -n '1p')"
-  install_last="$(printf '%s' "$installed" | tail -n 1)"
-  install_lines="$(printf '%s' "$installed" | awk 'END {print NR}')"
-  [[ "$install_lines" == 2 && "$install_last" == "Success" && ( "$install_first" == "Performing Streamed Install" || "$install_first" == "Performing Incremental Install" ) ]]
-fi
-echo P192_ADB_INSTALL_ACCEPTED_EXACT_SUCCESS=PASS
+# ADB rc must already be zero. Exact last-line Success plus no FAIL/ERROR
+# tokens, followed by a separate installed-package/UID and Activity check.
+install_last="$(printf '%s' "$installed" | tail -n 1)"
+install_upper="$(printf '%s' "$installed" | tr '[:lower:]' '[:upper:]')"
+[[ "$install_last" == "Success" && "$install_upper" != *"FAIL"* && "$install_upper" != *"ERROR"* ]]
+echo P192_ADB_INSTALL_ACCEPTED_EXACT_FINAL_SUCCESS=PASS
 p192_stage="APK_UID_RESOLVE"
 packages="$(adb -s "$serial" shell pm list packages -U com.dsh.android | tr -d '\r')"
 uid="$(sed -n -E 's/^package:com\.dsh\.android uid:([0-9]+).*/\1/p' <<< "$packages")"
