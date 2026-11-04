@@ -1,0 +1,119 @@
+name: P193 original-derived Android35 genuine two UID Binder localhost fixture
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p193_android35/**'
+      - '.github/workflows/p193-android35-real-binder-host-loopback.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p193-android35-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  original-derived-android35:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 58
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      P49_NODE_STAGE: '0'
+      P51_SIDE_BY_SIDE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate source, test protocol and original branch gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P181_THREE_ORIGINAL_START_DENY" = 1
+          test "$P49_NODE_STAGE" = 0
+          test "$P51_SIDE_BY_SIDE" = 0
+          bash -n host_candidate/p193_android35/run_p193_android35.sh
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          ast.parse(Path('host_candidate/p193_android35/patch_p43_in_ci.py').read_text())
+          print('P193_ANDROID35_PATCHER_AST=PASS')
+          PY
+          bash host_candidate/p193_host_loopback/run_java8.sh | tee "$RUNNER_TEMP/p193-base.log"
+          grep -Fq 'P193_JAVA8_OFFLINE_TEST=PASS checks=92' "$RUNNER_TEMP/p193-base.log"
+          test -f THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -f REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+      - name: Exact SHA pinned disposable P43 source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p193_android35/patch_p43_in_ci.py --apply-ci
+          git diff --name-only | sort >.p193_actual
+          printf '%s\n' \
+            host_candidate/p43_original_service/android/com/dsh/android/p43/P43IsolatedWorker.java \
+            host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java \
+            host_candidate/p43_original_service/build_embedded_emulator_apk.sh | sort >.p193_expected
+          cmp .p193_actual .p193_expected
+          echo P193_SHA_PINNED_P43_CI_PATCH_SCOPE=PASS
+      - name: Provision original-derived APK build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/d8"
+      - name: Compile ephemeral original-v138-derived test-only APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh >.p193_build.log 2>&1; then
+            grep -E 'P43_|P47_|P193_|error:|Traceback|Failed|failed|unbound' .p193_build.log | tail -n 30 || true
+            echo P193_BUILD_FAILED
+            exit 1
+          fi
+          test -s .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p193_build.log
+          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p193_build.log
+          grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p193_build.log
+          grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p193_build.log
+          echo P193_EPHEMERAL_ORIGINAL_TEST_APK_BUILD=PASS
+      - name: Enable disposable emulator KVM
+        shell: bash
+        run: if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Actual Android35 dual UID authenticated Binder test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p193_android35/run_p193_android35.sh
+      - name: Deny production and clean only runner scratch
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp .p193_build.log .p193_actual .p193_expected
+          echo P193_PLATFORM_UID_PROOF=REFER_TO_REAL_EMULATOR_STEP >> "$GITHUB_STEP_SUMMARY"
+          echo P193_ISOLATED_UID_NETWORK_PERMISSION=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P193_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P193_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P193_GS_CAPTURE=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P193_ORIGINAL_NODE_HTTP_TOKEN_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P193_FORMAL_V139=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"

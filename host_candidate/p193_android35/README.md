@@ -1,0 +1,9 @@
+# P193 real two-UID Android 35 test — nonproduction
+
+This fixture extends the **exact SHA-pinned original v138-derived P43 temporary APK**, in the sole Draft PR #80 and original branch. The GitHub Actions-only patcher changes precisely P43 worker, host probe and builder **in ephemeral CI checkout only**. No production DEX, user's phone, real account/cookies, signer or new Android permission is modified.
+
+The ordinary host UID owns an ephemeral TCP listener on literal IPv4 127.0.0.1. Host egress is blocked except loopback. The actual isolated UID cannot bind a socket and uses Android Messenger/Binder only. P43 original HELLO/verified asset FD/hash validates the framework Binder sender UID and session first. A second fixed fixture requests a synthetic string, rejects a genuine wrong-session Binder message, returns one valid response and one replay. The host uses real framework Message.sendingUid and the pinned asset digest, one-shot epoch, session and random nonce, not a Bundle UID. A strict run-boundary marker and two-UID logs must prove all status markers **after** the current start; missing or bad evidence fails the workflow.
+
+Use only a fresh emulator-5554 Android35 QEMU with root-attested ephemeral CI sandbox and newly installed test APK. Abort on pre-existing com.dsh.android. Cleanup only this scratch APK and its temporary iptables rules. Never connect public endpoints or use a user's device. A passing Java8 test is NOT a substitute for the real Android test.
+
+P192 real isolated UID TCP bind BIND_EACCES remains frozen evidence; no isolation or SELinux weakening. This synthetic Binder and fixed loopback GET is NOT the real ARM64 original Node, complete JS/FD workspace, EngineManager process or token-bearing HTTP READY; v139 signing/release is STRUCTURAL_BLOCKED. User website challenges are manual, with no account/proxy/device fingerprint rotation. See [Reference projects and disclaimer](../../REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md).
