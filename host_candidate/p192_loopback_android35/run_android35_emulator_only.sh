@@ -61,8 +61,12 @@ for line in lines[begins[0]+1:]:
 for key in required:
     vals = observed[key]
     if vals != ["PASS"]:
-        print("P187B_BLOCKED_" + key + "=" +
-              ("MISSING" if not vals else "DUPLICATE" if len(vals) > 1 else "NOT_PASS"))
+        # Emit only the source-enforced fixed status vocabulary. Never dump
+        # raw logcat, Binder nonce, port, URL, token, or app private data.
+        status = "MISSING" if not vals else "DUPLICATE" if len(vals) > 1 else vals[0]
+        if not re.fullmatch(r"(?:BIND|CONNECT|ACCEPT|ECHO)_(?:SECURITY|TIMEOUT|EACCES|EPERM|REFUSED|OTHER)|MISSING|DUPLICATE", status):
+            status = "INVALID_STATUS"
+        print("P187B_BLOCKED_" + key + "=" + status)
         sys.exit(2)
 if rejected:
     print("P187B_BLOCKED_UNEXPECTED_FAILURE_MARKER")
