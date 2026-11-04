@@ -31,6 +31,7 @@ jobs:
           mkdir -p .p168_jvm
           javac --release 8 -d .p168_jvm \
             host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java \
+            host_candidate/p184_verified_child_receipt/src/com/dsh/android/p68/P184ChildStartReceipt.java \
             host_candidate/p75_engine_rendezvous/src/com/dsh/android/p75/P75EngineStartRendezvous.java \
             host_candidate/p75_engine_rendezvous/test/com/dsh/android/p75/P75EngineStartRendezvousTest.java
           java -cp .p168_jvm com.dsh.android.p75.P75EngineStartRendezvousTest | tee p168-result.txt

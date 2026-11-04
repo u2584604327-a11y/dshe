@@ -53,6 +53,7 @@ jobs:
             host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java \
             host_candidate/p53_child_start/src/com/dsh/android/p53/P53StartOrder.java \
             host_candidate/p67_authenticated_handoff/src/com/dsh/android/p67/P67AuthenticatedHandoff.java \
+            host_candidate/p184_verified_child_receipt/src/com/dsh/android/p68/P184ChildStartReceipt.java \
             host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java
           test -s "$RUNNER_TEMP/p141-android/com/dsh/android/p68/P68AndroidBinderIntake.class"
           test -s "$RUNNER_TEMP/p141-android/com/dsh/p37/P37RemoteProcess.class"
