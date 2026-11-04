@@ -32,6 +32,10 @@
 - Do not copy the original publisher's name, signature or official branding in a way implying that this modified release was published or endorsed by that publisher.
 - The original v70 certificate differs from the modified fixed-signature v135/v138 certificate. A matching applicationId is **not** proof of a valid in-place update; real device signing, versionCode and data-preservation requirements remain mandatory.
 
+## 3a. 设计参考及限制 / Design references and limitations
+
+See [REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md](REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md) for source-by-source *design inspirations versus shipped code*, virtual-device scope, anti-abuse safeguards and bilingual non-endorsement/warranty disclaimers. This ledger adds no blanket license, VM, browser identity claim or production feature guarantee.
+
 ## 4. 发布与验证状态 / Release status
 
 - **DSH Android v139 production APK is NOT released or accepted.**

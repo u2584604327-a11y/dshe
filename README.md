@@ -5,6 +5,7 @@
 > **二次修改声明：** 本仓库 `u2584604327-a11y/dshe` 是在第三方 DSH Android 基础上进行独立修改、兼容性审计、安全隔离与功能集成实验的工程。**不是原创 DSH Android 的官方仓库，也不代表原作者或 DeepSeek 官方，修改内容不得归责原作者。**
 >
 > **版权及许可：** [软件出处和二次修改声明（中英双语）](NOTICE.md) · [原作者完整 MIT 许可](THIRD_PARTY_LICENSES/DSHAPP-MIT.txt)。第三方 DSH 引擎、Termux、浏览器内核及其他资产仍须分别核实其许可，不能笼统视为全部 MIT。
+> **设计参考、虚拟设备范围与免责声明：** [REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md](REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md)。区分设计参考与实际代码复用，不承诺真实虚拟机或规避网站风控。
 >
 > **发布状态：** 正式 `v139` APK **尚未发布**；当前主要是审核与候选集成工程，不得把实验 APK 冒充正式 DSH。
 
