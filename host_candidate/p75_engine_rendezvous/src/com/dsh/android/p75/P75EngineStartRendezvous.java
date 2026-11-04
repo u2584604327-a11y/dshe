@@ -1,6 +1,7 @@
 package com.dsh.android.p75;
 
 import com.dsh.p37.P37RemoteProcess;
+import com.dsh.android.p68.P184ChildStartReceipt;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
@@ -25,6 +26,8 @@ public final class P75EngineStartRendezvous {
   private static final ThreadLocal<Pending> trustedCall=new ThreadLocal<>();
   private static final class Pending {
     final String session;
+    final long ownerEpoch;
+    final boolean requiresP184Receipt;
     final CountDownLatch entered=new CountDownLatch(1);
     final CountDownLatch answered=new CountDownLatch(1);
     boolean waiting,terminal;
@@ -32,7 +35,10 @@ public final class P75EngineStartRendezvous {
     // Session contents do not prove thread ownership.
     Thread claimedThread;
     P37RemoteProcess proxy;
-    Pending(String s){session=s;}
+    Pending(String s){this(s,0L,false);}
+    Pending(String s,long epoch,boolean requireReceipt){
+      session=s;ownerEpoch=epoch;requiresP184Receipt=requireReceipt;
+    }
   }
   private P75EngineStartRendezvous(){}
   public static void armFromTrustedHost(String hostGeneratedSession) {
@@ -42,6 +48,22 @@ public final class P75EngineStartRendezvous {
     synchronized(LOCK) {
       if(pending!=null)throw new SecurityException("P75_ALREADY_ARMED");
       pending=new Pending(hostGeneratedSession);
+    }
+  }
+  /**
+   * P184 host-only opt-in: only the P68-issued one-use receipt may satisfy
+   * this particular pending generation. No user/worker/Bundle can arm it.
+   * Production launch argv remains DENY except the old fixed id -u fixture.
+   */
+  public static void armForVerifiedChildReceipt(String hostGeneratedSession,
+      long trustedOwnerEpoch) {
+    if(hostGeneratedSession==null ||
+       !hostGeneratedSession.matches("[0-9a-f]{64}") ||
+       trustedOwnerEpoch<=0)
+      throw new SecurityException("P184_TRUSTED_HOST_EPOCH_REQUIRED");
+    synchronized(LOCK){
+      if(pending!=null)throw new SecurityException("P184_ALREADY_ARMED");
+      pending=new Pending(hostGeneratedSession,trustedOwnerEpoch,true);
     }
   }
   /** Test host must bind the exact coroutine's intended thread; not Binder thread. */
@@ -67,7 +89,8 @@ public final class P75EngineStartRendezvous {
       int platformSendingUid,P37RemoteProcess.IsolatedUidVerifier frameworkUidVerifier){
     synchronized(LOCK){
       Pending p=pending;
-      if(p==null || p.terminal || !p.waiting || p.proxy!=null ||
+      if(p==null || p.terminal || p.requiresP184Receipt ||
+         !p.waiting || p.proxy!=null ||
          !p.session.equals(hostGeneratedSession) || remote==null ||
          !remote.isAlive() || platformSendingUid<0 || frameworkUidVerifier==null ||
          !frameworkUidVerifier.isIsolatedUid(platformSendingUid) ||
@@ -79,6 +102,28 @@ public final class P75EngineStartRendezvous {
         return false;
       // Caller MUST be P48's onLiveProxy callback after P68 verified
       // Binder Message.sendingUid, session, ordering and CHILD_STARTED.
+      p.proxy=remote;
+      p.answered.countDown();
+      return true;
+    }
+  }
+  /**
+   * P184 verified path. Only receipts minted inside the real P68 Android
+   * Messenger after framework Message.sendingUid + ordered CHILD_STARTED
+   * are eligible. Caller-supplied UID/BooleanSupplier has NO path here.
+   */
+  public static boolean authenticatedChildStartedWithReceipt(
+      P184ChildStartReceipt verifiedReceipt, P37RemoteProcess remote){
+    synchronized(LOCK){
+      Pending p=pending;
+      if(p==null || p.terminal || !p.requiresP184Receipt ||
+         !p.waiting || p.proxy!=null || remote==null ||
+         verifiedReceipt==null)
+        return false;
+      // The receipt burns on the FIRST attempt, including identity mismatch.
+      // Owner epoch and session come from the trusted host pending lease.
+      if(!verifiedReceipt.consume(remote,p.session,p.ownerEpoch))
+        return false;
       p.proxy=remote;
       p.answered.countDown();
       return true;
