@@ -1,0 +1,113 @@
+name: P191 original browser manual fullscreen + tab-epoch stale callback gate (no APK)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p191_browser_manual_tab_owner/**'
+      - '.github/workflows/p191-original-browser-manual-tab-owner.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p191-browser-tab-epoch-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify-pinned-original-browser-integration:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    env:
+      ORIGINAL_SHA: 4dddb12fd076d052e788a16638a658b7a447b669
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: changes
+      - uses: actions/checkout@v4
+        with:
+          repository: pht88888888/DSHAPP
+          ref: 4dddb12fd076d052e788a16638a658b7a447b669
+          persist-credentials: false
+          path: original
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Strict source anchors, Java 8 guard and negative controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original rev-parse HEAD)" = "$ORIGINAL_SHA"
+          cmp original/LICENSE changes/THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          python3 -m py_compile changes/host_candidate/p191_browser_manual_tab_owner/patch_original_browser.py changes/host_candidate/p191_browser_manual_tab_owner/p190_fullscreen_kotlin_smoke.py
+          python3 changes/host_candidate/p191_browser_manual_tab_owner/p190_fullscreen_kotlin_smoke.py
+          python3 changes/host_candidate/p191_browser_manual_tab_owner/test_patch_contract.py
+          mkdir -p "$RUNNER_TEMP/p191java"
+          javac --release 8 -d "$RUNNER_TEMP/p191java" \
+            changes/host_candidate/p191_browser_manual_tab_owner/BrowserOperationLease.java \
+            changes/host_candidate/p191_browser_manual_tab_owner/BrowserOperationLeaseTest.java
+          java -cp "$RUNNER_TEMP/p191java" com.dsh.android.browser.BrowserOperationLeaseTest
+          python3 changes/host_candidate/p191_browser_manual_tab_owner/patch_original_browser.py \
+            --original original \
+            --source changes/host_candidate/p191_browser_manual_tab_owner \
+            --check
+      - name: Patch only original two browser Kotlin sources and one scoped lease
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 changes/host_candidate/p191_browser_manual_tab_owner/patch_original_browser.py \
+            --original original --source changes/host_candidate/p191_browser_manual_tab_owner
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          changed=subprocess.check_output(['git','-C','original','diff','--name-only'],text=True).splitlines()
+          untracked=subprocess.check_output(['git','-C','original','ls-files','--others','--exclude-standard'],text=True).splitlines()
+          assert set(changed+untracked)=={
+            'app/src/main/java/com/dsh/android/browser/BrowserBridge.kt',
+            'app/src/main/java/com/dsh/android/browser/AiBrowserView.kt',
+            'app/src/main/java/com/dsh/android/browser/BrowserOperationLease.java',
+          },'P191_SCOPE_DRIFT'
+          b=Path('original/app/src/main/java/com/dsh/android/browser/BrowserBridge.kt').read_text()
+          v=Path('original/app/src/main/java/com/dsh/android/browser/AiBrowserView.kt').read_text()
+          assert b.count('browserLease.complete(lease)')==1
+          assert b.count('browserLease.mayCleanupCancelled(lease)')==1
+          assert v.count('BrowserBridge.beginManualTakeover()')==1
+          assert v.count('BrowserBridge.endManualTakeover()')==1
+          assert v.count('private fun enterManualFullscreen()')==1
+          assert v.count('private fun exitManualFullscreen()')==1
+          assert v.count('if (manualFullscreen) {')>=2
+          assert v.count('tabRevision.incrementAndGet()') == 4
+          assert v.count('fun activeTabRevision(): Long = tabRevision.get()') == 1
+          assert b.count('view.activeTabRevision()') == 2
+          assert b.count('allowTabChange =') == 1
+          assert 'sub == "new" || sub == "close" || sub == "select"' in b
+          print('P191_EXACT_ORIGINAL_BRIDGE_AND_MENU_PATCH_SCOPE=PASS')
+          PY
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Compile real original Android Kotlin/Java browser with lease
+        shell: bash
+        working-directory: original
+        run: |
+          set -euo pipefail
+          test ! -e keystore.properties && test ! -e dsh-release.jks
+          gradle --no-daemon --console=plain --max-workers=2 \
+            :app:compileSystemDebugKotlin :app:compileSystemDebugJavaWithJavac
+          echo P191_ORIGINAL_AIBROWSER_BRIDGE_UI_COMPILE=PASS
+      - name: Deny production APK release and sensitive actions
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/p191java"
+          echo P191_NO_APK_OR_SIGNING=YES >> "$GITHUB_STEP_SUMMARY"
+          echo P191_NO_COOKIE_TOKEN_EXTRACTION=YES >> "$GITHUB_STEP_SUMMARY"
+          echo P191_SITE_CHALLENGE_IS_USER_LED=YES >> "$GITHUB_STEP_SUMMARY"
+          echo P191_NO_AUTO_REPLAY_WHEN_CHALLENGED=YES >> "$GITHUB_STEP_SUMMARY"
+          echo P191_PRODUCTION_ENGINE_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P191_P109_SENSITIVE_NATIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P191_FORMAL_V139=BLOCKED >> "$GITHUB_STEP_SUMMARY"
