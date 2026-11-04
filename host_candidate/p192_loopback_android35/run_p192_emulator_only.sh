@@ -32,8 +32,12 @@ cleanup() {
 # A fresh disposable AVD must not already contain this package. This also
 # ensures post-install package attestation cannot accept a stale preinstall.
 p192_stage="APK_PREINSTALL_ABSENT"
-before_install="$(adb -s "$serial" shell pm path com.dsh.android | tr -d '\r')"
-[[ -z "$before_install" ]] || { echo P192_PREEXISTING_PACKAGE_DENIED; false; }
+# pm path exits nonzero when a package is absent on some Android builds.
+# pm list packages returns exit 0 and an empty match set for that normal state.
+before_install="$(adb -s "$serial" shell pm list packages -U com.dsh.android | tr -d '\r')"
+[[ "$before_install" != *"package:com.dsh.android "* &&
+   "$before_install" != "package:com.dsh.android" ]] ||
+  { echo P192_PREEXISTING_PACKAGE_DENIED; false; }
 trap cleanup EXIT
 # Distinguish adb command failure from verified post-install attestation.
 # Stage labels and reason codes are fixed vocabulary; no raw adb output.
