@@ -35,7 +35,7 @@ jobs:
           test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
           test -s host_candidate/p195_coroutine_lifecycle/README.md
           test "$(git hash-object host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java)" = f93dfe510ad04a247251b2d0e00cc7caf43fc0c3
-          test "$(git hash-object host_candidate/p194_original_modes/src/com/dsh/android/p194/P194OriginalModeSeal.java)" = 87b3481f4cbd54e8b0ce9bcfe1e2049b1f5b391a
+          test "$(git hash-object host_candidate/p194_original_modes/src/com/dsh/android/p194/P194OriginalModeSeal.java)" = cc5d3df5b9b97b180d11e9cef33d4617bb624eff
           test "$(git hash-object host_candidate/p35_original_engine_spawn_contract.py)" = ff1b65e7fc915a8b23f363db93659cc221aaa6a0
           grep -Fq "original_DSH_runtime_wiring':'NOT_IMPLEMENTED" host_candidate/p35_original_engine_spawn_contract.py
           grep -Fq 'public synchronized boolean hasProductionEngineReady(){return false;}' host_candidate/p195_coroutine_lifecycle/src/com/dsh/android/p195/P195OriginalCoroutineLifecycle.java
