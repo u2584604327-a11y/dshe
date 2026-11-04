@@ -1,0 +1,69 @@
+name: P195 original Process reader latch lifecycle and P194 exact-seal Java8 only
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p195_coroutine_lifecycle/**'
+      - '.github/workflows/p195-coroutine-process-lifecycle.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p195-coroutine-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  java8-p37-p194-and-lifecycle:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Pin source-only provenance and validate default-deny semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p195_coroutine_lifecycle/run_java8.sh
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+          test -s host_candidate/p195_coroutine_lifecycle/README.md
+          test "$(git hash-object host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java)" = f93dfe510ad04a247251b2d0e00cc7caf43fc0c3
+          test "$(git hash-object host_candidate/p194_original_modes/src/com/dsh/android/p194/P194OriginalModeSeal.java)" = 87b3481f4cbd54e8b0ce9bcfe1e2049b1f5b391a
+          test "$(git hash-object host_candidate/p35_original_engine_spawn_contract.py)" = ff1b65e7fc915a8b23f363db93659cc221aaa6a0
+          grep -Fq "original_DSH_runtime_wiring':'NOT_IMPLEMENTED" host_candidate/p35_original_engine_spawn_contract.py
+          grep -Fq 'public synchronized boolean hasProductionEngineReady(){return false;}' host_candidate/p195_coroutine_lifecycle/src/com/dsh/android/p195/P195OriginalCoroutineLifecycle.java
+          grep -Fq 'P195_TRUE_ENGINE_MANAGER_COROUTINE=NOT_WIRED' host_candidate/p195_coroutine_lifecycle/test/com/dsh/android/p195/P195OriginalCoroutineLifecycleTest.java
+          echo P195_ORIGINAL_V138_SOURCE_NOT_PRODUCTION_HOOK=PASS
+      - name: Run actual Java8 P37 Process facade, P194 seal and reader lifecycle negatives
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash host_candidate/p195_coroutine_lifecycle/run_java8.sh | tee "$RUNNER_TEMP/p195.log"
+          grep -Fxq 'P195_PROCESS_ALIAS_P194_SEAL_READER_LATCH_AND_AUTH_EXIT=PASS' "$RUNNER_TEMP/p195.log"
+          grep -Fxq 'P195_THREE_MODES_REAL_P37_STREAM_READER_EOF=PASS' "$RUNNER_TEMP/p195.log"
+          grep -Fxq 'P195_STALE_EOF_TRANSPORT_LOSS_AND_FAKE_READY_DENIED=PASS' "$RUNNER_TEMP/p195.log"
+          grep -Eq '^P195_JAVA8_ORIGINAL_LIFECYCLE_FIXTURE=PASS checks=[1-9][0-9]*$' "$RUNNER_TEMP/p195.log"
+          grep -Fxq 'P195_TRUE_ENGINE_MANAGER_COROUTINE=NOT_WIRED' "$RUNNER_TEMP/p195.log"
+          grep -Fxq 'P195_REAL_NODE_TOKEN_HTTP_READY=NOT_WIRED' "$RUNNER_TEMP/p195.log"
+          git diff --exit-code
+      - name: State production and platform proof boundaries
+        if: always()
+        shell: bash
+        run: |
+          echo P195_ANDROID35_GENUINE_ENGINE_MANAGER_COROUTINE=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P195_REAL_P184_TO_ORIGINAL_COROUTINE=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P195_P37_READER_LATCH_SOURCE_FIXTURE=CHECK_PRECEDING_TEST >> "$GITHUB_STEP_SUMMARY"
+          echo P195_ORIGINAL_NODE_ARM64_JS_FD_HTTP_TOKEN_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P195_P47_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P195_P109_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P195_GS_SCREENSHOT=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P195_P102_NATIVE_UI_CONSENT=NOT_PROVEN >> "$GITHUB_STEP_SUMMARY"
+          echo P195_SIGN_DEPLOY_INSTALL=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P195_V139_RELEASE=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"
