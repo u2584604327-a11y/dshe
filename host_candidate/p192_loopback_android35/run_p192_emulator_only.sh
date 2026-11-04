@@ -29,8 +29,13 @@ cleanup() {
   fi
   adb -s "$serial" shell pm uninstall com.dsh.android >/dev/null 2>&1 || true
 }
+# A fresh disposable AVD must not already contain this package. This also
+# ensures post-install package attestation cannot accept a stale preinstall.
+p192_stage="APK_PREINSTALL_ABSENT"
+before_install="$(adb -s "$serial" shell pm path com.dsh.android | tr -d '\r')"
+[[ -z "$before_install" ]] || { echo P192_PREEXISTING_PACKAGE_DENIED; false; }
 trap cleanup EXIT
-# Distinguish adb command failure from strict success-output mismatch.
+# Distinguish adb command failure from verified post-install attestation.
 # Stage labels and reason codes are fixed vocabulary; no raw adb output.
 p192_stage="ADB_INSTALL_COMMAND"
 if installed="$(adb -s "$serial" install "$apk" 2>&1)"; then
@@ -49,16 +54,21 @@ else
 fi
 p192_stage="ADB_INSTALL_OUTPUT"
 installed="$(printf '%s' "$installed" | tr -d '\r')"
-# ADB rc must already be zero. Exact last-line Success plus no FAIL/ERROR
-# tokens, followed by a separate installed-package/UID and Activity check.
-install_last="$(printf '%s' "$installed" | tail -n 1)"
+# adb exit status 0 is required above. Its output can contain extra emulator
+# progress after "Success" and is not a reliable structured API. Reject
+# failure/error text, then REQUIRE a fresh installed package, UID and Activity.
+# Never print raw adb output (may contain device or private values).
 install_upper="$(printf '%s' "$installed" | tr '[:lower:]' '[:upper:]')"
-[[ "$install_last" == "Success" && "$install_upper" != *"FAIL"* && "$install_upper" != *"ERROR"* ]]
-echo P192_ADB_INSTALL_ACCEPTED_EXACT_FINAL_SUCCESS=PASS
+[[ "$install_upper" != *"FAIL"* && "$install_upper" != *"ERROR"* ]]
+echo P192_ADB_INSTALL_EXIT0_NO_FAILURE_TOKENS=PASS
 p192_stage="APK_UID_RESOLVE"
 packages="$(adb -s "$serial" shell pm list packages -U com.dsh.android | tr -d '\r')"
 uid="$(sed -n -E 's/^package:com\.dsh\.android uid:([0-9]+).*/\1/p' <<< "$packages")"
 [[ "$uid" =~ ^[0-9]+$ ]]
+p192_stage="APK_PATH_RESOLVE"
+installed_paths="$(adb -s "$serial" shell pm path com.dsh.android | tr -d '\r')"
+[[ "$installed_paths" == package:* && "$installed_paths" == *"/com.dsh.android-"*"/base.apk"* ]]
+echo P192_FRESH_PACKAGE_UID_AND_PATH_ATTESTED=PASS
 # Reject all egress for the host UID, except its own IPv4 loopback path.
 # Never grant permissions to isolated UID or allow remote network access.
 p192_stage="NETWORK_IPTABLES_REJECT_IPV4"
