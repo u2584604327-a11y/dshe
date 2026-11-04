@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 58
     env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
       P47_NO_HOST_FALLBACK: '1'
       P181_THREE_ORIGINAL_START_DENY: '1'
       P49_NODE_STAGE: '0'
@@ -83,7 +85,8 @@ jobs:
         run: |
           set -euo pipefail
           if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh >.p192_build.log 2>&1; then
-            grep -E 'P43_|P47_|P76_|P187_|P192_|error:|Traceback' .p192_build.log | tail -n 30 || true
+            grep -E 'P43_|P47_|P76_|P187_|P192_|error:|Traceback|unbound variable|failed|Failed|exit status' .p192_build.log | tail -n 30 || true
+            echo P192_BUILD_FAILED_CHECK_STAGE_AND_REQUIRED_ENV
             exit 1
           fi
           apk=.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
