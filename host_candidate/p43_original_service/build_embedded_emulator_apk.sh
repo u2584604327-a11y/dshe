@@ -128,6 +128,7 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p53_child_start/src/com/dsh/android/p53/P53StartOrder.java \
   host_candidate/p67_authenticated_handoff/src/com/dsh/android/p67/P67AuthenticatedHandoff.java \
   host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java \
+  host_candidate/p184_verified_child_receipt/src/com/dsh/android/p68/P184ChildStartReceipt.java \
   host_candidate/p71_browser_runtime/src/com/dsh/android/p71/P71ToolReplyOnce.java \
   host_candidate/p71_browser_runtime/android/com/dsh/android/p71/P71WebViewProfileProbe.java \
   host_candidate/p73_webview_callback/android/com/dsh/android/p73/P73BrowserToolCallbackProbe.java \
@@ -234,6 +235,7 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p53/P53StartOrder;',
                   'Lcom/dsh/android/p67/P67AuthenticatedHandoff;',
                   'Lcom/dsh/android/p68/P68AndroidBinderIntake;',
+                  'Lcom/dsh/android/p68/P184ChildStartReceipt;',
                   'Lcom/dsh/android/p71/P71ToolReplyOnce;',
                   'Lcom/dsh/android/p71/P71WebViewProfileProbe;',
                   'Lcom/dsh/android/p73/P73BrowserToolCallbackProbe;',

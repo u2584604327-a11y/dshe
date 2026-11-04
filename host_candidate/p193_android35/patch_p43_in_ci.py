@@ -20,7 +20,7 @@ BUILDER=BASE+"build_embedded_emulator_apk.sh"
 PINNED={
     WORKER:"feabcaf30f2458e85a044e0f789bbc31254f3269",
     ACTIVITY:"8a83ef4c53c8e527f604023ab5eec2be8f2e12a9",
-    BUILDER:"d9dac2518ffa00833ba47429425657ff479fb28d"
+    BUILDER:"62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f"
 }
 NEW_SOURCES=[
  "host_candidate/p193_host_loopback/src/com/dsh/android/p193/P193HostLoopbackFixture.java",
