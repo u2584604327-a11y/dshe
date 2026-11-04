@@ -1,5 +1,11 @@
 name: P191 original browser manual fullscreen + tab-epoch stale callback gate (no APK)
 on:
+  push:
+    branches:
+      - 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    paths:
+      - 'host_candidate/p191_browser_manual_tab_owner/**'
+      - '.github/workflows/p191-original-browser-manual-tab-owner.yml'
   pull_request:
     types: [opened, synchronize]
     paths:
@@ -13,9 +19,12 @@ concurrency:
 jobs:
   verify-pinned-original-browser-integration:
     if: >-
-      github.event.pull_request.number == 80 &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/dsh/p96-original-engine-stream-owner-narrow-20261030') ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.number == 80 &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030')
     runs-on: ubuntu-24.04
     timeout-minutes: 22
     env:
