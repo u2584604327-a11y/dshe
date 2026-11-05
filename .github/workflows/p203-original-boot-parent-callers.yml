@@ -49,7 +49,8 @@ jobs:
           p=Path("host_candidate/p203_original_boot_parents/audit_original_boot_parent_callers.py")
           compile(p.read_text(),str(p),"exec")
           s=p.read_text()
-          assert '"NOT_PROVEN"' in s and '"NOT_ATTESTED"' in s
+          assert '"NOT_PROVEN"' in s
+          assert "P203_REAL_KOTLIN_COROUTINE_OS_ORIGIN=NOT_ATTESTED" in s
           assert '"STRUCTURAL_BLOCKED"' in s
           print("P203_SOURCE_NO_ENGINE_OR_UI_EXECUTION=PASS")
           PY
