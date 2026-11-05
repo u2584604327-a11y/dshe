@@ -113,11 +113,29 @@ else
 fi
 
 # P209: same fresh original coroutine entry and P47 final DENY from actual host.
+# P209 safe observation counters are scoped after this run's single unique log boundary.
+# Never emit original runtime builder argv, env, UID numbers, stack traces or raw Logcat.
+p209_count() {
+  printf '%s\n' "$selected" | grep -Fc "$1" || true
+}
+p209_count_pid() {
+  printf '%s\n' "$selected" | awk -v pid="$pid" -v k="$1" \
+    'index($0,k) && $3==pid{n++} END{print n+0}'
+}
+p209_gate_diagnostic() {
+  echo "P209_GATE_ENTRY_TAG_COUNT=$(p209_count 'P209_P47_ENTER_UID=')"
+  echo "P209_GATE_ENTRY_HOST_PID_COUNT=$(p209_count_pid 'P209_P47_ENTER_UID=')"
+  echo "P209_GATE_FINAL_TAG_COUNT=$(p209_count 'P209_P47_FINAL_DENY_UID=')"
+  echo "P209_GATE_FINAL_HOST_PID_COUNT=$(p209_count_pid 'P209_P47_FINAL_DENY_UID=')"
+  echo "P209_GATE_ORIGINAL_STACK_PASS_COUNT=$(p209_count_pid 'P209_ORIGINAL_CALLSTACK=PASS')"
+  echo "P209_GATE_ORIGINAL_STACK_OTHER_COUNT=$(p209_count_pid 'P209_ORIGINAL_CALLSTACK=OTHER')"
+}
 for key in P209_P47_ENTER_UID= P209_P47_FINAL_DENY_UID=;do
   vals="$(printf '%s\n' "$selected" | awk -v pid="$pid" -v key="$key" '
     index($0,key) && $3==pid {n=split($0,a,key);if(n==2){v=a[2];sub(/[[:space:]].*/,"",v);print v}}')"
   [[ "$(printf '%s\n' "$vals" | grep -c . || true)" == 1 &&
      "$vals" == "$uid" ]] || {
+     p209_gate_diagnostic
      echo P209_GATE_OS_PID_UID_MISMATCH_OR_NOT_OBSERVED=DENY;exit 2;
   }
 done
