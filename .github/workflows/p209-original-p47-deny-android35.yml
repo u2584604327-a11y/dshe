@@ -69,7 +69,7 @@ jobs:
           test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
           python3 - <<'PY'
           from pathlib import Path
-          for s in ("patch_gate_ci_only.py","test_patch_gate_ci_only.py","verify_gate_dex.py"):
+          for s in ("patch_gate_ci_only.py","test_patch_gate_ci_only.py","verify_gate_dex.py","verify_original_precall.py"):
             f=Path("host_candidate/p209_original_p47_deny")/s
             compile(f.read_text(),str(f),"exec")
           print("P209_SOURCE_PYTHON_SYNTAX=PASS")
@@ -125,6 +125,7 @@ jobs:
           grep -Fxq 'P208_CI_ONLY_EXACT_ORIGINAL_START2_ENTRY_MARKER=PASS' .p208tmp/build.log
           grep -Fxq 'P209_ONLY_TEMP_P40_ONE_LOG_AND_NO_HOST_SPAWN=PASS' .p208tmp/build.log
           grep -Fxq 'P208_ORIGINAL_START2_TEXT_EXCEPT_ONE_INVOKE=BYTE_IDENTICAL' .p208tmp/build.log
+          grep -Fxq 'P209_ONLY_TEST_PRE_PC3912_MARKER=PASS' .p208tmp/build.log
           grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p208tmp/build.log
           grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p208tmp/build.log
           grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p208tmp/build.log
@@ -134,14 +135,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 host_candidate/p208_original_start_coroutine/verify_derived.py \
+          python3 host_candidate/p209_original_p47_deny/verify_original_precall.py \
             .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
             .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
             | tee "$RUNNER_TEMP/p208-parity.log"
-          grep -Fxq 'P208_ONLY_FIRST_COROUTINE_MARKER_PLUS_PC3912_P40_DENY=PASS' "$RUNNER_TEMP/p208-parity.log"
-          grep -Fxq 'P208_ORIGINAL_START2_OTHER_OPCODES_OPERANDS=PARITY' "$RUNNER_TEMP/p208-parity.log"
-          grep -Fxq 'P208_ORIGINAL_START_PARENT_BOOT_ONCREATE_PARITY=PASS' "$RUNNER_TEMP/p208-parity.log"
-          grep -Fxq 'P208_JAVA_WITNESS_ONLY_DISPOSABLE_CLASSES3=PASS' "$RUNNER_TEMP/p208-parity.log"
+          grep -Fxq 'P209_START2_ONLY_FIRST_AND_PRE_PC3912_TWO_TEST_MARKERS=PASS' "$RUNNER_TEMP/p208-parity.log"
+          grep -Fxq 'P209_START2_ORIGINAL_ALL_OTHER_OPCODES_OPERANDS=PARITY' "$RUNNER_TEMP/p208-parity.log"
+          grep -Fxq 'P209_ORIGINAL_UPSTREAM_ENGINE_BOOT_ONCREATE=PARITY' "$RUNNER_TEMP/p208-parity.log"
+          grep -Fxq 'P209_PRE_PC3912_MARKER_ONLY_IN_DISPOSABLE_CLASSES3=PASS' "$RUNNER_TEMP/p208-parity.log"
           python3 host_candidate/p209_original_p47_deny/verify_gate_dex.py \
             .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
             | tee "$RUNNER_TEMP/p209-gate-parity.log"
@@ -178,6 +179,7 @@ jobs:
           echo P208_REAL_PHONE_INSTALL=NOT_PERFORMED >> "$GITHUB_STEP_SUMMARY"
           echo P208_DIFFERENT_SIGNER_ORIGINAL_DATA_OVERWRITE=FORBIDDEN >> "$GITHUB_STEP_SUMMARY"
           echo P209_REAL_P47_DENIED_LAUNCH=SEE_ACTUAL_ANDROID35_LOGS >> "$GITHUB_STEP_SUMMARY"
+          echo P209_ORIGINAL_PC3912_PRECALL=SEE_ACTUAL_ANDROID35_LOGS >> "$GITHUB_STEP_SUMMARY"
           echo P209_CHILD_OS_OWNER=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
           echo P209_P184_RECEIPT=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
           echo P209_FORMAL_V139=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"
