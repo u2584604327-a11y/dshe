@@ -127,8 +127,8 @@ def branch_assessment(items):
     candidates=[]
     for row in items:
         pc=row["pc"]
-        if pc>=CALL_PC or not is_cond(row["op"]) or
-           not reachable(edges,0,pc):
+        if (pc>=CALL_PC or not is_cond(row["op"]) or
+                not reachable(edges,0,pc)):
             continue
         destinations=edges[pc]
         need_arms=[reachable(edges,d,CALL_PC) for d in destinations]
