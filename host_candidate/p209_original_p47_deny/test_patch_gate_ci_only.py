@@ -10,7 +10,7 @@ def original():
        p.THROW+"  }\n"+p.NEXT+" probe config unchanged\n")
 def builder():
     return (p.BEFORE+"if test \"P208_CI_METHOD_ENTRY_ONLY\" = 1; then\n"+
-           "p208/P208StartCoroutineWitness.java\n"+p.P208_HOOK)
+           "  "+p.P208_JAVA+" \\\n"+p.P208_HOOK)
 class Tests(unittest.TestCase):
     def deny(self,code,func):
         with self.assertRaises(p.Deny) as cm:func()
@@ -36,7 +36,7 @@ class Tests(unittest.TestCase):
         self.assertIn(p.AFTER,p.patch_builder(builder()))
     def test_builder_inverse(self):
         v=p.patch_builder(builder())
-        self.assertEqual(v.replace(p.P208_HOOK+p.P209_HOOK,p.P208_HOOK,1).replace(p.AFTER,p.BEFORE,1),builder())
+        self.assertEqual(v.replace("  "+p.PRE_JAVA+" \\\n","",1).replace(p.P208_HOOK+p.P209_HOOK,p.P208_HOOK,1).replace(p.AFTER,p.BEFORE,1),builder())
     def test_wrong_builder(self):
         self.deny("PINNED_P208_BUILDER_REQUIRED",lambda:p.patch_builder("untrusted"))
     def test_duplicate_source(self):
