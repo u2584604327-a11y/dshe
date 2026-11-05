@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: p208-original-coroutine-entry-${{ github.ref }}
+  group: p209-original-p47-deny-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   real-original-coroutine-entry:
