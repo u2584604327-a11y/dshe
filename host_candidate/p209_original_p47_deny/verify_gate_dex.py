@@ -75,6 +75,39 @@ def main():
         jumps=[pos for pos,insn in rows
             if pos<3912 and insn.get_name().startswith("goto")]
         need(len(guards)>0,"ORIGINAL_PREPC3912_GUARD_COUNT")
+        # Conservative normal-edge CFG. Switch/payload and exception edges
+        # are deliberately NOT expanded; never claim this proves Android reach.
+        import importlib
+        helper=pathlib.Path(__file__).resolve().parents[1]/"p204_oncreate_pc430"
+        sys.path.insert(0,str(helper))
+        cfg=importlib.import_module("audit_original_oncreate_pc430")
+        nodes=[cfg.instruction(pc,inst.get_name(),inst.get_length(),
+            inst.get_ref_off() if cfg.is_cond(inst.get_name()) or
+              cfg.is_jump(inst.get_name()) else None)
+            for pc,inst in rows]
+        try:
+            edges,unknown,by_pc=cfg.graph(nodes)
+            need(3912 in by_pc,"PC3912_CFG_INSTRUCTION_BOUNDARY")
+            reachable=cfg.reachable(edges,0,3912)
+            candidates=[]
+            for node in nodes:
+                at=node["pc"]
+                if at>=3912 or not cfg.is_cond(node["op"]) or
+                   not cfg.reachable(edges,0,at):
+                    continue
+                arms=[cfg.reachable(edges,d,3912) for d in edges[at]]
+                if len(set(arms))>1:
+                    candidates.append((at,node["op"]))
+            print("P209_PC3912_CONSERVATIVE_NORMAL_CFG="+
+                  ("REACHABLE" if reachable else "NOT_PROVEN_REACHABLE"))
+            print("P209_PC3912_PRECALL_SPLIT_GUARD_COUNT="+str(len(candidates)))
+            for at,op in candidates[:8]:
+                print("P209_PC3912_PRECALL_GUARD_PC="+str(at)+",OP="+op)
+            print("P209_CFG_SWITCH_OR_PAYLOAD_UNEXPANDED="+str(len(unknown)))
+        except cfg.Blocked:
+            print("P209_PC3912_CONSERVATIVE_NORMAL_CFG=UNDETERMINED")
+        print("P209_PC3912_EXCEPTION_HANDLER_EDGES=NOT_MODELED")
+        print("P209_PC3912_RUNTIME_BRANCH_TAKEN=NOT_ATTESTED")
         print("P209_SIGNED_ORIGINAL_START2_PC3912_STATIC_AUDIT=PASS")
         print("P209_PRE_PC3912_CONDITIONAL_COUNT="+str(len(guards)))
         print("P209_PRE_PC3912_GOTO_COUNT="+str(len(jumps)))
