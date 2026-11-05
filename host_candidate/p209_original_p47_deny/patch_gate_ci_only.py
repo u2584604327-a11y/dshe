@@ -174,7 +174,7 @@ def inject_precall(s, expected_guard_op="if-ne"):
     guard_at=sum(map(len,rows[:cond_idx]))
     after_cond=guard_at+len(rows[cond_idx])
     label_end=sum(map(len,rows[:label_idx+1]))
-    need(body.index(p208.INSERT)<guard_at<after_cond<=label_end<at and
+    need(body.index(p208.INSERT)<guard_at<after_cond<=label_end<=at and
          cond_idx<label_idx<call_idx,
          "ENTRY_FIRST_IF_TAKEN_LABEL_PRE_PC3912_ORDER")
     newbody=(body[:guard_at]+GUARD_INVOKE+
