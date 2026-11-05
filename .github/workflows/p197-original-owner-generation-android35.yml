@@ -1,0 +1,138 @@
+name: P197 real Android35 original singleton host generation to P68/P184 receipt (no Node)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p197_original_owner/**'
+      - '.github/workflows/p197-original-owner-generation-android35.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p197-real-owner-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  original-host-singleton-and-framework-binder:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 58
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      P49_NODE_STAGE: '0'
+      P51_SIDE_BY_SIDE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Strict host owner epoch Java8 and old P184 receipt negatives
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P181_THREE_ORIGINAL_START_DENY" = 1
+          test "$P49_NODE_STAGE" = 0
+          test "$P51_SIDE_BY_SIDE" = 0
+          bash -n host_candidate/p197_original_owner/run_android35_receipt.sh
+          bash -n host_candidate/p197_original_owner/run_java8.sh
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          ast.parse(Path("host_candidate/p197_original_owner/patch_p43_ci_only.py").read_text())
+          print("P197_ANDROID35_CI_PATCHER_SYNTAX=PASS")
+          PY
+          bash host_candidate/p197_original_owner/run_java8.sh | tee "$RUNNER_TEMP/p197-owner.log"
+          grep -Eq '^P197_JAVA8_HOST_OWNER_NEGATIVES=PASS checks=[1-9][0-9]*$' "$RUNNER_TEMP/p197-owner.log"
+          grep -Fxq 'P197_TRUE_ENGINE_MANAGER_COROUTINE=NOT_INVOKED' "$RUNNER_TEMP/p197-owner.log"
+          grep -Fxq 'P197_FRAMEWORK_UID_AND_ORIGINAL_SINGLETON_REAL_ANDROID=REQUIRES_ANDROID_TEST' "$RUNNER_TEMP/p197-owner.log"
+          bash host_candidate/p184_verified_child_receipt/run_java8.sh | tee "$RUNNER_TEMP/p197-receipt.log"
+          grep -Fq 'P184_JAVA8_NEGATIVE_AND_THREAD_TEST=PASS assertions=53' "$RUNNER_TEMP/p197-receipt.log"
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+          echo P197_P184_NO_PLATFORM_AUTHORITY_FROM_JVM_TEST=PASS
+      - name: Patch only two pinned P43 original-package CI test sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p197_original_owner/patch_p43_ci_only.py --ci
+          git diff --name-only | sort > .p197_actual
+          printf '%s\n' \
+            host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java \
+            host_candidate/p43_original_service/build_embedded_emulator_apk.sh | sort > .p197_expected
+          cmp .p197_actual .p197_expected
+          echo P197_CI_ONLY_TWO_PINNED_ORIGINAL_P43_FILES_CHANGED=PASS
+      - name: Provision disposable Android35 tools and exact androguard decoder
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/d8"
+      - name: Build original-v138-derived disposable DENY-only APK and verify P197 classes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh >.p197_build.log 2>&1;then
+            echo P197_EPHEMERAL_ORIGINAL_APK_COMPILE_FAILED
+            exit 1
+          fi
+          test -s .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p197_build.log
+          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p197_build.log
+          grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p197_build.log
+          grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p197_build.log
+          python3 - <<'PY'
+          import zipfile
+          from androguard.core.dex import DEX
+          p=".p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
+          required={"Lcom/dsh/android/p197/P197HostGeneration;",
+                    "Lcom/dsh/android/p197/P197HostGeneration$Lease;",
+                    "Lcom/dsh/android/p197/P197AndroidOwnerInspector;",
+                    "Lcom/dsh/android/p197/P197AndroidHostEpochProbe;"}
+          with zipfile.ZipFile(p) as z:
+            names={x.get_name() for x in DEX(z.read("classes3.dex")).get_classes()}
+          assert required <= names
+          print("P197_ACTUAL_DERIVED_APK_HOST_EPOCH_CLASSES=PASS")
+          PY
+          echo P197_ORIGINAL_V138_DERIVED_APK_BUILD=PASS
+      - name: Enable disposable Android35 emulator KVM
+        shell: bash
+        run: if test -c /dev/kvm;then sudo chmod 666 /dev/kvm;fi
+      - name: Actual Android35 existing original EngineManager singleton and Binder receipt owner epoch
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p197_original_owner/run_android35_receipt.sh
+      - name: Erase temporary original package and deny all production claims
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp .p197_build.log .p197_actual .p197_expected
+          echo P197_ACTUAL_EXISTING_ORIGINAL_SINGLETON=CHECK_REAL_EMULATOR_STEP >> "$GITHUB_STEP_SUMMARY"
+          echo P197_FRAMEWORK_UID_AND_ONE_USE_RECEIPT=CHECK_REAL_EMULATOR_STEP >> "$GITHUB_STEP_SUMMARY"
+          echo P197_REAL_ORIGINAL_KOTLIN_COROUTINE=NOT_INVOKED >> "$GITHUB_STEP_SUMMARY"
+          echo P197_ORIGINAL_ARM64_NODE_HTTP_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P197_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P197_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P197_GS_CAPTURE=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P197_RELEASE_SIGN_INSTALL_USER_PHONE=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P197_FORMAL_V139=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"
