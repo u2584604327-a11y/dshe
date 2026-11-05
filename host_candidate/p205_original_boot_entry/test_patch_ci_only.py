@@ -81,7 +81,7 @@ class P205Tests(unittest.TestCase):
     def test_builder_without_java_line_denied(self):
         self.denied("EXPECTED_ONE_JAVA_COMPILE",lambda:p.patch_builder(
             ('if test "${P72_ACCESSOR_FIXTURE_ONLY:-0}" = 1; then\n'
-             + '  test "${P51_SIDE_BY_SIDE:-0}" = 1 || {'))
+             + '  test "${P51_SIDE_BY_SIDE:-0}" = 1 || {')))
     def test_no_native_permission_or_host_start(self):
         src=p.patch_original_smali(fixture())
         for forbidden in ("ProcessBuilder","INTERNET","startOrDeny"):

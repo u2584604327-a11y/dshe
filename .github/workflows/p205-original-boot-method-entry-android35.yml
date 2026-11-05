@@ -43,7 +43,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          for name in ("patch_ci_only.py","verify_derived.py"):
+          for name in ("patch_ci_only.py","verify_derived.py","test_patch_ci_only.py"):
             f=Path("host_candidate/p205_original_boot_entry")/name
             compile(f.read_text(),str(f),"exec")
           print("P205_COMPILE_IN_MEMORY_WITHOUT_WORKTREE_CACHE=PASS")
