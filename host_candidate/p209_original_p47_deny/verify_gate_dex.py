@@ -92,8 +92,8 @@ def main():
             candidates=[]
             for node in nodes:
                 at=node["pc"]
-                if at>=3912 or not cfg.is_cond(node["op"]) or
-                   not cfg.reachable(edges,0,at):
+                if (at>=3912 or not cfg.is_cond(node["op"]) or
+                    not cfg.reachable(edges,0,at)):
                     continue
                 arms=[cfg.reachable(edges,d,3912) for d in edges[at]]
                 if len(set(arms))>1:
