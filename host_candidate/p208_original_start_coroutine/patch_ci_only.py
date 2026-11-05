@@ -126,7 +126,7 @@ def find_method(s):
 def patch_original_smali(s):
     require(INSERT.strip() not in s,"ORIGINAL_ALREADY_INSTRUMENTED")
     a,b,method=find_method(s)
-    require(200<len(method)<220000,"SUSPEND_METHOD_BYTES_BOUND")
+    require(350<len(method)<220000,"SUSPEND_METHOD_BYTES_BOUND")
     directives=list(re.finditer(r"(?m)^[ \t]+\.(?:registers|locals)[ \t]+\d+[ \t]*$",method))
     require(len(directives)==1,"EXACT_REGISTER_DIRECTIVE")
     require(method.count("Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;")==1 and
