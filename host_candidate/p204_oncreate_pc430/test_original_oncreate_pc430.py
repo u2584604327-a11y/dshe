@@ -85,7 +85,9 @@ class P204Test(unittest.TestCase):
         self.blocked("ONCREATE_BOOTENGINE_EDGE_COUNT",
                      lambda:p.branch_assessment(x))
     def test_missing_anchor_denied(self):
-        x=[i for i in fixture() if i["pc"]<430]
+        # A valid truncated no-anchor method must not retain an invalid
+        # branch to that now-missing PC; that is a separate rejection case.
+        x=[i for i in fixture(conditional=False) if i["pc"]<430]
         self.blocked("PC430_NOT_AN_INSTRUCTION",lambda:p.branch_assessment(x))
     def test_invalid_branch_target_denied(self):
         x=fixture()
