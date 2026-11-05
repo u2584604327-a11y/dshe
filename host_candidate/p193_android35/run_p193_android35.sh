@@ -73,6 +73,23 @@ for _ in $(seq 1 25); do
   ')"
   if [[ "$since" == *P193_MARKER_ERROR* ]];then sleep 1;continue;fi
   if [[ "$since" == *"P193_ANDROID35_"*"=DENY"* ]];then
+    # All diagnostic output is an explicit, finite allowlist of fixed status
+    # codes. Never print raw logcat, UID/session/nonce/token or arbitrary
+    # exception text, even on failing tests.
+    for code in \
+      P193_ANDROID35_FRAMEWORK_SENDER_UID \
+      P193_ANDROID35_FRAME_SCHEMA \
+      P193_ANDROID35_REPLAY_OR_FRAME \
+      P193_ANDROID35_MALFORMED_FRAME \
+      P193_ANDROID35_LOOPBACK_SERVER_ERROR \
+      P193_ANDROID35_LOOPBACK_SERVER_TIMEOUT \
+      P193_ANDROID35_LOOPBACK_OR_BINDER_VALIDATION \
+      P193_ANDROID35_FIXED_FIXTURE_ERROR \
+      P193_ANDROID35_REVOKED_BINDER; do
+      if [[ "$since" == *"$code=DENY"* ]];then
+        echo "P193_SAFE_DIAGNOSTIC_${code}=DENY"
+      fi
+    done
     echo P193_ANDROID35_SAFETY_REJECTION;exit 2
   fi
   if [[ "$since" == *P193_ANDROID35_HOST_LOOPBACK_BINDER_TWO_UID=PASS* &&
@@ -85,7 +102,22 @@ for _ in $(seq 1 25); do
   fi
   sleep 1
 done
-[[ "$ok" == YES ]] || { echo P193_ANDROID35_REAL_UID_BINDER_PROOF_MISSING;exit 2; }
+if [[ "$ok" != YES ]];then
+  # A missing proof is not silently normalized to a success.
+  # Print only known marker names, no values and no full logcat.
+  for code in \
+    P193_ANDROID35_HOST_LOOPBACK_BINDER_TWO_UID \
+    P193_ANDROID35_FRAMEWORK_SENDING_UID_AUTH \
+    P193_ANDROID35_BINDER_DUPLICATE_FRAME_REJECT \
+    P193_ANDROID35_WRONG_SESSION_DROPPED \
+    P193_ANDROID35_WORKER_NO_NETWORK_BINDER_ACK \
+    P43_REAL_ORIGINAL_APK_BINDER_ISOLATED_UID; do
+    if [[ "$since" != *"$code=PASS"* ]];then
+      echo "P193_MISSING_REQUIRED_PROOF_${code}"
+    fi
+  done
+  echo P193_ANDROID35_REAL_UID_BINDER_PROOF_MISSING;exit 2
+fi
 echo P193_ANDROID35_HOST_LOOPBACK_AND_REAL_UID_BINDER=PASS
 echo P193_ANDROID35_WRONG_SESSION_AND_REPLAY=PASS
 echo P193_ANDROID35_ISOLATED_TCP=NOT_USED

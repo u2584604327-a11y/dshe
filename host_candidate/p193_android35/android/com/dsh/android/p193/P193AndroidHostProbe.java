@@ -13,6 +13,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * P193 Android35 TEMPORARY original-package APK test hook only.
@@ -30,6 +32,10 @@ public final class P193AndroidHostProbe implements AutoCloseable {
   private final Handler main=new Handler(Looper.getMainLooper());
   private volatile P193HostLoopbackFixture fixture;
   private volatile boolean closed, accepted, duplicateDenied, finished;
+  // A valid HTTP 200 can reach the client before the Android main Looper
+  // handles the intentional second Binder callback. Do not mistake that
+  // scheduling race for a bypass or silently ignore the replay.
+  private final CountDownLatch realReplayChecked=new CountDownLatch(1);
   private Thread runner;
 
   public P193AndroidHostProbe(Messenger boundWorker, String hostSession,
@@ -94,7 +100,13 @@ public final class P193AndroidHostProbe implements AutoCloseable {
           report("P193_ANDROID35_LOOPBACK_SERVER_TIMEOUT=DENY");
           return;
         }
-        if(!closed && accepted && duplicateDenied &&
+        // A valid first reply releases the host socket before the second
+        // same-worker Binder callback is necessarily dispatched on main.
+        // Observe an actual schema+UID-checked replay within a bounded time;
+        // never infer replay denial from HTTP success or wait unboundedly.
+        boolean replayObserved=http.startsWith("HTTP/1.1 200 OK\r\n") &&
+            accepted && realReplayChecked.await(1500,TimeUnit.MILLISECONDS);
+        if(!closed && replayObserved && duplicateDenied &&
             http.startsWith("HTTP/1.1 200 OK\r\n") &&
             http.endsWith("P193_FIXTURE_OK")) {
           report("P193_ANDROID35_HOST_LOOPBACK_BINDER_TWO_UID=PASS");
@@ -141,6 +153,7 @@ public final class P193AndroidHostProbe implements AutoCloseable {
       }
       if(!pass && accepted && !duplicateDenied) {
         duplicateDenied=true;
+        realReplayChecked.countDown();
         report("P193_ANDROID35_BINDER_DUPLICATE_FRAME_REJECT=PASS");
         return true;
       }
