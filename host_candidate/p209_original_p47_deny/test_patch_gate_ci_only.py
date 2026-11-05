@@ -10,7 +10,7 @@ def original():
        p.THROW+"  }\n"+p.NEXT+" probe config unchanged\n")
 def builder():
     return (p.BEFORE+"if test \"P208_CI_METHOD_ENTRY_ONLY\" = 1; then\n"+
-           "p208/P208StartCoroutineWitness.java\n")
+           "p208/P208StartCoroutineWitness.java\n"+p.P208_HOOK)
 class Tests(unittest.TestCase):
     def deny(self,code,func):
         with self.assertRaises(p.Deny) as cm:func()
@@ -36,11 +36,26 @@ class Tests(unittest.TestCase):
         self.assertIn(p.AFTER,p.patch_builder(builder()))
     def test_builder_inverse(self):
         v=p.patch_builder(builder())
-        self.assertEqual(v.replace(p.AFTER,p.BEFORE,1),builder())
+        self.assertEqual(v.replace(p.P208_HOOK+p.P209_HOOK,p.P208_HOOK,1).replace(p.AFTER,p.BEFORE,1),builder())
     def test_wrong_builder(self):
         self.deny("PINNED_P208_BUILDER_REQUIRED",lambda:p.patch_builder("untrusted"))
     def test_duplicate_source(self):
         self.deny("PINNED_P208_BUILDER_REQUIRED",lambda:p.patch_builder(builder()+p.BEFORE))
     def test_no_process_spawn(self):
         self.assertNotIn("ProcessBuilder.start",p.ENTER+p.STACK+p.FINAL)
+def p40_fixture():
+    return (p.P40_HDR+'    .param p0, "builder" # Ljava/lang/ProcessBuilder;\n'+
+      p.P40_CALL+'    move-result-object v0\n    return-object v0\n.end method\n')
+class P40Tests(unittest.TestCase):
+    def test_one_marker(self):
+        s=p40_fixture();v=p.patch_p40(s)
+        self.assertEqual(v.count("P209_P40_BRIDGE_ENTRY=OBSERVED"),1)
+        self.assertEqual(v.replace(p.P40_LOG,"",1).replace(
+           p.P40_HDR.replace(".registers 2",".registers 3"),p.P40_HDR,1),s)
+    def test_no_original_call(self):
+        with self.assertRaises(p.Deny):
+            p.patch_p40(p40_fixture().replace(p.P40_CALL,""))
+    def test_double_marker_denied(self):
+        with self.assertRaises(p.Deny):
+            p.patch_p40(p.patch_p40(p40_fixture()))
 if __name__=="__main__":unittest.main(verbosity=2)

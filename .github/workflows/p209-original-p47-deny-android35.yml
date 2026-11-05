@@ -75,7 +75,7 @@ jobs:
           print("P209_SOURCE_PYTHON_SYNTAX=PASS")
           PY
           python3 -B host_candidate/p209_original_p47_deny/test_patch_gate_ci_only.py 2>&1 | tee "$RUNNER_TEMP/p209-unit.log"
-          grep -Eq '^Ran 13 tests in' "$RUNNER_TEMP/p209-unit.log"
+          grep -Eq '^Ran 16 tests in' "$RUNNER_TEMP/p209-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-unit.log"
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
           test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
@@ -122,6 +122,7 @@ jobs:
           test -s .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
           test -s .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
           grep -Fxq 'P208_CI_ONLY_EXACT_ORIGINAL_START2_ENTRY_MARKER=PASS' .p208tmp/build.log
+          grep -Fxq 'P209_ONLY_TEMP_P40_ONE_LOG_AND_NO_HOST_SPAWN=PASS' .p208tmp/build.log
           grep -Fxq 'P208_ORIGINAL_START2_TEXT_EXCEPT_ONE_INVOKE=BYTE_IDENTICAL' .p208tmp/build.log
           grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p208tmp/build.log
           grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p208tmp/build.log
@@ -143,6 +144,7 @@ jobs:
           python3 host_candidate/p209_original_p47_deny/verify_gate_dex.py \
             .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
             | tee "$RUNNER_TEMP/p209-gate-parity.log"
+          grep -Fxq 'P209_DISPOSABLE_P40_ONE_LOG_BEFORE_P47_DENY=PASS' "$RUNNER_TEMP/p209-gate-parity.log"
           grep -Fxq 'P209_DISPOSABLE_P47_MAIN_GATE_BINARY_LOGS=PASS' "$RUNNER_TEMP/p209-gate-parity.log"
           echo P209_ORIGINAL_P47_GATE_BINARY_AND_SOURCE_PARITY=PASS
           echo P208_EXACT_ORIGINAL_METHOD_WITNESS_SOURCE_PROVENANCE=PASS

@@ -1,1 +1,13 @@
 P209: Genuine original EngineManager$start$2.invokeSuspend -> P40 -> P47 DENY in same Android35 run. Reuse P208 proven first-instruction disposable marker and existing parity audit. Pin signed original v138 SHA256 3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5; original P47 gate blob 44cd38245dc87b9eff960b15dc520e60a2754c2c. Only ephemeral .p209tmp/P47LaunchGate.java receives 3 additive category-only Log.i statements (entry UID; P150 original-callstack shape; final-deny UID) before original exact IOException throw. Original P47 Java repo source untouched. Original P47/P181/P182 all three ProcessBuilder starts remain typed DENY with no host fallback; P208 original start2 only first marker and PC3912 P40 allowed in original-vs-derived DEX parity. Rebuild tests in current GitHub PR #80 with original assets/native/classes2 hashes, fixed signer, no original user data. Fresh Android35 simulator app UID inbound? Outbound IPv4+IPv6 disabled. Genuine original manifest MainActivity cold launched, Logcat per-run boundary, original start2 entry and P47 final denied branch must both occur, matching host PID/UID and exact order; P150 original stack shape PASS. Refusal before final deny is a valid fail-closed diagnostic, not successful P209. Final-deny marker plus original throw and compiled P47 no host ProcessBuilder.start proves this refused route did not create a child; no global OS child count or process-owner generation is asserted. P192 isolated UID direct TCP BIND_EACCES persists as negative; P184 original-coroutine receipt, true child OS owner/epoch, Node FD/JS/native/HTTP READY remain unwired. No release, merge, real phone install, isolation downgrade, GS capture or unauthorized browser requests. Retain DSHAPP MIT origin and unofficial fork notice. v139 STRUCTURAL_BLOCKED.
+
+P209 bounded P40 discriminator (test-only): The signed v138 original P40 bytecode remains
+untouched; after the existing P47 interpose, only disposable CI smali for
+P40ProcessBridge.start receives a single fixed Log.i category marker before
+the strict P47 startOrDeny call. The temporary register directive expands
+from 2 to 3 to preserve p0 while using only local registers v0/v1; the
+original P47 invocation remains once and cannot call host ProcessBuilder.start.
+The derived DEX audit checks one P40 Log.i before the one P47 call and no
+host spawn. A natural Android35 cold launch reports P40 tag counts by current
+host PID beside P47 ENTRY/FINAL counts, without logging actual UIDs, argv,
+paths or user data. A P40 marker is not P47 success and cannot attest a
+child process. P209 stays BLOCKED until actual final DENY passes.

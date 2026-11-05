@@ -59,7 +59,7 @@ selected=
 valid=NO
 for _ in $(seq 1 18);do
   raw="$(adb -s "$serial" logcat -d -v threadtime \
-    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I '*:S')"
+    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I '*:S')"
   selected="$(printf '%s\n' "$raw" | awk -v m="$marker" '
     index($0,m){count++;after=1;next}
     after{print}
@@ -123,6 +123,8 @@ p209_count_pid() {
     'index($0,k) && $3==pid{n++} END{print n+0}'
 }
 p209_gate_diagnostic() {
+  echo "P209_P40_ENTRY_TAG_COUNT=$(p209_count 'P209_P40_BRIDGE_ENTRY=OBSERVED')"
+  echo "P209_P40_ENTRY_HOST_PID_COUNT=$(p209_count_pid 'P209_P40_BRIDGE_ENTRY=OBSERVED')"
   echo "P209_GATE_ENTRY_TAG_COUNT=$(p209_count 'P209_P47_ENTER_UID=')"
   echo "P209_GATE_ENTRY_HOST_PID_COUNT=$(p209_count_pid 'P209_P47_ENTER_UID=')"
   echo "P209_GATE_FINAL_TAG_COUNT=$(p209_count 'P209_P47_FINAL_DENY_UID=')"

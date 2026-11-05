@@ -11,6 +11,7 @@ def main():
     try:
         with zipfile.ZipFile(a.derived) as f:
             dex=DEX(f.read("classes3.dex"))
+            dex1=DEX(f.read("classes.dex"))
         cls=[c for c in dex.get_classes() if c.get_name()==OWNER]
         need(len(cls)==1,"P47_CLASS")
         methods=[m for m in cls[0].get_methods() if m.get_name()=="startOrDeny"]
@@ -28,6 +29,27 @@ def main():
             if method.get_name() in ("probeOrDeny","configOrDeny"):
                 need(not any("Landroid/util/Log;->i(" in i.get_output()
                     for _,i in method.get_instructions_idx()),"SECONDARY_GATE_DRIFT")
+        p40=[c for c in dex1.get_classes() if
+              c.get_name()=="Lcom/dsh/android/p40/P40ProcessBridge;"]
+        need(len(p40)==1,"EXACT_P40_CLASS")
+        start=[m for m in p40[0].get_methods() if m.get_name()=="start"]
+        need(len(start)==1 and start[0].get_code() is not None,
+             "EXACT_P40_START_METHOD")
+        instructions=[(i.get_name(),i.get_output()) for _,i in start[0].get_instructions_idx()]
+        logger=[idx for idx,(op,out) in enumerate(instructions)
+           if op.startswith("invoke-") and
+           "Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I" in "".join(out.split())]
+        to_gate=[idx for idx,(op,out) in enumerate(instructions)
+           if op=="invoke-static" and
+           "Lcom/dsh/android/p47/P47LaunchGate;->startOrDeny(" in out]
+        categories=[idx for idx,(op,out) in enumerate(instructions)
+           if op=="const-string" and "P209_P40_BRIDGE_ENTRY=OBSERVED" in out]
+        need(len(logger)==1 and len(to_gate)==1 and len(categories)==1 and
+             categories[0]<logger[0]<to_gate[0],"EXACT_P40_LOG_BEFORE_TYPED_DENY")
+        need(start[0].get_code().get_registers_size()==3,"EXACT_P40_TEST_REGISTERS")
+        need(not any(HOST in out for op,out in instructions if op.startswith("invoke-")),
+             "P40_HOST_PROCESS_NOT_PERMITTED")
+        print("P209_DISPOSABLE_P40_ONE_LOG_BEFORE_P47_DENY=PASS")
         # P209 read-only original v138 path audit: static CFG is not runtime proof.
         import pathlib
         import hashlib
