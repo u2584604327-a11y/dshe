@@ -11,6 +11,7 @@ from androguard.core.dex import DEX
 import zipfile
 PRE="Lcom/dsh/android/p209/P209PreCallWitness;->mark()V"
 GUARD="Lcom/dsh/android/p209/P209PreCallWitness;->markFirstGuard()V"
+FALL="Lcom/dsh/android/p209/P209PreCallWitness;->markFallthrough()V"
 P208="Lcom/dsh/android/p208/P208StartCoroutineWitness;->mark()V"
 OLD="Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;"
 NEW="Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;"
@@ -20,34 +21,61 @@ def require(v,label):
 def ins(method):
     return [(pc,i.get_name(),i.get_output()) for pc,i in method.get_instructions_idx()]
 def compare(original,derived):
-    a=ins(original);b=ins(derived)
-    first=[i for i,(_,op,out) in enumerate(b) if op=="invoke-static" and P208 in out]
-    approach=[i for i,(_,op,out) in enumerate(b) if op=="invoke-static" and GUARD in out]
-    precall=[i for i,(_,op,out) in enumerate(b) if op=="invoke-static" and PRE in out]
-    cond=[(pc,op) for pc,op,out in a if op.startswith("if-")]
-    require(cond and 0<cond[0][0]<3912 and cond[0][1].startswith("if-"),
-            "SIGNED_FIRST_ORIGINAL_GUARD_BEFORE_PC3912")
-    expected_original_cond_op=cond[0][1]
-    require(first==[0] and len(approach)==1 and len(precall)==1 and
-            0<approach[0]<precall[0],"EXACT_THREE_TEST_MARKER_POSITIONS")
-    guard_idx=approach[0];pre_idx=precall[0]
-    require(guard_idx+1<len(b) and b[guard_idx+1][1]==expected_original_cond_op and
-            sum(op.startswith("if-") for _,op,out in b[:guard_idx])==0,
-            "GUARD_MARKER_IMMEDIATELY_BEFORE_FIRST_IF_NE")
-    require(pre_idx+1<len(b) and b[pre_idx+1][1]=="invoke-static" and
-            NEW in b[pre_idx+1][2],"PRE_MARKER_IMMEDIATELY_BEFORE_P40")
-    remaining=[row for i,row in enumerate(b) if i not in (0,guard_idx,pre_idx)]
-    require(len(a)==len(remaining),"ORIGINAL_INSTRUCTION_COUNT_EXCEPT_THREE")
-    replaced=[]
-    for pos,(o,d) in enumerate(zip(a,remaining)):
-        pc,op,out=o;_,dop,dout=d
+    before=list(original.get_instructions_idx())
+    after=list(derived.get_instructions_idx())
+    def is_marker(instr,sym):
+        return instr.get_name()=="invoke-static" and sym in instr.get_output()
+    first=[k for k,(_,inst) in enumerate(after) if is_marker(inst,P208)]
+    guard=[k for k,(_,inst) in enumerate(after) if is_marker(inst,GUARD)]
+    fall=[k for k,(_,inst) in enumerate(after) if is_marker(inst,FALL)]
+    precall=[k for k,(_,inst) in enumerate(after) if is_marker(inst,PRE)]
+    original_conds=[(pc,inst) for pc,inst in before if inst.get_name().startswith("if-")]
+    require(original_conds and original_conds[0][0]==26 and
+            original_conds[0][1].get_name()=="if-eqz" and
+            original_conds[0][0]+original_conds[0][1].get_length()==30 and
+            original_conds[0][0]+2*original_conds[0][1].get_ref_off()==176,
+            "ORIGINAL_SIGNED_PC26_IF_EQZ_BOTH_SUCCESSORS_PINNED")
+    require(first==[0] and len(guard)==len(fall)==len(precall)==1 and
+            0<guard[0]<fall[0]<precall[0],
+            "EXACT_FOUR_DISPOSABLE_MARKER_POSITIONS")
+    gi,fi,pi=guard[0],fall[0],precall[0]
+    require(gi+2==fi and after[gi+1][1].get_name()=="if-eqz" and
+            after[fi+1][1].get_name()=="if-eq" and
+            not any(ins.get_name().startswith("if-") for _,ins in after[:gi]),
+            "FALLTHROUGH_MARKER_ONLY_AFTER_FIRST_ORIGINAL_IF")
+    require(pi+1<len(after) and after[pi+1][1].get_name()=="invoke-static" and
+            NEW in after[pi+1][1].get_output(),
+            "PRE_MARKER_IMMEDIATELY_BEFORE_TYPED_P40_DENY")
+    aligned=[item for k,item in enumerate(after) if k not in (0,gi,fi,pi)]
+    require(len(before)==len(aligned),"ORIGINAL_INSTRUCTION_COUNT_EXCEPT_FOUR")
+    orig_to_derived={oldpc:newpc for (oldpc,_),(newpc,_) in zip(before,aligned)}
+    require(len(orig_to_derived)==len(before),"UNIQUE_ORIGINAL_ALIGNMENT")
+    spawn_changes=[]
+    branch_checks=0
+    for pos,((pc,oi),(dpc,di)) in enumerate(zip(before,aligned)):
+        op,dop=oi.get_name(),di.get_name()
+        out,dout=oi.get_output(),di.get_output()
+        if (op.startswith("if-") or op in ("goto","goto/16","goto/32")):
+            require(op==dop and oi.get_length()==di.get_length(),
+                    "BRANCH_OPCODE_OR_WIDTH_DRIFT_INDEX_"+str(pos))
+            otarget=pc+2*oi.get_ref_off()
+            dtarget=dpc+2*di.get_ref_off()
+            require(otarget in orig_to_derived and
+                    orig_to_derived[otarget]==dtarget,
+                    "ORIGINAL_BRANCH_TARGET_CHANGED_INDEX_"+str(pos))
+            if op.startswith("if-"):
+                require(out.rsplit(",",1)[0]==dout.rsplit(",",1)[0],
+                        "ORIGINAL_IF_REGISTER_OPERANDS_CHANGED_INDEX_"+str(pos))
+            branch_checks+=1
+            continue
         if op==dop and out==dout:continue
-        valid=(pc==3912 and op=="invoke-virtual" and dop=="invoke-static"
-            and out.endswith(OLD) and dout.endswith(NEW)
-            and out[:-len(OLD)]==dout[:-len(NEW)])
-        require(valid,"UNAUTHORIZED_ORIGINAL_OP_OR_OPERAND_INDEX_"+str(pos))
-        replaced.append(pc)
-    require(replaced==[3912],"ONLY_ORIGINAL_PC3912_P40_REDIRECT")
+        allow=(pc==3912 and op=="invoke-virtual" and dop=="invoke-static" and
+               out.endswith(OLD) and dout.endswith(NEW) and
+               out[:-len(OLD)]==dout[:-len(NEW)])
+        require(allow,"ORIGINAL_NONBRANCH_OPCODE_OR_OPERAND_CHANGED_INDEX_"+str(pos))
+        spawn_changes.append(pc)
+    require(spawn_changes==[3912],"ONLY_ORIGINAL_PC3912_P40_DENY_REWRITE")
+    require(branch_checks>=1,"NO_ORIGINAL_BRANCH_EDGE_VERIFIED")
 def main():
     if len(sys.argv)!=3:sys.exit(2)
     try:
@@ -64,7 +92,7 @@ def main():
                 if c.get_name()==prev.START2 and method.get_name()=="invokeSuspend":continue
                 for _,instr in method.get_instructions_idx():
                     out=instr.get_output()
-                    require(PRE not in out and P208 not in out and GUARD not in out,
+                    require(PRE not in out and P208 not in out and GUARD not in out and FALL not in out,
                             "EXTRA_MARKER_OUTSIDE_ORIGINAL_COROUTINE")
         for owner,name,desc in [
              (prev.ENGINE,"start","(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"),
@@ -81,10 +109,12 @@ def main():
         require("Lcom/dsh/android/p208/P208StartCoroutineWitness;" in owners and
                 "Lcom/dsh/android/p209/P209PreCallWitness;" in owners,
                 "BOTH_TEST_ONLY_CLASSES3_WITNESSES")
-        print("P209_START2_ENTRY_FIRST_GUARD_AND_PC3912_THREE_TEST_MARKERS=PASS")
+        print("P209_START2_ENTRY_PC26_PC30_AND_PC3912_FOUR_TEST_MARKERS=PASS")
         print("P209_START2_ORIGINAL_ALL_OTHER_OPCODES_OPERANDS=PARITY")
         print("P209_ORIGINAL_UPSTREAM_ENGINE_BOOT_ONCREATE=PARITY")
         print("P209_FIRST_GUARD_MATCHES_SIGNED_ORIGINAL=PASS")
+        print("P209_ALL_ORIGINAL_BRANCH_TARGETS_RELOCATED_EXACTLY=PASS")
+        print("P209_PC26_FALLTHROUGH_PC30_MARKER_ONLY_TEST_DEX=PASS")
         print("P209_FIRST_GUARD_SIGNED_PC="+str([(pc,op) for pc,op,out in ins(prev.find(o,prev.START2,"invokeSuspend","(Ljava/lang/Object;)Ljava/lang/Object;")) if op.startswith("if-")][0][0]))
         print("P209_PRE_PC3912_MARKER_ONLY_IN_DISPOSABLE_CLASSES3=PASS")
         print("P209_REAL_PC3912_RUNTIME_EXECUTION=NOT_ATTESTED")

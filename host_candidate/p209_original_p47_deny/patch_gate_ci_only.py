@@ -40,6 +40,7 @@ PRE_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->mar
 P40_TARGET="Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;"
 GUARD_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markFirstGuard()V\n"
 GUARD_MAX_PC=3912
+FALL_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markFallthrough()V\n"
 
 class Deny(Exception):pass
 def need(v,code):
@@ -140,35 +141,42 @@ def patch_p40(s):
     return out
 def inject_precall(s, expected_guard_op="if-ne"):
     import re
-    need(PRE_INVOKE.strip() not in s and GUARD_INVOKE.strip() not in s,
-         "PRECALL_OR_GUARD_ALREADY_MARKED")
+    need(PRE_INVOKE.strip() not in s and GUARD_INVOKE.strip() not in s and
+         FALL_INVOKE.strip() not in s,"PRECALL_OR_GUARD_OR_FALL_ALREADY_MARKED")
     import sys
     sys.path.insert(0,"host_candidate/p208_original_start_coroutine")
     import patch_ci_only as p208
-    a,b,method=p208.find_method(s)
-    need(method.count(p208.INSERT.strip())==1,"P208_FIRST_MARKER_REQUIRED")
-    rows=method.splitlines(keepends=True)
-    matches=[idx for idx,line in enumerate(rows) if
-             P40_TARGET in line and line.lstrip().startswith("invoke-static ")]
-    need(len(matches)==1,"EXACT_ONE_ORIGINAL_PC3912_P40_CALL")
-    idx=matches[0]
+    a,b,body=p208.find_method(s)
+    need(body.count(p208.INSERT.strip())==1,"P208_FIRST_MARKER_REQUIRED")
+    rows=body.splitlines(keepends=True)
+    calls=[i for i,line in enumerate(rows) if
+           P40_TARGET in line and line.lstrip().startswith("invoke-static ")]
+    need(len(calls)==1,"EXACT_ONE_ORIGINAL_PC3912_P40_CALL")
+    call_idx=calls[0]
     expected=(r"^[ \t]+invoke-static[ \t]+\{[vp][0-9]+\},[ \t]*"+
               re.escape(P40_TARGET)+r"[ \t]*\n?$")
-    need(re.fullmatch(expected,rows[idx]) is not None,
+    need(re.fullmatch(expected,rows[call_idx]) is not None,
          "ORIGINAL_PC3912_P40_CALL_SHAPE")
-    at=sum(len(line) for line in rows[:idx])
-    conds=[m for m in re.finditer(r"(?m)^[ \t]+(if-[a-z0-9/-]+)[ \t]+",method)]
-    need(len(conds)>0 and conds[0].group(1)==expected_guard_op,
-         "SIGNED_FIRST_GUARD_OPCODE_AND_ORDER")
-    gat=conds[0].start()
-    need(method.index(p208.INSERT)<gat<at,
-         "ENTRY_THEN_FIRST_GUARD_THEN_PC3912")
-    updated=method[:gat]+GUARD_INVOKE+method[gat:at]+PRE_INVOKE+method[at:]
-    out=s[:a]+updated+s[b:]
-    need(out.replace(GUARD_INVOKE,"",1).replace(PRE_INVOKE,"",1)==s and
-         out.count(GUARD_INVOKE.strip())==1 and
-         out.count(PRE_INVOKE.strip())==1,"EXACT_TWO_DISPOSABLE_ADDITIONS")
-    return out
+    at=sum(map(len,rows[:call_idx]))
+    conds=[(i,line) for i,line in enumerate(rows) if
+           re.match(r"^[ \t]+if-[a-z0-9/-]+[ \t]+",line)]
+    need(conds and re.match(r"^[ \t]+(if-[a-z0-9/-]+)[ \t]+",conds[0][1]).group(1)
+         ==expected_guard_op,"SIGNED_FIRST_GUARD_OPCODE_AND_ORDER")
+    cond_idx=conds[0][0]
+    guard_at=sum(map(len,rows[:cond_idx]))
+    after_cond=guard_at+len(rows[cond_idx])
+    need(body.index(p208.INSERT)<guard_at<after_cond<at,
+         "ENTRY_FIRST_COND_FALLTHROUGH_PRE_PC3912_ORDER")
+    newbody=(body[:guard_at]+GUARD_INVOKE+
+             body[guard_at:after_cond]+FALL_INVOKE+
+             body[after_cond:at]+PRE_INVOKE+body[at:])
+    new=s[:a]+newbody+s[b:]
+    need(new.replace(GUARD_INVOKE,"",1).replace(FALL_INVOKE,"",1).
+         replace(PRE_INVOKE,"",1)==s and
+         all(new.count(marker.strip())==1
+             for marker in (GUARD_INVOKE,FALL_INVOKE,PRE_INVOKE)),
+         "EXACT_THREE_REVERSIBLE_CI_MARKERS")
+    return new
 def inject_p40():
     import hashlib
     scope(prepared=True)
@@ -191,9 +199,14 @@ def inject_p40():
     need(len(methods)==1,"SIGNED_ORIGINAL_START2_UNIQUE")
     conds=[(pc,ins.get_name()) for pc,ins in methods[0].get_instructions_idx()
            if ins.get_name().startswith("if-")]
-    need(conds and 0<conds[0][0]<GUARD_MAX_PC and
-         conds[0][1].startswith("if-"),"SIGNED_FIRST_GUARD_INSIDE_ORIGINAL_PC3912")
+    need(conds and conds[0][0]==26 and conds[0][1]=="if-eqz",
+         "SIGNED_FIRST_GUARD_PC26_IF_EQZ")
     original_first_pc,original_first_op=conds[0]
+    signed_first_instruction=next(ins for pc,ins in methods[0].get_instructions_idx()
+                                  if pc==original_first_pc)
+    need(original_first_pc+signed_first_instruction.get_length()==30 and
+         original_first_pc+2*signed_first_instruction.get_ref_off()==176,
+         "SIGNED_PC26_EXACT_FALLTHROUGH_PC30_TAKEN_PC176")
     print("P209_SIGNED_ORIGINAL_FIRST_GUARD_PC="+str(original_first_pc))
     print("P209_SIGNED_ORIGINAL_FIRST_GUARD_OP="+original_first_op)
     need(P40_SRC.is_file(),"P40_DENY_BRIDGE_REQUIRED")
@@ -206,9 +219,10 @@ def inject_p40():
     need(PRE_SRC.is_file() and not PRE_SRC.is_symlink(),"PINNED_START2_SMALI_ONLY")
     original=PRE_SRC.read_text()
     PRE_SRC.write_text(inject_precall(original,original_first_op))
-    need(PRE_SRC.read_text().replace(GUARD_INVOKE,"",1).replace(PRE_INVOKE,"",1)==original,
+    need(PRE_SRC.read_text().replace(GUARD_INVOKE,"",1).replace(FALL_INVOKE,"",1).replace(PRE_INVOKE,"",1)==original,
          "PRECALL_SOURCE_EXACT_INVERSE")
     print("P209_ONLY_TEST_ORIGINAL_FIRST_GUARD_MARKER=PASS")
+    print("P209_PC26_FALLTHROUGH_PC30_ONLY_REVERSIBLE_MARKER=PASS")
     print("P209_ONLY_TEST_PRE_PC3912_MARKER=PASS")
     print("P209_ONLY_TEMP_P40_ONE_LOG_AND_NO_HOST_SPAWN=PASS")
 def main():

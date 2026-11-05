@@ -10,6 +10,18 @@ public final class P209PreCallWitness {
   private static final String TAG="P209_PREP40";
   private P209PreCallWitness(){}
   /** Bounded CI-only original PC38 state-guard approach witness. */
+  /** Test-only observation immediately after original PC26 if-eqz fallthrough. */
+  public static void markFallthrough() {
+    try {
+      if (Process.isIsolated()) {
+        Log.i("P209_FALL","P209_PC30_FALL_ISOLATED=DENY");
+        return;
+      }
+      Log.i("P209_FALL","P209_PC30_FALLTHROUGH=OBSERVED");
+    }catch(Throwable ignored) {
+      // Diagnostic failure cannot alter original app logic.
+    }
+  }
   public static void markFirstGuard() {
     try {
       if (Process.isIsolated()) {

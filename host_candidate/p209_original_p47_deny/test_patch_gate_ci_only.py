@@ -82,7 +82,7 @@ def precall_fixture():
 class PreCallTests(unittest.TestCase):
     def test_pre_call_exact_inverse(self):
         s=precall_fixture()
-        self.assertEqual(p.inject_precall(s).replace(p.GUARD_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),s)
+        self.assertEqual(p.inject_precall(s).replace(p.GUARD_INVOKE,"",1).replace(p.FALL_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),s)
     def test_missing_p40_fails_closed(self):
         s=precall_fixture().replace(p.P40_TARGET,"Lcom/example/Other;->start()V")
         with self.assertRaises(p.Deny):p.inject_precall(s)
@@ -96,7 +96,8 @@ class PreCallTests(unittest.TestCase):
         value=p.inject_precall(precall_fixture())
         self.assertEqual(value.count(p.GUARD_INVOKE.strip()),1)
         self.assertLess(value.index(p.GUARD_INVOKE),value.index("    if-ne v0, v1, :done"))
-        self.assertLess(value.index("    if-ne v0, v1, :done"),value.index(p.PRE_INVOKE))
+        self.assertLess(value.index("    if-ne v0, v1, :done"),value.index(p.FALL_INVOKE))
+        self.assertLess(value.index(p.FALL_INVOKE),value.index(p.PRE_INVOKE))
     def test_wrong_first_guard_refused(self):
         value=precall_fixture().replace("if-ne v0, v1","if-eq v0, v1")
         with self.assertRaises(p.Deny) as x:p.inject_precall(value)
@@ -107,5 +108,15 @@ class PreCallTests(unittest.TestCase):
     def test_dynamic_first_if_op_matches_exact_runtime_pin(self):
         value=precall_fixture().replace("if-ne v0, v1", "if-nez v0")
         result=p.inject_precall(value,expected_guard_op="if-nez")
-        self.assertEqual(result.replace(p.GUARD_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),value)
+        self.assertEqual(result.replace(p.GUARD_INVOKE,"",1).replace(p.FALL_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),value)
+    def test_fallthrough_marker_once_between_if_and_p40(self):
+        result=p.inject_precall(precall_fixture())
+        self.assertEqual(result.count(p.FALL_INVOKE.strip()),1)
+        self.assertLess(result.index("    if-ne v0, v1, :done"),result.index(p.FALL_INVOKE))
+        self.assertLess(result.index(p.FALL_INVOKE),result.index(p.PRE_INVOKE))
+    def test_duplicate_fallthrough_marker_rejected(self):
+        value=precall_fixture().replace("    return-object v0\n",
+            p.FALL_INVOKE+"    return-object v0\n")
+        with self.assertRaises(p.Deny) as x:p.inject_precall(value)
+        self.assertEqual(str(x.exception),"P209_DENY_PRECALL_OR_GUARD_OR_FALL_ALREADY_MARKED")
 if __name__=="__main__":unittest.main(verbosity=2)
