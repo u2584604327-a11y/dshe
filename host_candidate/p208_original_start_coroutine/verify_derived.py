@@ -11,8 +11,9 @@ BOOT="Lcom/dsh/android/MainActivity$bootEngine$1;"
 WITNESS="Lcom/dsh/android/p208/P208StartCoroutineWitness;"
 OLD="Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;"
 NEW="Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;"
+class Denied(Exception):pass
 def require(ok,code):
-    if not ok:raise ValueError("P208_DENY_"+code)
+    if not ok:raise Denied("P208_DENY_"+code)
 def load(path,name="classes.dex"):
     with zipfile.ZipFile(path) as z:return DEX(z.read(name))
 def find(dex,owner,name,desc):
@@ -72,6 +73,9 @@ def main():
         print("P208_ORIGINAL_START_PARENT_BOOT_ONCREATE_PARITY=PASS")
         print("P208_JAVA_WITNESS_ONLY_DISPOSABLE_CLASSES3=PASS")
         print("P208_ORIGINAL_CHILD_PROCESS_OWNER=NOT_ATTESTED")
+    except Denied as e:
+        print(str(e),file=sys.stderr)
+        sys.exit(2)
     except Exception:
         print("P208_COROUTINE_DEX_PARITY_FAIL_CLOSED",file=sys.stderr)
         sys.exit(2)
