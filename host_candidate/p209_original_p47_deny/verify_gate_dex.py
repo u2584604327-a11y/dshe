@@ -66,6 +66,27 @@ def main():
             for m in c.get_methods() if m.get_name()=="invokeSuspend"]
         need(len(start)==1,"ORIGINAL_START2_SIGNATURE")
         rows=list(start[0].get_instructions_idx())
+        # P209 purely read-only bounded original v138 opcode boundary after
+        # PC176. Never treat a static opcode sequence as Android execution.
+        pc176=[i for i,(pc,ins) in enumerate(rows) if pc==176]
+        need(len(pc176)==1 and rows[pc176[0]][1].get_name()=="invoke-static/range",
+             "SIGNED_ORIGINAL_PC176_STATIC_INVOKE")
+        follow=pc176[0]+1
+        need(follow<len(rows),"SIGNED_PC176_NEXT_OPCODE")
+        pair=rows[follow][1].get_name().startswith("move-result")
+        if pair:follow+=1
+        need(follow<len(rows) and rows[follow][0]<3912 and
+             not rows[follow][1].get_name().startswith("move-result"),
+             "PC176_POST_INVOKE_SAFE_OPCODE_BOUND")
+        print("P209_SIGNED_PC176_ORIGINAL_OPCODE=invoke-static/range")
+        print("P209_SIGNED_PC176_HAS_MOVE_RESULT="+("YES" if pair else "NO"))
+        print("P209_SIGNED_PC176_NEXT_SAFE_PC="+str(rows[follow][0]))
+        print("P209_SIGNED_PC176_NEXT_SAFE_OPCODE="+rows[follow][1].get_name())
+        for pc,ins in rows[pc176[0]:min(follow+9,len(rows))]:
+            if pc>=3912:break
+            print("P209_PC176_STATIC_WINDOW_PC="+str(pc)+",OP="+ins.get_name())
+        print("P209_ORIGINAL_PC176_POST_CALL_STATIC_AUDIT=PASS")
+        print("P209_ORIGINAL_PC176_CALL_NORMAL_RETURN=NOT_ATTESTED")
         calls=[pos for pos,insn in rows if
             insn.get_name()=="invoke-virtual" and
             "Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;" in insn.get_output()]
