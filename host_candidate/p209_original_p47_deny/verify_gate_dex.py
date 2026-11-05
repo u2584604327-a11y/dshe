@@ -28,6 +28,35 @@ def main():
             if method.get_name() in ("probeOrDeny","configOrDeny"):
                 need(not any("Landroid/util/Log;->i(" in i.get_output()
                     for _,i in method.get_instructions_idx()),"SECONDARY_GATE_DRIFT")
+        # P209 read-only original v138 path audit: static CFG is not runtime proof.
+        import pathlib
+        import hashlib
+        import importlib.util
+        source=pathlib.Path(".p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk")
+        need(source.is_file(),"SIGNED_SOURCE_REQUIRED")
+        need(hashlib.sha256(source.read_bytes()).hexdigest()==
+             "3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5",
+             "SIGNED_SOURCE_SHA")
+        with zipfile.ZipFile(source) as signed:
+            original=DEX(signed.read("classes.dex"))
+        start=[m for c in original.get_classes()
+            if c.get_name()=="Lcom/dsh/android/EngineManager$start$2;"
+            for m in c.get_methods() if m.get_name()=="invokeSuspend"]
+        need(len(start)==1,"ORIGINAL_START2_SIGNATURE")
+        rows=list(start[0].get_instructions_idx())
+        calls=[pos for pos,insn in rows if
+            insn.get_name()=="invoke-virtual" and
+            "Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;" in insn.get_output()]
+        need(calls==[3912],"ORIGINAL_PC3912_UNIQUE")
+        guards=[pos for pos,insn in rows
+            if pos<3912 and insn.get_name().startswith("if-")]
+        jumps=[pos for pos,insn in rows
+            if pos<3912 and insn.get_name().startswith("goto")]
+        need(len(guards)>0,"ORIGINAL_PREPC3912_GUARD_COUNT")
+        print("P209_SIGNED_ORIGINAL_START2_PC3912_STATIC_AUDIT=PASS")
+        print("P209_PRE_PC3912_CONDITIONAL_COUNT="+str(len(guards)))
+        print("P209_PRE_PC3912_GOTO_COUNT="+str(len(jumps)))
+        print("P209_REAL_ANDROID_PC3912_REACHED=NOT_ATTESTED")
         print("P209_DISPOSABLE_P47_MAIN_GATE_BINARY_LOGS=PASS")
         print("P209_ORIGINAL_P47_MAIN_THROWS_AFTER_FINAL_MARKER=PASS")
         print("P209_P47_PRIMARY_NO_HOST_PROCESSBUILDER_START=PASS")
