@@ -32,6 +32,12 @@ P40_CALL="    invoke-static {p0}, Lcom/dsh/android/p47/P47LaunchGate;->startOrDe
 P40_LOG=('    const-string v0, "P209_P40"\n'
          '    const-string v1, "P209_P40_BRIDGE_ENTRY=OBSERVED"\n'
          '    invoke-static {v0, v1}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I\n')
+# P209 strictly disposable original-PC3912 pre-P40 marker.
+PRE_SRC=Path(".p43tmp/decoded/smali/com/dsh/android/EngineManager$start$2.smali")
+PRE_JAVA="host_candidate/p209_original_p47_deny/android/com/dsh/android/p209/P209PreCallWitness.java"
+P208_JAVA="host_candidate/p208_original_start_coroutine/android/com/dsh/android/p208/P208StartCoroutineWitness.java"
+PRE_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->mark()V\n"
+P40_TARGET="Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;"
 class Deny(Exception):pass
 def need(v,code):
     if not v:raise Deny("P209_DENY_"+code)
@@ -61,8 +67,15 @@ def patch_builder(s):
     need(s.count(P208_HOOK)==1 and P209_HOOK not in s,
          "PINNED_P208_BUILDER_HOOK")
     out=s.replace(BEFORE,AFTER,1).replace(P208_HOOK,P208_HOOK+P209_HOOK,1)
-    need(out.replace(P208_HOOK+P209_HOOK,P208_HOOK,1).
-         replace(AFTER,BEFORE,1)==s,"ONLY_GATE_AND_P40_DIAGNOSTIC_HOOK")
+    java_line="  "+P208_JAVA+" \\\n"
+    added_line="  "+PRE_JAVA+" \\\n"
+    need(out.count(java_line)==1 and PRE_JAVA not in out,
+         "PINNED_P208_JAVAC_LINE")
+    out=out.replace(java_line,java_line+added_line,1)
+    need(out.replace(added_line,"",1).
+         replace(P208_HOOK+P209_HOOK,P208_HOOK,1).
+         replace(AFTER,BEFORE,1)==s,"ONLY_GATE_P40_HOOK_AND_JAVA")
+
     return out
 def patch_verifier(s):
     need(s.count(VERIFY_OLD)==1 and VERIFY_NEW not in s,
@@ -122,6 +135,24 @@ def patch_p40(s):
     need("Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;" not in out,
          "P40_NO_HOST_SPAWN")
     return out
+def inject_precall(s):
+    import re
+    need(PRE_INVOKE.strip() not in s,"PRECALL_ALREADY_MARKED")
+    import sys
+    sys.path.insert(0,"host_candidate/p208_original_start_coroutine")
+    import patch_ci_only as p208
+    a,b,method=p208.find_method(s)
+    need(method.count(p208.INSERT.strip())==1 and method.index(p208.INSERT)<method.index(P40_TARGET),
+         "P208_FIRST_MARKER_REQUIRED")
+    lines=list(re.finditer(r"(?m)^([ \\t]+)invoke-static[ \\t]+\\{[vp][0-9]+\\},[ \\t]*"+
+            re.escape(P40_TARGET)+r"[ \\t]*$",method))
+    need(len(lines)==1,"EXACT_ONE_ORIGINAL_PC3912_P40_CALL")
+    at=lines[0].start()
+    marked=method[:at]+PRE_INVOKE+method[at:]
+    out=s[:a]+marked+s[b:]
+    need(out.replace(PRE_INVOKE,"",1)==s and out.count(PRE_INVOKE.strip())==1,
+         "ONLY_ONE_PRECALL_INSTRUCTION")
+    return out
 def inject_p40():
     import hashlib
     scope(prepared=True)
@@ -139,6 +170,12 @@ def inject_p40():
     need(P40_SRC.read_text().replace(P40_LOG,"",1).
          replace(P40_HDR.replace(".registers 2",".registers 3"),P40_HDR,1)==s,
          "ONLY_TEST_P40_LOGGING_DIFFERENCE")
+    need(PRE_SRC.is_file() and not PRE_SRC.is_symlink(),"PINNED_START2_SMALI_ONLY")
+    original=PRE_SRC.read_text()
+    PRE_SRC.write_text(inject_precall(original))
+    need(PRE_SRC.read_text().replace(PRE_INVOKE,"",1)==original,
+         "PRECALL_SOURCE_EXACT_INVERSE")
+    print("P209_ONLY_TEST_PRE_PC3912_MARKER=PASS")
     print("P209_ONLY_TEMP_P40_ONE_LOG_AND_NO_HOST_SPAWN=PASS")
 def main():
     a=argparse.ArgumentParser()
