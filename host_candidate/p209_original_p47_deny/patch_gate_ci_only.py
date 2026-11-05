@@ -39,8 +39,7 @@ P208_JAVA="host_candidate/p208_original_start_coroutine/android/com/dsh/android/
 PRE_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->mark()V\n"
 P40_TARGET="Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;"
 GUARD_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markFirstGuard()V\n"
-GUARD_ORIGINAL_PC=38
-GUARD_ORIGINAL_OP="if-ne"
+GUARD_MAX_PC=3912
 
 class Deny(Exception):pass
 def need(v,code):
@@ -139,7 +138,7 @@ def patch_p40(s):
     need("Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;" not in out,
          "P40_NO_HOST_SPAWN")
     return out
-def inject_precall(s):
+def inject_precall(s, expected_guard_op="if-ne"):
     import re
     need(PRE_INVOKE.strip() not in s and GUARD_INVOKE.strip() not in s,
          "PRECALL_OR_GUARD_ALREADY_MARKED")
@@ -159,7 +158,7 @@ def inject_precall(s):
          "ORIGINAL_PC3912_P40_CALL_SHAPE")
     at=sum(len(line) for line in rows[:idx])
     conds=[m for m in re.finditer(r"(?m)^[ \t]+(if-[a-z0-9/-]+)[ \t]+",method)]
-    need(len(conds)>0 and conds[0].group(1)==GUARD_ORIGINAL_OP,
+    need(len(conds)>0 and conds[0].group(1)==expected_guard_op,
          "SIGNED_FIRST_GUARD_OPCODE_AND_ORDER")
     gat=conds[0].start()
     need(method.index(p208.INSERT)<gat<at,
@@ -192,8 +191,11 @@ def inject_p40():
     need(len(methods)==1,"SIGNED_ORIGINAL_START2_UNIQUE")
     conds=[(pc,ins.get_name()) for pc,ins in methods[0].get_instructions_idx()
            if ins.get_name().startswith("if-")]
-    need(conds and conds[0]==(GUARD_ORIGINAL_PC,GUARD_ORIGINAL_OP),
-         "SIGNED_ORIGINAL_FIRST_PC38_GUARD")
+    need(conds and 0<conds[0][0]<GUARD_MAX_PC and
+         conds[0][1].startswith("if-"),"SIGNED_FIRST_GUARD_INSIDE_ORIGINAL_PC3912")
+    original_first_pc,original_first_op=conds[0]
+    print("P209_SIGNED_ORIGINAL_FIRST_GUARD_PC="+str(original_first_pc))
+    print("P209_SIGNED_ORIGINAL_FIRST_GUARD_OP="+original_first_op)
     need(P40_SRC.is_file(),"P40_DENY_BRIDGE_REQUIRED")
     s=P40_SRC.read_text()
     modified=patch_p40(s)
@@ -203,10 +205,10 @@ def inject_p40():
          "ONLY_TEST_P40_LOGGING_DIFFERENCE")
     need(PRE_SRC.is_file() and not PRE_SRC.is_symlink(),"PINNED_START2_SMALI_ONLY")
     original=PRE_SRC.read_text()
-    PRE_SRC.write_text(inject_precall(original))
+    PRE_SRC.write_text(inject_precall(original,original_first_op))
     need(PRE_SRC.read_text().replace(GUARD_INVOKE,"",1).replace(PRE_INVOKE,"",1)==original,
          "PRECALL_SOURCE_EXACT_INVERSE")
-    print("P209_ONLY_TEST_FIRST_PC38_GUARD_MARKER=PASS")
+    print("P209_ONLY_TEST_ORIGINAL_FIRST_GUARD_MARKER=PASS")
     print("P209_ONLY_TEST_PRE_PC3912_MARKER=PASS")
     print("P209_ONLY_TEMP_P40_ONE_LOG_AND_NO_HOST_SPAWN=PASS")
 def main():

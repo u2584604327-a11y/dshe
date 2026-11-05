@@ -16,7 +16,7 @@ public final class P209PreCallWitness {
         Log.i("P209_GUARD","P209_FIRST_GUARD_ISOLATED=DENY");
         return;
       }
-      Log.i("P209_GUARD","P209_FIRST_GUARD_PC38=OBSERVED");
+      Log.i("P209_GUARD","P209_FIRST_GUARD=OBSERVED");
     }catch(Throwable ignored) {
       // No diagnostic may change original coroutine execution.
     }

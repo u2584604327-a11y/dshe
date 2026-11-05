@@ -104,4 +104,8 @@ class PreCallTests(unittest.TestCase):
     def test_repeated_guard_refused(self):
         value=p.inject_precall(precall_fixture())
         with self.assertRaises(p.Deny):p.inject_precall(value)
+    def test_dynamic_first_if_op_matches_exact_runtime_pin(self):
+        value=precall_fixture().replace("if-ne v0, v1", "if-nez v0")
+        result=p.inject_precall(value,expected_guard_op="if-nez")
+        self.assertEqual(result.replace(p.GUARD_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),value)
 if __name__=="__main__":unittest.main(verbosity=2)

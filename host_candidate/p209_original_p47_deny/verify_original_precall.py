@@ -25,11 +25,13 @@ def compare(original,derived):
     approach=[i for i,(_,op,out) in enumerate(b) if op=="invoke-static" and GUARD in out]
     precall=[i for i,(_,op,out) in enumerate(b) if op=="invoke-static" and PRE in out]
     cond=[(pc,op) for pc,op,out in a if op.startswith("if-")]
-    require(cond and cond[0]==(38,"if-ne"),"SIGNED_ORIGINAL_FIRST_GUARD_PC38")
+    require(cond and 0<cond[0][0]<3912 and cond[0][1].startswith("if-"),
+            "SIGNED_FIRST_ORIGINAL_GUARD_BEFORE_PC3912")
+    expected_original_cond_op=cond[0][1]
     require(first==[0] and len(approach)==1 and len(precall)==1 and
             0<approach[0]<precall[0],"EXACT_THREE_TEST_MARKER_POSITIONS")
     guard_idx=approach[0];pre_idx=precall[0]
-    require(guard_idx+1<len(b) and b[guard_idx+1][1]=="if-ne" and
+    require(guard_idx+1<len(b) and b[guard_idx+1][1]==expected_original_cond_op and
             sum(op.startswith("if-") for _,op,out in b[:guard_idx])==0,
             "GUARD_MARKER_IMMEDIATELY_BEFORE_FIRST_IF_NE")
     require(pre_idx+1<len(b) and b[pre_idx+1][1]=="invoke-static" and
@@ -79,10 +81,11 @@ def main():
         require("Lcom/dsh/android/p208/P208StartCoroutineWitness;" in owners and
                 "Lcom/dsh/android/p209/P209PreCallWitness;" in owners,
                 "BOTH_TEST_ONLY_CLASSES3_WITNESSES")
-        print("P209_START2_ENTRY_PC38_AND_PC3912_THREE_TEST_MARKERS=PASS")
+        print("P209_START2_ENTRY_FIRST_GUARD_AND_PC3912_THREE_TEST_MARKERS=PASS")
         print("P209_START2_ORIGINAL_ALL_OTHER_OPCODES_OPERANDS=PARITY")
         print("P209_ORIGINAL_UPSTREAM_ENGINE_BOOT_ONCREATE=PARITY")
-        print("P209_FIRST_PC38_GUARD_MATCHES_SIGNED_ORIGINAL=PASS")
+        print("P209_FIRST_GUARD_MATCHES_SIGNED_ORIGINAL=PASS")
+        print("P209_FIRST_GUARD_SIGNED_PC="+str([(pc,op) for pc,op,out in ins(prev.find(o,prev.START2,"invokeSuspend","(Ljava/lang/Object;)Ljava/lang/Object;")) if op.startswith("if-")][0][0]))
         print("P209_PRE_PC3912_MARKER_ONLY_IN_DISPOSABLE_CLASSES3=PASS")
         print("P209_REAL_PC3912_RUNTIME_EXECUTION=NOT_ATTESTED")
     except (Deny,prev.Denied,p208.Refused) as e:

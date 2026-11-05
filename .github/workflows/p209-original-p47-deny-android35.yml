@@ -75,11 +75,11 @@ jobs:
           print("P209_SOURCE_PYTHON_SYNTAX=PASS")
           PY
           python3 -B host_candidate/p209_original_p47_deny/test_patch_gate_ci_only.py 2>&1 | tee "$RUNNER_TEMP/p209-unit.log"
-          grep -Eq '^Ran 25 tests in' "$RUNNER_TEMP/p209-unit.log"
+          grep -Eq '^Ran 26 tests in' "$RUNNER_TEMP/p209-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-unit.log"
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
           test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
-          echo P209_SOURCE_PINNED_AND_25_NEGATIVE_TESTS=PASS
+          echo P209_SOURCE_PINNED_AND_26_NEGATIVE_TESTS=PASS
           echo P208_PINNED_BOOT_METHOD_AND_DENY_SAFETY_CHECKS=PASS
       - name: Patch only disposable P43 CI builder to include one bootEngine witness
         shell: bash
@@ -126,7 +126,7 @@ jobs:
           grep -Fxq 'P209_ONLY_TEMP_P40_ONE_LOG_AND_NO_HOST_SPAWN=PASS' .p208tmp/build.log
           grep -Fxq 'P208_ORIGINAL_START2_TEXT_EXCEPT_ONE_INVOKE=BYTE_IDENTICAL' .p208tmp/build.log
           grep -Fxq 'P209_ONLY_TEST_PRE_PC3912_MARKER=PASS' .p208tmp/build.log
-          grep -Fxq 'P209_ONLY_TEST_FIRST_PC38_GUARD_MARKER=PASS' .p208tmp/build.log
+          grep -Fxq 'P209_ONLY_TEST_ORIGINAL_FIRST_GUARD_MARKER=PASS' .p208tmp/build.log
           grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p208tmp/build.log
           grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p208tmp/build.log
           grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p208tmp/build.log
@@ -140,10 +140,10 @@ jobs:
             .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
             .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
             | tee "$RUNNER_TEMP/p208-parity.log"
-          grep -Fxq 'P209_START2_ENTRY_PC38_AND_PC3912_THREE_TEST_MARKERS=PASS' "$RUNNER_TEMP/p208-parity.log"
+          grep -Fxq 'P209_START2_ENTRY_FIRST_GUARD_AND_PC3912_THREE_TEST_MARKERS=PASS' "$RUNNER_TEMP/p208-parity.log"
           grep -Fxq 'P209_START2_ORIGINAL_ALL_OTHER_OPCODES_OPERANDS=PARITY' "$RUNNER_TEMP/p208-parity.log"
           grep -Fxq 'P209_ORIGINAL_UPSTREAM_ENGINE_BOOT_ONCREATE=PARITY' "$RUNNER_TEMP/p208-parity.log"
-          grep -Fxq 'P209_FIRST_PC38_GUARD_MATCHES_SIGNED_ORIGINAL=PASS' "$RUNNER_TEMP/p208-parity.log"
+          grep -Fxq 'P209_FIRST_GUARD_MATCHES_SIGNED_ORIGINAL=PASS' "$RUNNER_TEMP/p208-parity.log"
           grep -Fxq 'P209_PRE_PC3912_MARKER_ONLY_IN_DISPOSABLE_CLASSES3=PASS' "$RUNNER_TEMP/p208-parity.log"
           python3 host_candidate/p209_original_p47_deny/verify_gate_dex.py \
             .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
