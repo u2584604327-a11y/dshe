@@ -32,6 +32,8 @@ def main():
         print("P209_ORIGINAL_P47_MAIN_THROWS_AFTER_FINAL_MARKER=PASS")
         print("P209_P47_PRIMARY_NO_HOST_PROCESSBUILDER_START=PASS")
         print("P209_P47_SECONDARY_MODES_NOT_INSTRUMENTED=PASS")
+    except ValueError as denied:
+        print(str(denied),file=sys.stderr);sys.exit(2)
     except Exception:
         print("P209_DISPOSABLE_GATE_BINARY_FAIL_CLOSED",file=sys.stderr);sys.exit(2)
 if __name__=="__main__":main()
