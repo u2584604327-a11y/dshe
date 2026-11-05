@@ -20,14 +20,14 @@ STACK=('    android.util.Log.i("P209_GATE", '
     'Thread.currentThread().getStackTrace()) ? '
     '"P209_ORIGINAL_CALLSTACK=PASS" : "P209_ORIGINAL_CALLSTACK=OTHER");\n')
 FINAL='    android.util.Log.i("P209_GATE","P209_P47_FINAL_DENY_UID="+android.os.Process.myUid());\n'
-P208_HOOK='    python3 host_candidate/p208_original_start_coroutine/patch_ci_only.py --inject-smali "$DIR/decoded"\\n'
-P209_HOOK='    python3 host_candidate/p209_original_p47_deny/patch_gate_ci_only.py --inject-p40\\n'
+P208_HOOK='    python3 host_candidate/p208_original_start_coroutine/patch_ci_only.py --inject-smali "$DIR/decoded"\n'
+P209_HOOK='    python3 host_candidate/p209_original_p47_deny/patch_gate_ci_only.py --inject-p40\n'
 P40_SRC=Path(".p43tmp/decoded/smali/com/dsh/android/p40/P40ProcessBridge.smali")
-P40_HDR=".method public static start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;\\n    .registers 2\\n"
-P40_CALL="    invoke-static {p0}, Lcom/dsh/android/p47/P47LaunchGate;->startOrDeny(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;\\n"
-P40_LOG=('    const-string v0, "P209_P40"\\n'
-         '    const-string v1, "P209_P40_BRIDGE_ENTRY=OBSERVED"\\n'
-         '    invoke-static {v0, v1}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I\\n')
+P40_HDR=".method public static start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;\n    .registers 2\n"
+P40_CALL="    invoke-static {p0}, Lcom/dsh/android/p47/P47LaunchGate;->startOrDeny(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;\n"
+P40_LOG=('    const-string v0, "P209_P40"\n'
+         '    const-string v1, "P209_P40_BRIDGE_ENTRY=OBSERVED"\n'
+         '    invoke-static {v0, v1}, Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I\n')
 class Deny(Exception):pass
 def need(v,code):
     if not v:raise Deny("P209_DENY_"+code)
