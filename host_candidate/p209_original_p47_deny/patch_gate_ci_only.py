@@ -142,17 +142,22 @@ def inject_precall(s):
     sys.path.insert(0,"host_candidate/p208_original_start_coroutine")
     import patch_ci_only as p208
     a,b,method=p208.find_method(s)
-    need(method.count(p208.INSERT.strip())==1 and method.index(p208.INSERT)<method.index(P40_TARGET),
-         "P208_FIRST_MARKER_REQUIRED")
-    lines=list(re.finditer(r"(?m)^([ \\t]+)invoke-static[ \\t]+\\{[vp][0-9]+\\},[ \\t]*"+
-            re.escape(P40_TARGET)+r"[ \\t]*$",method))
-    need(len(lines)==1,"EXACT_ONE_ORIGINAL_PC3912_P40_CALL")
-    at=lines[0].start()
-    marked=method[:at]+PRE_INVOKE+method[at:]
-    out=s[:a]+marked+s[b:]
-    need(out.replace(PRE_INVOKE,"",1)==s and out.count(PRE_INVOKE.strip())==1,
+    need(method.count(p208.INSERT.strip())==1,"P208_FIRST_MARKER_REQUIRED")
+    rows=method.splitlines(keepends=True)
+    matches=[idx for idx,line in enumerate(rows) if
+             P40_TARGET in line and line.lstrip().startswith("invoke-static ")]
+    need(len(matches)==1,"EXACT_ONE_ORIGINAL_PC3912_P40_CALL")
+    idx=matches[0]
+    expected=(r"^[ \t]+invoke-static[ \t]+\{[vp][0-9]+\},[ \t]*"+
+              re.escape(P40_TARGET)+r"[ \t]*\n?$")
+    need(re.fullmatch(expected,rows[idx]) is not None,
+         "ORIGINAL_PC3912_P40_CALL_SHAPE")
+    at=sum(len(line) for line in rows[:idx])
+    need(method.index(p208.INSERT)<at,"P208_ENTRY_MUST_PRECEDE_PC3912")
+    new=s[:a]+method[:at]+PRE_INVOKE+method[at:]+s[b:]
+    need(new.replace(PRE_INVOKE,"",1)==s and new.count(PRE_INVOKE.strip())==1,
          "ONLY_ONE_PRECALL_INSTRUCTION")
-    return out
+    return new
 def inject_p40():
     import hashlib
     scope(prepared=True)
