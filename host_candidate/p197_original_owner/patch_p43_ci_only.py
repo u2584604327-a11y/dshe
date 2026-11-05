@@ -37,9 +37,23 @@ def patch_activity(s):
       // already checked and the original P47 main-DEX host deny gate intact.
       if(remote!=null && getIntent()!=null &&
          getIntent().getBooleanExtra("p197_owner_generation",false)){
-        p197=new P197AndroidHostEpochProbe(P43ProbeActivity.this,
-            remote,session,line->log(line));
-        p197.start();
+        try {
+          p197=new P197AndroidHostEpochProbe(P43ProbeActivity.this,
+              remote,session,line->log(line));
+          p197.start();
+        }catch(SecurityException denied){
+          // Only constant allowlisted categories; never raw exception text,
+          // instance identity, UID/PID, session or original app private data.
+          String code=denied.getMessage();
+          if("P197_ORIGINAL_SINGLETON_NOT_ACTIVE".equals(code))
+            log("P197_ANDROID35_SINGLETON_NOT_INITIALIZED=DENY");
+          else if("P197_ORIGINAL_SINGLETON_REFLECTION_DENIED".equals(code) ||
+                  "P197_UNEXPECTED_ORIGINAL_SINGLETON_FIELD".equals(code))
+            log("P197_ANDROID35_SINGLETON_REFLECTION=DENY");
+          else
+            log("P197_ANDROID35_HOST_OWNER_PRECONDITION=DENY");
+          fail("P197_HOST_OWNER_EPOCH_NOT_ESTABLISHED");
+        }
         return; // no P50, general shell or original Node execution
       }
       if(remote!=null && p48==null) {""","start")
