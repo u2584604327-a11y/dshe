@@ -1,0 +1,145 @@
+name: P205 real Android35 original MainActivity bootEngine method-entry observation, Node denied
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p205_original_boot_entry/**'
+      - '.github/workflows/p205-original-boot-method-entry-android35.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p205-original-method-entry-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-original-boot-method-entry:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 58
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      P49_NODE_STAGE: '0'
+      P51_SIDE_BY_SIDE: '0'
+      P205_CI_METHOD_ENTRY_ONLY: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Only exact original v138 one-call marker, 20 synthetic negative cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile host_candidate/p205_original_boot_entry/patch_ci_only.py host_candidate/p205_original_boot_entry/verify_derived.py
+          python3 -B host_candidate/p205_original_boot_entry/test_patch_ci_only.py 2>&1 | tee "$RUNNER_TEMP/p205-unittest.log"
+          grep -Eq '^Ran 20 tests in' "$RUNNER_TEMP/p205-unittest.log"
+          grep -Fxq OK "$RUNNER_TEMP/p205-unittest.log"
+          bash -n host_candidate/p205_original_boot_entry/run_android35_entry.sh
+          test "$(git hash-object host_candidate/p43_original_service/build_embedded_emulator_apk.sh)" = 62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f
+          test "$(git hash-object host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java)" = 8a83ef4c53c8e527f604023ab5eec2be8f2e12a9
+          test "$(git hash-object host_candidate/p150_original_coroutine/src/com/dsh/android/p150/P150OriginalCoroutineObserver.java)" = eb28cea66a80700af523921fb12f8011dba6729b
+          test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P181_THREE_ORIGINAL_START_DENY" = 1
+          test "$P49_NODE_STAGE" = 0
+          test "$P51_SIDE_BY_SIDE" = 0
+          test "$P205_CI_METHOD_ENTRY_ONLY" = 1
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+          echo P205_PINNED_BOOT_METHOD_AND_DENY_SAFETY_CHECKS=PASS
+      - name: Patch only disposable P43 CI builder to include one bootEngine witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p205_original_boot_entry/patch_ci_only.py --prepare-builder
+          test "$(git diff --name-only)" = host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          grep -Fq 'P205_CI_METHOD_ENTRY_ONLY' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          grep -Fq 'P205BootEntryWitness.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          echo P205_DISPOSABLE_BUILDER_ONLY_ONE_FILE_DIFF=PASS
+      - name: Prepare exact v138 ephemeral Android APK tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          python3 - <<'PY'
+          import importlib.metadata
+          assert importlib.metadata.version("androguard")=="4.1.4"
+          print("P205_PINNED_ANDROGUARD_414=PASS")
+          PY
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/d8"
+      - name: Build SHA-pinned original-v138-derived Android35 APK, P47 all starts DENY
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .p205tmp
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > .p205tmp/build.log 2>&1;then
+            echo P205_DISPOSABLE_ORIGINAL_V138_BUILD=DENY
+            tail -n 20 .p205tmp/build.log | sed -E 's/(token|cookie|authorization|password)=\S+/\1=[REDACTED]/gi'
+            exit 2
+          fi
+          test -s .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          test -s .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          grep -Fxq 'P205_CI_ONLY_EXACT_ORIGINAL_BOOTENGINE_ENTRY_MARKER=PASS' .p205tmp/build.log
+          grep -Fxq 'P205_ORIGINAL_BOOTENGINE_TEXT_EXCEPT_ONE_INVOKE=BYTE_IDENTICAL' .p205tmp/build.log
+          grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p205tmp/build.log
+          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p205tmp/build.log
+          grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p205tmp/build.log
+          grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p205tmp/build.log
+          echo P205_SHA_PINNED_ORIGINAL_3_START_DENY_ONLY_BUILD=PASS
+      - name: Full original onCreate parity and exactly one bootEngine entry invocation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p205_original_boot_entry/verify_derived.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            | tee "$RUNNER_TEMP/p205-parity.log"
+          grep -Fxq 'P205_TEST_ONLY_ORIGINAL_BOOTENGINE_ONLY_ONE_FIRST_INVOKE=PASS' "$RUNNER_TEMP/p205-parity.log"
+          grep -Fxq 'P205_BOOTENGINE_OTHER_ORIGINAL_INSTRUCTIONS=BYTECODE_SEMANTIC_PARITY' "$RUNNER_TEMP/p205-parity.log"
+          grep -Fxq 'P205_ORIGINAL_ONCREATE_COMPLETE_INSTRUCTION_PARITY=PASS' "$RUNNER_TEMP/p205-parity.log"
+          grep -Fxq 'P205_PC430_ORIGINAL_CALLSITE_UNCHANGED=PASS' "$RUNNER_TEMP/p205-parity.log"
+          echo P205_EXACT_ORIGINAL_METHOD_WITNESS_SOURCE_PROVENANCE=PASS
+      - name: Disposable emulator KVM
+        shell: bash
+        run: if test -c /dev/kvm;then sudo chmod 666 /dev/kvm;fi
+      - name: Real Android35 first launch of original MainActivity with actual bootEngine entry marker
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p205_original_boot_entry/run_android35_entry.sh
+      - name: Wipe original APK and test-signature APK; keep runtime and release gates BLOCKED
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp .p205tmp
+          echo P205_GENUINE_MAINACTIVITY_BOOT_METHOD_ENTRY=SEE_ACTUAL_ANDROID35_LOGS >> "$GITHUB_STEP_SUMMARY"
+          echo P205_ORIGINAL_INVOKESUSPEND=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P205_P47_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P205_ORIGINAL_P184_RECEIPT_TO_REAL_COROUTINE=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P205_ORIGINAL_NODE_FD_JS_NATIVE_HTTP_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P205_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P205_GS_CAPTURE=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P205_EXTERNAL_FINGERPRINT_SITE_REQUEST=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P205_REAL_PHONE_INSTALL=NOT_PERFORMED >> "$GITHUB_STEP_SUMMARY"
+          echo P205_DIFFERENT_SIGNER_ORIGINAL_DATA_OVERWRITE=FORBIDDEN >> "$GITHUB_STEP_SUMMARY"
+          echo P205_FORMAL_V139=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"
