@@ -17,7 +17,7 @@ def main():
         need(len(methods)==1,"EXACT_STARTORDENY")
         ins=[(i.get_name(),i.get_output()) for _,i in methods[0].get_instructions_idx()]
         log=[i for i,(op,out) in enumerate(ins) if
-             "Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I" in out]
+             "Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I" in "".join(out.split())]
         need(len(log)==3 and log==sorted(log),"EXACT_THREE_GATE_LOGS")
         need(any(op=="throw" for op,out in ins) and
              log[-1]<max(i for i,(op,out) in enumerate(ins) if op=="throw"),
