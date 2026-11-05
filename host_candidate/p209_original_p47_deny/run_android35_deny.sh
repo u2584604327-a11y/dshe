@@ -59,7 +59,7 @@ selected=
 valid=NO
 for _ in $(seq 1 18);do
   raw="$(adb -s "$serial" logcat -d -v threadtime \
-    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I '*:S')"
+    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I P209_PREP40:I '*:S')"
   selected="$(printf '%s\n' "$raw" | awk -v m="$marker" '
     index($0,m){count++;after=1;next}
     after{print}
@@ -108,6 +108,21 @@ if [[ "$selected" == *P208_ORIGINAL_START2_INVOKESUSPEND_METHOD_ENTRY=OBSERVED* 
     echo P208_HOST_OS_UID_MISMATCH=DENY;exit 2;
   fi
   echo P208_ORIGINAL_START2_COROUTINE_HOST_PID_UID_MATCH=PASS
+  if [[ "$selected" == *P209_PRE_P40_ISOLATED=DENY* ]];then
+    echo P209_PRE_PC3912_MARKER_ISOLATED=DENY;exit 2
+  fi
+  precall_total="$(printf '%s\n' "$selected" | grep -Fc 'P209_PRE_P40_WITNESS=OBSERVED' || true)"
+  precall_host="$(printf '%s\n' "$selected" | awk -v pid="$pid" '
+    index($0,"P209_PRE_P40_WITNESS=OBSERVED") && $3==pid{n++}
+    END{print n+0}')"
+  [[ "$precall_total" == "$precall_host" ]] || {
+    echo P209_PRE_PC3912_FOREIGN_PID=DENY;exit 2;
+  }
+  if [[ "$precall_host" -gt 0 ]];then
+    echo P209_ORIGINAL_PC3912_PRE_P40=OBSERVED
+  else
+    echo P209_ORIGINAL_PC3912_PRE_P40=NOT_OBSERVED
+  fi
 else
   echo P208_ORIGINAL_START2_INVOKESUSPEND_METHOD_ENTRY=NOT_OBSERVED
 fi
@@ -123,6 +138,9 @@ p209_count_pid() {
     'index($0,k) && $3==pid{n++} END{print n+0}'
 }
 p209_gate_diagnostic() {
+  echo "P209_PRE_PC3912_TAG_COUNT=$(p209_count 'P209_PRE_P40_WITNESS=OBSERVED')"
+  echo "P209_PRE_PC3912_HOST_PID_COUNT=$(p209_count_pid 'P209_PRE_P40_WITNESS=OBSERVED')"
+  echo "P209_PRE_PC3912_ISOLATED_DENY_COUNT=$(p209_count 'P209_PRE_P40_ISOLATED=DENY')"
   echo "P209_P40_ENTRY_TAG_COUNT=$(p209_count 'P209_P40_BRIDGE_ENTRY=OBSERVED')"
   echo "P209_P40_ENTRY_HOST_PID_COUNT=$(p209_count_pid 'P209_P40_BRIDGE_ENTRY=OBSERVED')"
   echo "P209_GATE_ENTRY_TAG_COUNT=$(p209_count 'P209_P47_ENTER_UID=')"
