@@ -1,0 +1,180 @@
+name: P209 original start coroutine P47 final DENY Android35
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p209_original_p47_deny/**'
+      - '.github/workflows/p209-original-p47-deny-android35.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p208-original-coroutine-entry-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-original-coroutine-entry:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 58
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      P49_NODE_STAGE: '0'
+      P51_SIDE_BY_SIDE: '0'
+      P208_CI_METHOD_ENTRY_ONLY: '1'
+      P209_FINAL_DENY_ONLY: '1'
+      P74_FIXTURE_ENGINE_BRIDGE: '0'
+      P75_RENDEZVOUS_FIXTURE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prove original coroutine signature, exact one-opcode marker and 21 fail-closed cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ("patch_ci_only.py","verify_derived.py","test_patch_ci_only.py"):
+            f=Path("host_candidate/p208_original_start_coroutine")/name
+            compile(f.read_text(),str(f),"exec")
+          print("P208_COMPILE_IN_MEMORY_WITHOUT_WORKTREE_CACHE=PASS")
+          PY
+          python3 -B host_candidate/p208_original_start_coroutine/test_patch_ci_only.py 2>&1 | tee "$RUNNER_TEMP/p208-unittest.log"
+          grep -Eq '^Ran 21 tests in' "$RUNNER_TEMP/p208-unittest.log"
+          grep -Fxq OK "$RUNNER_TEMP/p208-unittest.log"
+          bash -n host_candidate/p208_original_start_coroutine/run_android35_entry.sh
+          test "$(git hash-object host_candidate/p43_original_service/build_embedded_emulator_apk.sh)" = 62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f
+          test "$(git hash-object host_candidate/p205_original_boot_entry/patch_ci_only.py)" = e2337dff4c46ed504381d4506a9e1ef647e35f0d
+          test "$(git hash-object host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java)" = 8a83ef4c53c8e527f604023ab5eec2be8f2e12a9
+          test "$(git hash-object host_candidate/p150_original_coroutine/src/com/dsh/android/p150/P150OriginalCoroutineObserver.java)" = eb28cea66a80700af523921fb12f8011dba6729b
+          test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P181_THREE_ORIGINAL_START_DENY" = 1
+          test "$P49_NODE_STAGE" = 0
+          test "$P51_SIDE_BY_SIDE" = 0
+          test "$P208_CI_METHOD_ENTRY_ONLY" = 1
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+          python3 - <<'PY'
+          from pathlib import Path
+          for s in ("patch_gate_ci_only.py","test_patch_gate_ci_only.py","verify_gate_dex.py"):
+            f=Path("host_candidate/p209_original_p47_deny")/s
+            compile(f.read_text(),str(f),"exec")
+          print("P209_SOURCE_PYTHON_SYNTAX=PASS")
+          PY
+          python3 -B host_candidate/p209_original_p47_deny/test_patch_gate_ci_only.py 2>&1 | tee "$RUNNER_TEMP/p209-unit.log"
+          grep -Eq '^Ran 13 tests in' "$RUNNER_TEMP/p209-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p209-unit.log"
+          bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
+          test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
+          echo P209_SOURCE_PINNED_AND_13_NEGATIVE_TESTS=PASS
+          echo P208_PINNED_BOOT_METHOD_AND_DENY_SAFETY_CHECKS=PASS
+      - name: Patch only disposable P43 CI builder to include one bootEngine witness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p208_original_start_coroutine/patch_ci_only.py --prepare-builder
+          test "$(git diff --name-only)" = host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          grep -Fq 'P208_CI_METHOD_ENTRY_ONLY' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          grep -Fq 'P208StartCoroutineWitness.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          python3 host_candidate/p209_original_p47_deny/patch_gate_ci_only.py --prepare
+          test -s .p209tmp/P47LaunchGate.java
+          test "$(git diff --name-only)" = host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          echo P209_GATE_ONLY_TEMPORARY_SOURCE_IN_BUILDER=PASS
+          echo P208_DISPOSABLE_BUILDER_ONLY_ONE_FILE_DIFF=PASS
+      - name: Prepare exact v138 ephemeral Android APK tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          python3 - <<'PY'
+          import importlib.metadata
+          assert importlib.metadata.version("androguard")=="4.1.4"
+          print("P208_PINNED_ANDROGUARD_414=PASS")
+          PY
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/d8"
+      - name: Build SHA-pinned original-v138-derived Android35 APK, P47 all starts DENY
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .p208tmp
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > .p208tmp/build.log 2>&1;then
+            echo P208_DISPOSABLE_ORIGINAL_V138_BUILD=DENY
+            tail -n 20 .p208tmp/build.log | sed -E 's/(token|cookie|authorization|password)=\S+/\1=[REDACTED]/gi'
+            exit 2
+          fi
+          test -s .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          test -s .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          grep -Fxq 'P208_CI_ONLY_EXACT_ORIGINAL_START2_ENTRY_MARKER=PASS' .p208tmp/build.log
+          grep -Fxq 'P208_ORIGINAL_START2_TEXT_EXCEPT_ONE_INVOKE=BYTE_IDENTICAL' .p208tmp/build.log
+          grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p208tmp/build.log
+          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p208tmp/build.log
+          grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p208tmp/build.log
+          grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p208tmp/build.log
+          echo P208_SHA_PINNED_ORIGINAL_3_START_DENY_ONLY_BUILD=PASS
+      - name: Full original onCreate and bootEngine parity plus exactly one coroutine entry marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p208_original_start_coroutine/verify_derived.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            | tee "$RUNNER_TEMP/p208-parity.log"
+          grep -Fxq 'P208_ONLY_FIRST_COROUTINE_MARKER_PLUS_PC3912_P40_DENY=PASS' "$RUNNER_TEMP/p208-parity.log"
+          grep -Fxq 'P208_ORIGINAL_START2_OTHER_OPCODES_OPERANDS=PARITY' "$RUNNER_TEMP/p208-parity.log"
+          grep -Fxq 'P208_ORIGINAL_START_PARENT_BOOT_ONCREATE_PARITY=PASS' "$RUNNER_TEMP/p208-parity.log"
+          grep -Fxq 'P208_JAVA_WITNESS_ONLY_DISPOSABLE_CLASSES3=PASS' "$RUNNER_TEMP/p208-parity.log"
+          python3 host_candidate/p209_original_p47_deny/verify_gate_dex.py \
+            .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            | tee "$RUNNER_TEMP/p209-gate-parity.log"
+          grep -Fxq 'P209_DISPOSABLE_P47_MAIN_GATE_BINARY_LOGS=PASS' "$RUNNER_TEMP/p209-gate-parity.log"
+          echo P209_ORIGINAL_P47_GATE_BINARY_AND_SOURCE_PARITY=PASS
+          echo P208_EXACT_ORIGINAL_METHOD_WITNESS_SOURCE_PROVENANCE=PASS
+      - name: Disposable emulator KVM
+        shell: bash
+        run: if test -c /dev/kvm;then sudo chmod 666 /dev/kvm;fi
+      - name: Android35 cold launch of original MainActivity with true original invokeSuspend entry
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p209_original_p47_deny/run_android35_deny.sh
+      - name: Wipe original APK and test-signature APK; keep runtime and release gates BLOCKED
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp .p208tmp .p209tmp
+          echo P208_ORIGINAL_START2_ENTRY=SEE_ACTUAL_ANDROID35_LOGS >> "$GITHUB_STEP_SUMMARY"
+          echo P208_ORIGINAL_CHILD_PROCESS_OWNER=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P208_P47_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P208_ORIGINAL_P184_RECEIPT_TO_REAL_COROUTINE=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P208_ORIGINAL_NODE_FD_JS_NATIVE_HTTP_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P208_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P208_GS_CAPTURE=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P208_EXTERNAL_FINGERPRINT_SITE_REQUEST=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P208_REAL_PHONE_INSTALL=NOT_PERFORMED >> "$GITHUB_STEP_SUMMARY"
+          echo P208_DIFFERENT_SIGNER_ORIGINAL_DATA_OVERWRITE=FORBIDDEN >> "$GITHUB_STEP_SUMMARY"
+          echo P209_REAL_P47_DENIED_LAUNCH=SEE_ACTUAL_ANDROID35_LOGS >> "$GITHUB_STEP_SUMMARY"
+          echo P209_CHILD_OS_OWNER=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P209_P184_RECEIPT=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P209_FORMAL_V139=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"
