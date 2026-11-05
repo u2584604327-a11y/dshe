@@ -58,7 +58,7 @@ def patch_builder(s):
     line=("  host_candidate/p43_original_service/android/com/dsh/android/"
           "p43/P43ProbeActivity.java \\\n")
     extra=("  host_candidate/p208_original_start_coroutine/android/com/dsh/android/"
-           "p206/P208StartCoroutineWitness.java \\\n")
+           "p208/P208StartCoroutineWitness.java \\\n")
     s=exact(s,line,line+extra,"JAVA_COMPILE")
     require(s.count("patch_ci_only.py --inject-smali")==1,
             "ONLY_ONE_ENTRY_HOOK")

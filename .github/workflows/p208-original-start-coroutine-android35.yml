@@ -93,20 +93,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p .p206tmp
-          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > .p206tmp/build.log 2>&1;then
+          mkdir -p .p208tmp
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > .p208tmp/build.log 2>&1;then
             echo P208_DISPOSABLE_ORIGINAL_V138_BUILD=DENY
-            tail -n 20 .p206tmp/build.log | sed -E 's/(token|cookie|authorization|password)=\S+/\1=[REDACTED]/gi'
+            tail -n 20 .p208tmp/build.log | sed -E 's/(token|cookie|authorization|password)=\S+/\1=[REDACTED]/gi'
             exit 2
           fi
           test -s .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
           test -s .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
-          grep -Fxq 'P208_CI_ONLY_EXACT_ORIGINAL_START2_ENTRY_MARKER=PASS' .p206tmp/build.log
-          grep -Fxq 'P208_ORIGINAL_START2_TEXT_EXCEPT_ONE_INVOKE=BYTE_IDENTICAL' .p206tmp/build.log
-          grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p206tmp/build.log
-          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p206tmp/build.log
-          grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p206tmp/build.log
-          grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p206tmp/build.log
+          grep -Fxq 'P208_CI_ONLY_EXACT_ORIGINAL_START2_ENTRY_MARKER=PASS' .p208tmp/build.log
+          grep -Fxq 'P208_ORIGINAL_START2_TEXT_EXCEPT_ONE_INVOKE=BYTE_IDENTICAL' .p208tmp/build.log
+          grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p208tmp/build.log
+          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p208tmp/build.log
+          grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p208tmp/build.log
+          grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p208tmp/build.log
           echo P208_SHA_PINNED_ORIGINAL_3_START_DENY_ONLY_BUILD=PASS
       - name: Full original onCreate and bootEngine parity plus exactly one coroutine entry marker
         shell: bash
@@ -138,7 +138,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          rm -rf .p43tmp .p206tmp
+          rm -rf .p43tmp .p208tmp
           echo P208_ORIGINAL_START2_ENTRY=SEE_ACTUAL_ANDROID35_LOGS >> "$GITHUB_STEP_SUMMARY"
           echo P208_ORIGINAL_CHILD_PROCESS_OWNER=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
           echo P208_P47_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
