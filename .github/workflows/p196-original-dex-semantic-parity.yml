@@ -1,0 +1,135 @@
+name: P196 exact signed v138 vs P47 derived DEX three-mode lifecycle symbolic diff
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p196_dex_lifecycle/**'
+      - '.github/workflows/p196-original-dex-semantic-parity.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p196-v138-dex-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  signed-v138-three-mode-binary-lifecycle:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      P49_NODE_STAGE: '0'
+      P51_SIDE_BY_SIDE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Strict negative tests, immutable original code pins and provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B host_candidate/p196_dex_lifecycle/test_symbolic_diff.py 2>&1 | tee "$RUNNER_TEMP/p196-self.log"
+          grep -Eq '^Ran 18 tests in' "$RUNNER_TEMP/p196-self.log"
+          grep -Fxq 'OK' "$RUNNER_TEMP/p196-self.log"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('host_candidate/p196_dex_lifecycle/audit_exact_v138_dex.py')
+          compile(p.read_text(),str(p),'exec')
+          print("P196_PYTHON_SYNTAX_VALID=PASS")
+          PY
+          test "$(git hash-object host_candidate/p35_original_engine_spawn_contract.py)" = ff1b65e7fc915a8b23f363db93659cc221aaa6a0
+          test "$(git hash-object host_candidate/p40_exact_trampoline.py)" = ec9afd9d87c43f28106899d9a80189042a03633f
+          test "$(git hash-object host_candidate/p47_no_fallback/p47_gate.py)" = 49f0d5d07cf7e8fa1e0323c945ddbb1eed946065
+          test "$(git hash-object host_candidate/p43_original_service/build_embedded_emulator_apk.sh)" = 62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P181_THREE_ORIGINAL_START_DENY" = 1
+          test "$P49_NODE_STAGE" = 0
+          test "$P51_SIDE_BY_SIDE" = 0
+          echo P196_PINNED_ORIGINAL_V138_P40_P47_BUILD_SOURCES=PASS
+      - name: Provision pinned binary decoder and ephemeral APK build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          python3 - <<'PY'
+          import importlib.metadata
+          assert importlib.metadata.version("androguard")=="4.1.4"
+          print("P196_ANDROGUARD_414_FIXED=PASS")
+          PY
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/d8"
+      - name: Build original-v138-derived DENY-only temporary APK with real DEX
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .p196tmp
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > .p196tmp/build.log 2>&1; then
+            # Only bound error categories, no raw original argv/string/exception.
+            echo P196_ORIGINAL_P43_DENY_APK_BUILD_FAILED
+            exit 1
+          fi
+          apk=.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          original=.p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          test -s "$original" && test -s "$apk"
+          grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p196tmp/build.log
+          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p196tmp/build.log
+          grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p196tmp/build.log
+          grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p196tmp/build.log
+          echo P196_REAL_ORIGINAL_V138_DERIVED_DENY_ONLY_APK_BUILT=PASS
+      - name: Compare real original and derived classes.dex every opcode and catch handler
+        shell: bash
+        run: |
+          set -euo pipefail
+          original=.p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          derived=.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          python3 -B host_candidate/p196_dex_lifecycle/audit_exact_v138_dex.py \
+            "$original" "$derived" --report .p196tmp/redacted-summary.json |
+            tee "$RUNNER_TEMP/p196-proof.log"
+          grep -Fxq 'P196_EXACT_ORIGINAL_V138_MAIN_DEX_SEMANTIC_DIFF=PASS' "$RUNNER_TEMP/p196-proof.log"
+          grep -Fxq 'P196_THREE_TYPED_P40_CALLSITES_ONLY_REWRITTEN=PASS' "$RUNNER_TEMP/p196-proof.log"
+          grep -Fxq 'P196_REGISTER_BRANCH_CATCH_LIFECYCLE_PARITY=PASS' "$RUNNER_TEMP/p196-proof.log"
+          grep -Fxq 'P196_SECONDARY_DEX_ASSET_NATIVE_HASH_PARITY=PASS' "$RUNNER_TEMP/p196-proof.log"
+          grep -Fxq 'P196_ORIGINAL_COROUTINE_NODE_HTTP_READY=NOT_WIRED' "$RUNNER_TEMP/p196-proof.log"
+          python3 - <<'PY'
+          import json
+          r=json.load(open(".p196tmp/redacted-summary.json"))
+          assert r["original_sha256"]=="3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5"
+          assert sorted(r["three_callsite_rewrites"])==["CONFIG","MAIN","PROBE"]
+          assert r["three_callsite_rewrites"]["MAIN"]["replaced_pc"]==3912
+          assert r["engine_manager_coroutine_executed"] is False
+          assert r["real_node_started"] is False
+          assert r["production_http_ready"] is False
+          print("P196_BOUNDED_THREE_CALLSITES_BINARY_REPORT=PASS")
+          PY
+          echo P196_STRICT_SIGNED_V138_TO_P47_DENY_DEX_BOUNDS=PASS
+      - name: Wipe test APK, original baseline and all scratch
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp .p196tmp
+          echo P196_ORIGINAL_SIGNED_APK_EXACT_SHA=CHECK_COMPARE_STEP >> "$GITHUB_STEP_SUMMARY"
+          echo P196_REAL_DEX_THREE_CALLSITE_PARITY=CHECK_COMPARE_STEP >> "$GITHUB_STEP_SUMMARY"
+          echo P196_PRODUCTION_ENGINE_MANAGER_COROUTINE=NOT_INVOKED >> "$GITHUB_STEP_SUMMARY"
+          echo P196_ORIGINAL_ARM64_NODE_HTTP_TOKEN_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P196_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P196_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P196_GS_SCREENSHOT=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P196_APK_SIGN_RELEASE_OWNER_PHONE=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P196_V139_RELEASE=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"
