@@ -48,7 +48,7 @@ marker="P197_START_$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
 adb -s "$serial" shell log -p i -t P197_BOUNDARY "$marker" >/dev/null
 status="$(adb -s "$serial" shell am start -W -n \
   com.dsh.android/com.dsh.android.p43.P43ProbeActivity \
-  --ez p184_receipt true)"
+  --ez p197_owner_generation true)"
 [[ "$status" =~ Status:\ (ok|warning) ]]
 verified=NO
 for _ in $(seq 1 28); do

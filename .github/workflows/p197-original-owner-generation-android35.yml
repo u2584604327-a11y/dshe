@@ -47,6 +47,15 @@ jobs:
           bash -n host_candidate/p197_original_owner/run_android35_receipt.sh
           bash -n host_candidate/p197_original_owner/run_java8.sh
           python3 - <<'PY'
+          from pathlib import Path
+          runner=Path("host_candidate/p197_original_owner/run_android35_receipt.sh").read_text()
+          patcher=Path("host_candidate/p197_original_owner/patch_p43_ci_only.py").read_text()
+          assert runner.count("--ez p197_owner_generation true")==1
+          assert patcher.count('getBooleanExtra("p197_owner_generation",false)')==1
+          assert "--ez p184_receipt true" not in runner
+          print("P197_EXACT_ACTIVITY_INTENT_GATE_MATCH=PASS")
+          PY
+          python3 - <<'PY'
           import ast
           from pathlib import Path
           ast.parse(Path("host_candidate/p197_original_owner/patch_p43_ci_only.py").read_text())
