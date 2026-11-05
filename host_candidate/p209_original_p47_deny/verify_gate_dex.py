@@ -88,6 +88,32 @@ def main():
         try:
             edges,unknown,by_pc=cfg.graph(nodes)
             need(3912 in by_pc,"PC3912_CFG_INSTRUCTION_BOUNDARY")
+            # P209 read-only signed-original first real branch successors.
+            # Static graph edges do not attest which Android runtime arm executed.
+            earliest=[(pc,ins) for pc,ins in rows
+                      if ins.get_name().startswith("if-")]
+            need(len(earliest)>0 and earliest[0][0]==26,
+                 "FIRST_SIGNED_GUARD_EXACT_PC26")
+            guard_pc,guard_ins=earliest[0]
+            fall=guard_pc+guard_ins.get_length()
+            taken=guard_pc+2*guard_ins.get_ref_off()
+            need(fall in by_pc and taken in by_pc and fall!=taken and
+                 set(edges[guard_pc])=={fall,taken},
+                 "FIRST_SIGNED_GUARD_EXACT_NORMAL_TWO_EDGES")
+            fall_reaches=cfg.reachable(edges,fall,3912)
+            taken_reaches=cfg.reachable(edges,taken,3912)
+            print("P209_FIRST_SIGNED_CONDITION_PC="+str(guard_pc))
+            print("P209_FIRST_SIGNED_CONDITION_OP="+guard_ins.get_name())
+            print("P209_FIRST_GUARD_FALLTHROUGH_PC="+str(fall))
+            print("P209_FIRST_GUARD_TAKEN_TARGET_PC="+str(taken))
+            print("P209_FIRST_GUARD_FALLTHROUGH_OPCODE="+by_pc[fall]["op"])
+            print("P209_FIRST_GUARD_TAKEN_TARGET_OPCODE="+by_pc[taken]["op"])
+            print("P209_FIRST_GUARD_FALLTHROUGH_STATIC_PC3912="+
+                  ("REACHABLE" if fall_reaches else "NOT_PROVEN_REACHABLE"))
+            print("P209_FIRST_GUARD_TAKEN_STATIC_PC3912="+
+                  ("REACHABLE" if taken_reaches else "NOT_PROVEN_REACHABLE"))
+            print("P209_FIRST_GUARD_RUNTIME_SELECTED_ARM=NOT_ATTESTED")
+            print("P209_SIGNED_FIRST_GUARD_TWO_NORMAL_EDGES=PASS")
             reachable=cfg.reachable(edges,0,3912)
             candidates=[]
             for node in nodes:
