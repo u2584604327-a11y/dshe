@@ -67,4 +67,27 @@ class VerifierTests(unittest.TestCase):
     def test_missing_original_verifier_denied(self):
         with self.assertRaises(p.Deny):
             p.patch_verifier("not original")
+def precall_fixture():
+    import sys
+    sys.path.insert(0,"host_candidate/p208_original_start_coroutine")
+    import patch_ci_only as p208
+    return (".class final Lcom/dsh/android/EngineManager$start$2;\n"+
+      ".method public final invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;\n"+
+      "    .locals 4\n"+p208.INSERT+
+      "    const/4 v0, 0x0\n"+
+      "    invoke-static {v0}, "+p.P40_TARGET+"\n"+
+      "    return-object v0\n.end method\n")
+class PreCallTests(unittest.TestCase):
+    def test_pre_call_exact_inverse(self):
+        s=precall_fixture()
+        self.assertEqual(p.inject_precall(s).replace(p.PRE_INVOKE,"",1),s)
+    def test_missing_p40_fails_closed(self):
+        s=precall_fixture().replace(p.P40_TARGET,"Lcom/example/Other;->start()V")
+        with self.assertRaises(p.Deny):p.inject_precall(s)
+    def test_duplicate_p40_fails_closed(self):
+        s=precall_fixture()
+        call="    invoke-static {v0}, "+p.P40_TARGET+"\n"
+        with self.assertRaises(p.Deny):p.inject_precall(s.replace(call,call+call))
+    def test_duplicate_precall_fails_closed(self):
+        with self.assertRaises(p.Deny):p.inject_precall(p.inject_precall(precall_fixture()))
 if __name__=="__main__":unittest.main(verbosity=2)
