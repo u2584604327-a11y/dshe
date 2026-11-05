@@ -161,7 +161,11 @@ def main():
         validate_ci()
         if args.prepare_builder:run_preparation()
         else:run_injection(args.inject_smali)
+    except Refused as error:
+        # Only an allowlisted static refusal label, no private path or data.
+        print(str(error),file=sys.stderr)
+        sys.exit(2)
     except Exception:
-        print("P205_CI_ONLY_PATCH_DENIED",file=sys.stderr)
+        print("P205_CI_ONLY_UNEXPECTED_PATCH_ERROR",file=sys.stderr)
         sys.exit(2)
 if __name__=="__main__":main()

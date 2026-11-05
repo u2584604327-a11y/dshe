@@ -41,7 +41,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile host_candidate/p205_original_boot_entry/patch_ci_only.py host_candidate/p205_original_boot_entry/verify_derived.py
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ("patch_ci_only.py","verify_derived.py"):
+            f=Path("host_candidate/p205_original_boot_entry")/name
+            compile(f.read_text(),str(f),"exec")
+          print("P205_COMPILE_IN_MEMORY_WITHOUT_WORKTREE_CACHE=PASS")
+          PY
           python3 -B host_candidate/p205_original_boot_entry/test_patch_ci_only.py 2>&1 | tee "$RUNNER_TEMP/p205-unittest.log"
           grep -Eq '^Ran 20 tests in' "$RUNNER_TEMP/p205-unittest.log"
           grep -Fxq OK "$RUNNER_TEMP/p205-unittest.log"
