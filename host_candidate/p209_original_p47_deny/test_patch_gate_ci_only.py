@@ -9,8 +9,8 @@ def original():
        "    P149OriginalBuilderWitness.observeWithoutLaunch(builder,3);\n"+
        p.THROW+"  }\n"+p.NEXT+" probe config unchanged\n")
 def builder():
-    return p.BEFORE+"if test \"P208_CI_METHOD_ENTRY_ONLY\" = 1; then\n"+
-           "p208/P208StartCoroutineWitness.java\n"
+    return (p.BEFORE+"if test \"P208_CI_METHOD_ENTRY_ONLY\" = 1; then\n"+
+           "p208/P208StartCoroutineWitness.java\n")
 class Tests(unittest.TestCase):
     def deny(self,code,func):
         with self.assertRaises(p.Deny) as cm:func()
