@@ -58,4 +58,13 @@ class P40Tests(unittest.TestCase):
     def test_double_marker_denied(self):
         with self.assertRaises(p.Deny):
             p.patch_p40(p.patch_p40(p40_fixture()))
+class VerifierTests(unittest.TestCase):
+    def test_strict_p47_verifier_inverse(self):
+        s="head\n"+p.VERIFY_OLD+"\ntail\n"
+        result=p.patch_verifier(s)
+        self.assertEqual(result.replace(p.VERIFY_NEW,p.VERIFY_OLD,1),s)
+        self.assertIn("P209_EXACT_ONE_TEST_LOG_BEFORE_STRICT_P47",result)
+    def test_missing_original_verifier_denied(self):
+        with self.assertRaises(p.Deny):
+            p.patch_verifier("not original")
 if __name__=="__main__":unittest.main(verbosity=2)

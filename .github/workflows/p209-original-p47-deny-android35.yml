@@ -75,7 +75,7 @@ jobs:
           print("P209_SOURCE_PYTHON_SYNTAX=PASS")
           PY
           python3 -B host_candidate/p209_original_p47_deny/test_patch_gate_ci_only.py 2>&1 | tee "$RUNNER_TEMP/p209-unit.log"
-          grep -Eq '^Ran 16 tests in' "$RUNNER_TEMP/p209-unit.log"
+          grep -Eq '^Ran 18 tests in' "$RUNNER_TEMP/p209-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-unit.log"
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
           test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
@@ -91,8 +91,9 @@ jobs:
           grep -Fq 'P208StartCoroutineWitness.java' host_candidate/p43_original_service/build_embedded_emulator_apk.sh
           python3 host_candidate/p209_original_p47_deny/patch_gate_ci_only.py --prepare
           test -s .p209tmp/P47LaunchGate.java
-          test "$(git diff --name-only)" = host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          test "$(git diff --name-only)" = "$(printf '%s\n%s' host_candidate/p43_original_service/build_embedded_emulator_apk.sh host_candidate/p47_no_fallback/p47_gate.py)"
           echo P209_GATE_ONLY_TEMPORARY_SOURCE_IN_BUILDER=PASS
+          echo P209_TEST_P47_VERIFIER_STRICT_P40_LOG_ALLOWLIST=PASS
           echo P208_DISPOSABLE_BUILDER_ONLY_ONE_FILE_DIFF=PASS
       - name: Prepare exact v138 ephemeral Android APK tools
         shell: bash

@@ -7,6 +7,10 @@ BRANCH="dsh/p96-original-engine-stream-owner-narrow-20261030"
 GATE=Path("host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java")
 GATE_BLOB="44cd38245dc87b9eff960b15dc520e60a2754c2c"
 BUILDER=Path("host_candidate/p43_original_service/build_embedded_emulator_apk.sh")
+VERIFY=Path("host_candidate/p47_no_fallback/p47_gate.py")
+VERIFY_BLOB="49f0d5d07cf7e8fa1e0323c945ddbb1eed946065"
+VERIFY_OLD="        need(len(bridge_invokes)==1 and bridge_invokes[0][0]==\"invoke-static\"\n             and DENY in bridge_invokes[0][1],\n             \"BRIDGE_NOT_EXACTLY_NO_FALLBACK\")"
+VERIFY_NEW="        if os.environ.get(\"P209_FINAL_DENY_ONLY\")==\"1\":\n            need(os.environ.get(\"P47_NO_HOST_FALLBACK\")==\"1\",\n                 \"P209_NO_HOST_FALLBACK_MANDATORY\")\n            instructions=[(i.get_name(),i.get_output()) for _,i in\n                 exact_bridge_methods[0].get_instructions_idx()]\n            token_count=sum(op==\"const-string\" and\n                 \"P209_P40_BRIDGE_ENTRY=OBSERVED\" in out for op,out in instructions)\n            log_sig=\"Landroid/util/Log;->i(Ljava/lang/String;Ljava/lang/String;)I\"\n            need(len(bridge_invokes)==2 and\n                 bridge_invokes[0][0]==\"invoke-static\" and\n                 log_sig in \"\".join(bridge_invokes[0][1].split()) and\n                 bridge_invokes[1][0]==\"invoke-static\" and\n                 DENY in bridge_invokes[1][1] and\n                 token_count==1 and\n                 exact_bridge_methods[0].get_code().get_registers_size()==3,\n                 \"P209_EXACT_ONE_TEST_LOG_BEFORE_STRICT_P47\")\n        else:\n            need(len(bridge_invokes)==1 and bridge_invokes[0][0]==\"invoke-static\"\n                 and DENY in bridge_invokes[0][1],\n                 \"BRIDGE_NOT_EXACTLY_NO_FALLBACK\")"
 TMP=Path(".p209tmp/P47LaunchGate.java")
 BEFORE="P74_P47_GATE_SOURCE="+str(GATE)+"\n"
 AFTER="P74_P47_GATE_SOURCE=.p209tmp/P47LaunchGate.java\n"
@@ -60,6 +64,13 @@ def patch_builder(s):
     need(out.replace(P208_HOOK+P209_HOOK,P208_HOOK,1).
          replace(AFTER,BEFORE,1)==s,"ONLY_GATE_AND_P40_DIAGNOSTIC_HOOK")
     return out
+def patch_verifier(s):
+    need(s.count(VERIFY_OLD)==1 and VERIFY_NEW not in s,
+         "EXPECTED_STRICT_P47_VERIFIER")
+    patched=s.replace(VERIFY_OLD,VERIFY_NEW,1)
+    need(patched.replace(VERIFY_NEW,VERIFY_OLD,1)==s,
+         "P47_VERIFIER_EXACT_INVERSE")
+    return patched
 def scope(prepared=False):
     need(os.environ.get("GITHUB_ACTIONS")=="true" and
          os.environ.get("GITHUB_REPOSITORY")==REPO and
@@ -76,19 +87,28 @@ def scope(prepared=False):
     need(git("hash-object",str(GATE))==GATE_BLOB,"PINNED_REAL_GATE")
     need(TMP.is_file() if prepared else not TMP.exists(),
          "TEMP_GATE_STATE_DRIFT")
-    need(git("diff","--name-only").splitlines()==[str(BUILDER)],
-         "ONLY_P208_TEMP_BUILDER_CHANGED")
+    expected=[str(BUILDER),str(VERIFY)] if prepared else [str(BUILDER)]
+    need(git("diff","--name-only").splitlines()==expected,
+         "ONLY_TEST_BUILDER_AND_PINNED_VERIFIER_CHANGED")
 def prepare():
     scope()
     src=GATE.read_text()
+    need(git("hash-object",str(VERIFY))==VERIFY_BLOB,
+         "ORIGINAL_P47_VERIFIER_SOURCE_PIN")
+    old_verifier=VERIFY.read_text()
+    new_verifier=patch_verifier(old_verifier)
     TMP.parent.mkdir(parents=True,exist_ok=True)
     TMP.write_text(patch_gate(src))
     BUILDER.write_text(patch_builder(BUILDER.read_text()))
+    VERIFY.write_text(new_verifier)
+    need(VERIFY.read_text().replace(VERIFY_NEW,VERIFY_OLD,1)==old_verifier,
+         "ONLY_PINNED_TEST_LOG_ALLOWLIST_ADDED")
     need(GATE.read_text()==src and
          TMP.read_text().replace(ENTER,"",1).replace(STACK,"",1).
              replace(FINAL,"",1)==src,"REAL_GATE_NOT_EDITED")
-    need(git("diff","--name-only").splitlines()==[str(BUILDER)],
+    need(git("diff","--name-only").splitlines()==[str(BUILDER),str(VERIFY)],
          "WORKTREE_SCOPE")
+    print("P209_TEMP_P47_VERIFIER_STRICT_LOG_ALLOWLIST=PASS")
     print("P209_SHA_PINNED_REAL_P47_SOURCE_UNCHANGED=PASS")
     print("P209_ONLY_DISPOSABLE_GATE_THREE_FIXED_LOG_MARKERS=PASS")
     print("P209_TEMP_BUILDER_SOURCE_SWITCH_ONLY=PASS")
