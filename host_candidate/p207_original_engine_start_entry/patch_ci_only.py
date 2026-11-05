@@ -136,7 +136,7 @@ def find_method(s,desc):
 def patch_original_smali(s,desc):
     require(INSERT.strip() not in s,"ORIGINAL_ALREADY_INSTRUMENTED")
     a,b,method=find_method(s,desc)
-    require(75<len(method)<100000,"START_METHOD_BYTES_BOUND")
+    require(150<len(method)<100000,"START_METHOD_BYTES_BOUND")
     regs=list(re.finditer(r"(?m)^[ \t]+\.(?:registers|locals)[ \t]+\d+[ \t]*$",method))
     require(len(regs)==1,"EXACT_REGISTER_DIRECTIVE")
     pos=method.find("\n",regs[0].end())
