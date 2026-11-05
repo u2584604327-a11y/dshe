@@ -75,12 +75,14 @@ def precall_fixture():
       ".method public final invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;\n"+
       "    .locals 4\n"+p208.INSERT+
       "    const/4 v0, 0x0\n"+
+      "    if-ne v0, v1, :done\n"+
       "    invoke-static {v0}, "+p.P40_TARGET+"\n"+
+      "    :done\n"+
       "    return-object v0\n.end method\n")
 class PreCallTests(unittest.TestCase):
     def test_pre_call_exact_inverse(self):
         s=precall_fixture()
-        self.assertEqual(p.inject_precall(s).replace(p.PRE_INVOKE,"",1),s)
+        self.assertEqual(p.inject_precall(s).replace(p.GUARD_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),s)
     def test_missing_p40_fails_closed(self):
         s=precall_fixture().replace(p.P40_TARGET,"Lcom/example/Other;->start()V")
         with self.assertRaises(p.Deny):p.inject_precall(s)
@@ -90,4 +92,16 @@ class PreCallTests(unittest.TestCase):
         with self.assertRaises(p.Deny):p.inject_precall(s.replace(call,call+call))
     def test_duplicate_precall_fails_closed(self):
         with self.assertRaises(p.Deny):p.inject_precall(p.inject_precall(precall_fixture()))
+    def test_first_guard_before_original_if_ne(self):
+        value=p.inject_precall(precall_fixture())
+        self.assertEqual(value.count(p.GUARD_INVOKE.strip()),1)
+        self.assertLess(value.index(p.GUARD_INVOKE),value.index("    if-ne v0, v1, :done"))
+        self.assertLess(value.index("    if-ne v0, v1, :done"),value.index(p.PRE_INVOKE))
+    def test_wrong_first_guard_refused(self):
+        value=precall_fixture().replace("if-ne v0, v1","if-eq v0, v1")
+        with self.assertRaises(p.Deny) as x:p.inject_precall(value)
+        self.assertEqual(str(x.exception),"P209_DENY_SIGNED_FIRST_GUARD_OPCODE_AND_ORDER")
+    def test_repeated_guard_refused(self):
+        value=p.inject_precall(precall_fixture())
+        with self.assertRaises(p.Deny):p.inject_precall(value)
 if __name__=="__main__":unittest.main(verbosity=2)

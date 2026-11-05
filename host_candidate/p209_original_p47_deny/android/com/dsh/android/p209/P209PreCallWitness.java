@@ -9,6 +9,18 @@ import android.util.Log;
 public final class P209PreCallWitness {
   private static final String TAG="P209_PREP40";
   private P209PreCallWitness(){}
+  /** Bounded CI-only original PC38 state-guard approach witness. */
+  public static void markFirstGuard() {
+    try {
+      if (Process.isIsolated()) {
+        Log.i("P209_GUARD","P209_FIRST_GUARD_ISOLATED=DENY");
+        return;
+      }
+      Log.i("P209_GUARD","P209_FIRST_GUARD_PC38=OBSERVED");
+    }catch(Throwable ignored) {
+      // No diagnostic may change original coroutine execution.
+    }
+  }
   public static void mark() {
     try {
       if (Process.isIsolated()) {

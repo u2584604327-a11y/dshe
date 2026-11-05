@@ -38,6 +38,10 @@ PRE_JAVA="host_candidate/p209_original_p47_deny/android/com/dsh/android/p209/P20
 P208_JAVA="host_candidate/p208_original_start_coroutine/android/com/dsh/android/p208/P208StartCoroutineWitness.java"
 PRE_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->mark()V\n"
 P40_TARGET="Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;"
+GUARD_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markFirstGuard()V\n"
+GUARD_ORIGINAL_PC=38
+GUARD_ORIGINAL_OP="if-ne"
+
 class Deny(Exception):pass
 def need(v,code):
     if not v:raise Deny("P209_DENY_"+code)
@@ -137,7 +141,8 @@ def patch_p40(s):
     return out
 def inject_precall(s):
     import re
-    need(PRE_INVOKE.strip() not in s,"PRECALL_ALREADY_MARKED")
+    need(PRE_INVOKE.strip() not in s and GUARD_INVOKE.strip() not in s,
+         "PRECALL_OR_GUARD_ALREADY_MARKED")
     import sys
     sys.path.insert(0,"host_candidate/p208_original_start_coroutine")
     import patch_ci_only as p208
@@ -153,11 +158,18 @@ def inject_precall(s):
     need(re.fullmatch(expected,rows[idx]) is not None,
          "ORIGINAL_PC3912_P40_CALL_SHAPE")
     at=sum(len(line) for line in rows[:idx])
-    need(method.index(p208.INSERT)<at,"P208_ENTRY_MUST_PRECEDE_PC3912")
-    new=s[:a]+method[:at]+PRE_INVOKE+method[at:]+s[b:]
-    need(new.replace(PRE_INVOKE,"",1)==s and new.count(PRE_INVOKE.strip())==1,
-         "ONLY_ONE_PRECALL_INSTRUCTION")
-    return new
+    conds=[m for m in re.finditer(r"(?m)^[ \t]+(if-[a-z0-9/-]+)[ \t]+",method)]
+    need(len(conds)>0 and conds[0].group(1)==GUARD_ORIGINAL_OP,
+         "SIGNED_FIRST_GUARD_OPCODE_AND_ORDER")
+    gat=conds[0].start()
+    need(method.index(p208.INSERT)<gat<at,
+         "ENTRY_THEN_FIRST_GUARD_THEN_PC3912")
+    updated=method[:gat]+GUARD_INVOKE+method[gat:at]+PRE_INVOKE+method[at:]
+    out=s[:a]+updated+s[b:]
+    need(out.replace(GUARD_INVOKE,"",1).replace(PRE_INVOKE,"",1)==s and
+         out.count(GUARD_INVOKE.strip())==1 and
+         out.count(PRE_INVOKE.strip())==1,"EXACT_TWO_DISPOSABLE_ADDITIONS")
+    return out
 def inject_p40():
     import hashlib
     scope(prepared=True)
@@ -168,6 +180,20 @@ def inject_p40():
     need(signed.is_file() and hashlib.sha256(signed.read_bytes()).hexdigest()==
          "3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5",
          "EXACT_SIGNED_ORIGINAL_V138_SHA")
+    # Signed-v138 first original conditional is fixed PC38 if-ne.
+    import zipfile
+    from androguard.core.dex import DEX
+    with zipfile.ZipFile(signed) as z:
+        original_dex=DEX(z.read("classes.dex"))
+    methods=[m for c in original_dex.get_classes()
+        if c.get_name()=="Lcom/dsh/android/EngineManager$start$2;"
+        for m in c.get_methods() if m.get_name()=="invokeSuspend" and
+        "".join(m.get_descriptor().split())=="(Ljava/lang/Object;)Ljava/lang/Object;"]
+    need(len(methods)==1,"SIGNED_ORIGINAL_START2_UNIQUE")
+    conds=[(pc,ins.get_name()) for pc,ins in methods[0].get_instructions_idx()
+           if ins.get_name().startswith("if-")]
+    need(conds and conds[0]==(GUARD_ORIGINAL_PC,GUARD_ORIGINAL_OP),
+         "SIGNED_ORIGINAL_FIRST_PC38_GUARD")
     need(P40_SRC.is_file(),"P40_DENY_BRIDGE_REQUIRED")
     s=P40_SRC.read_text()
     modified=patch_p40(s)
@@ -178,8 +204,9 @@ def inject_p40():
     need(PRE_SRC.is_file() and not PRE_SRC.is_symlink(),"PINNED_START2_SMALI_ONLY")
     original=PRE_SRC.read_text()
     PRE_SRC.write_text(inject_precall(original))
-    need(PRE_SRC.read_text().replace(PRE_INVOKE,"",1)==original,
+    need(PRE_SRC.read_text().replace(GUARD_INVOKE,"",1).replace(PRE_INVOKE,"",1)==original,
          "PRECALL_SOURCE_EXACT_INVERSE")
+    print("P209_ONLY_TEST_FIRST_PC38_GUARD_MARKER=PASS")
     print("P209_ONLY_TEST_PRE_PC3912_MARKER=PASS")
     print("P209_ONLY_TEMP_P40_ONE_LOG_AND_NO_HOST_SPAWN=PASS")
 def main():
