@@ -10,6 +10,7 @@ import patch_ci_only as p208
 from androguard.core.dex import DEX
 import zipfile
 PRE="Lcom/dsh/android/p209/P209PreCallWitness;->mark()V"
+GUARD="Lcom/dsh/android/p209/P209PreCallWitness;->markFirstGuard()V"
 P208="Lcom/dsh/android/p208/P208StartCoroutineWitness;->mark()V"
 OLD="Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;"
 NEW="Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;"
@@ -21,14 +22,21 @@ def ins(method):
 def compare(original,derived):
     a=ins(original);b=ins(derived)
     first=[i for i,(_,op,out) in enumerate(b) if op=="invoke-static" and P208 in out]
-    second=[i for i,(_,op,out) in enumerate(b) if op=="invoke-static" and PRE in out]
-    require(first==[0] and len(second)==1 and second[0]>0,"EXACT_TWO_MARKER_POSITIONS")
-    k=second[0]
-    require(k+1<len(b) and b[k+1][1]=="invoke-static" and NEW in b[k+1][2],
-            "PRE_MARKER_IMMEDIATELY_BEFORE_P40")
-    remaining=[row for i,row in enumerate(b) if i not in (0,k)]
-    require(len(a)==len(remaining),"ORIGINAL_INSTRUCTION_COUNT_EXCEPT_TWO")
-    changed=[]
+    approach=[i for i,(_,op,out) in enumerate(b) if op=="invoke-static" and GUARD in out]
+    precall=[i for i,(_,op,out) in enumerate(b) if op=="invoke-static" and PRE in out]
+    cond=[(pc,op) for pc,op,out in a if op.startswith("if-")]
+    require(cond and cond[0]==(38,"if-ne"),"SIGNED_ORIGINAL_FIRST_GUARD_PC38")
+    require(first==[0] and len(approach)==1 and len(precall)==1 and
+            0<approach[0]<precall[0],"EXACT_THREE_TEST_MARKER_POSITIONS")
+    guard_idx=approach[0];pre_idx=precall[0]
+    require(guard_idx+1<len(b) and b[guard_idx+1][1]=="if-ne" and
+            sum(op.startswith("if-") for _,op,out in b[:guard_idx])==0,
+            "GUARD_MARKER_IMMEDIATELY_BEFORE_FIRST_IF_NE")
+    require(pre_idx+1<len(b) and b[pre_idx+1][1]=="invoke-static" and
+            NEW in b[pre_idx+1][2],"PRE_MARKER_IMMEDIATELY_BEFORE_P40")
+    remaining=[row for i,row in enumerate(b) if i not in (0,guard_idx,pre_idx)]
+    require(len(a)==len(remaining),"ORIGINAL_INSTRUCTION_COUNT_EXCEPT_THREE")
+    replaced=[]
     for pos,(o,d) in enumerate(zip(a,remaining)):
         pc,op,out=o;_,dop,dout=d
         if op==dop and out==dout:continue
@@ -36,8 +44,8 @@ def compare(original,derived):
             and out.endswith(OLD) and dout.endswith(NEW)
             and out[:-len(OLD)]==dout[:-len(NEW)])
         require(valid,"UNAUTHORIZED_ORIGINAL_OP_OR_OPERAND_INDEX_"+str(pos))
-        changed.append(pc)
-    require(changed==[3912],"ONLY_ORIGINAL_PC3912_P40_REDIRECT")
+        replaced.append(pc)
+    require(replaced==[3912],"ONLY_ORIGINAL_PC3912_P40_REDIRECT")
 def main():
     if len(sys.argv)!=3:sys.exit(2)
     try:
@@ -54,7 +62,7 @@ def main():
                 if c.get_name()==prev.START2 and method.get_name()=="invokeSuspend":continue
                 for _,instr in method.get_instructions_idx():
                     out=instr.get_output()
-                    require(PRE not in out and P208 not in out,
+                    require(PRE not in out and P208 not in out and GUARD not in out,
                             "EXTRA_MARKER_OUTSIDE_ORIGINAL_COROUTINE")
         for owner,name,desc in [
              (prev.ENGINE,"start","(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"),
@@ -71,9 +79,10 @@ def main():
         require("Lcom/dsh/android/p208/P208StartCoroutineWitness;" in owners and
                 "Lcom/dsh/android/p209/P209PreCallWitness;" in owners,
                 "BOTH_TEST_ONLY_CLASSES3_WITNESSES")
-        print("P209_START2_ONLY_FIRST_AND_PRE_PC3912_TWO_TEST_MARKERS=PASS")
+        print("P209_START2_ENTRY_PC38_AND_PC3912_THREE_TEST_MARKERS=PASS")
         print("P209_START2_ORIGINAL_ALL_OTHER_OPCODES_OPERANDS=PARITY")
         print("P209_ORIGINAL_UPSTREAM_ENGINE_BOOT_ONCREATE=PARITY")
+        print("P209_FIRST_PC38_GUARD_MATCHES_SIGNED_ORIGINAL=PASS")
         print("P209_PRE_PC3912_MARKER_ONLY_IN_DISPOSABLE_CLASSES3=PASS")
         print("P209_REAL_PC3912_RUNTIME_EXECUTION=NOT_ATTESTED")
     except (Deny,prev.Denied,p208.Refused) as e:

@@ -59,7 +59,7 @@ selected=
 valid=NO
 for _ in $(seq 1 18);do
   raw="$(adb -s "$serial" logcat -d -v threadtime \
-    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I P209_PREP40:I '*:S')"
+    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I P209_PREP40:I P209_GUARD:I '*:S')"
   selected="$(printf '%s\n' "$raw" | awk -v m="$marker" '
     index($0,m){count++;after=1;next}
     after{print}
@@ -138,6 +138,9 @@ p209_count_pid() {
     'index($0,k) && $3==pid{n++} END{print n+0}'
 }
 p209_gate_diagnostic() {
+  echo "P209_FIRST_GUARD_TAG_COUNT=$(p209_count 'P209_FIRST_GUARD_PC38=OBSERVED')"
+  echo "P209_FIRST_GUARD_HOST_PID_COUNT=$(p209_count_pid 'P209_FIRST_GUARD_PC38=OBSERVED')"
+  echo "P209_FIRST_GUARD_ISOLATED_COUNT=$(p209_count 'P209_FIRST_GUARD_ISOLATED=DENY')"
   echo "P209_PRE_PC3912_TAG_COUNT=$(p209_count 'P209_PRE_P40_WITNESS=OBSERVED')"
   echo "P209_PRE_PC3912_HOST_PID_COUNT=$(p209_count_pid 'P209_PRE_P40_WITNESS=OBSERVED')"
   echo "P209_PRE_PC3912_ISOLATED_DENY_COUNT=$(p209_count 'P209_PRE_P40_ISOLATED=DENY')"
@@ -150,6 +153,19 @@ p209_gate_diagnostic() {
   echo "P209_GATE_ORIGINAL_STACK_PASS_COUNT=$(p209_count_pid 'P209_ORIGINAL_CALLSTACK=PASS')"
   echo "P209_GATE_ORIGINAL_STACK_OTHER_COUNT=$(p209_count_pid 'P209_ORIGINAL_CALLSTACK=OTHER')"
 }
+if [[ "$selected" == *P209_FIRST_GUARD_ISOLATED=DENY* ]];then
+  echo P209_FIRST_GUARD_ISOLATED_HOST=DENY;exit 2
+fi
+guard_total="$(p209_count 'P209_FIRST_GUARD_PC38=OBSERVED')"
+guard_host="$(p209_count_pid 'P209_FIRST_GUARD_PC38=OBSERVED')"
+[[ "$guard_total" == "$guard_host" ]] || {
+  echo P209_FIRST_GUARD_FOREIGN_HOST_PID=DENY;exit 2
+}
+if [[ "$guard_host" -gt 0 ]];then
+  echo P209_FIRST_GUARD_PC38=OBSERVED
+else
+  echo P209_FIRST_GUARD_PC38=NOT_OBSERVED
+fi
 for key in P209_P47_ENTER_UID= P209_P47_FINAL_DENY_UID=;do
   vals="$(printf '%s\n' "$selected" | awk -v pid="$pid" -v key="$key" '
     index($0,key) && $3==pid {n=split($0,a,key);if(n==2){v=a[2];sub(/[[:space:]].*/,"",v);print v}}')"

@@ -11,3 +11,5 @@ host spawn. A natural Android35 cold launch reports P40 tag counts by current
 host PID beside P47 ENTRY/FINAL counts, without logging actual UIDs, argv,
 paths or user data. A P40 marker is not P47 success and cannot attest a
 child process. P209 stays BLOCKED until actual final DENY passes.
+
+2026-11-05 P209 early state-guard diagnostic: immutable signed original start$2 first if-ne must be PC38 (DEX byte-offset), or the CI-only insertion fails closed. A single zero-register markFirstGuard() is added immediately before the first original conditional; signed-original/deduced APK verifier allows only P208 entry, PC38 guard, and original PC3912 pre-P40 markers plus existing strict original P40 redirect, never altered conditions/returns. Fresh Android35 Logcat current-run PID-filtered P209_GUARD shows category only and does not attest a child, owner generation or Node READY. The actual original P47 source, 3 strict DENY start paths, network isolation and release gate remain untouched.
