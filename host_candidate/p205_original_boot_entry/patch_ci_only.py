@@ -68,8 +68,7 @@ def find_method(s):
     require(len(matches)==1,"EXACT_SINGLE_BOOTENGINE_VOID_METHOD")
     m=matches[0]
     stop=s.find(".end method",m.end())
-    require(stop>=0 and s.find(".end method",m.end(),stop+1)>=0,
-            "SMALI_METHOD_CLOSURE")
+    require(stop>=0,"SMALI_METHOD_CLOSURE")
     # A following .method must not start before this method ends.
     require(s.find("\n.method",m.end(),stop)<0,"NESTED_METHOD")
     end=stop+len(".end method")
