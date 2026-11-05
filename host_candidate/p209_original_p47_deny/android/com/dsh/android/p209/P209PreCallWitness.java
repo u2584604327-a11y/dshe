@@ -11,6 +11,18 @@ public final class P209PreCallWitness {
   private P209PreCallWitness(){}
   /** Bounded CI-only original PC38 state-guard approach witness. */
   /** Test-only observation immediately after original PC26 if-eqz fallthrough. */
+  /** Disposable marker after the exact original PC26 taken label, before PC176. */
+  public static void markTakenTarget() {
+    try {
+      if (Process.isIsolated()) {
+        Log.i("P209_TAKEN","P209_PC176_TAKEN_ISOLATED=DENY");
+        return;
+      }
+      Log.i("P209_TAKEN","P209_PC176_BRANCH_TARGET=OBSERVED");
+    }catch(Throwable ignored) {
+      // No logging side effect may modify original coroutine control flow.
+    }
+  }
   public static void markFallthrough() {
     try {
       if (Process.isIsolated()) {

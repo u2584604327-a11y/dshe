@@ -59,7 +59,7 @@ selected=
 valid=NO
 for _ in $(seq 1 18);do
   raw="$(adb -s "$serial" logcat -d -v threadtime \
-    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I P209_PREP40:I P209_GUARD:I P209_FALL:I '*:S')"
+    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I P209_PREP40:I P209_GUARD:I P209_FALL:I P209_TAKEN:I '*:S')"
   selected="$(printf '%s\n' "$raw" | awk -v m="$marker" '
     index($0,m){count++;after=1;next}
     after{print}
@@ -138,6 +138,9 @@ p209_count_pid() {
     'index($0,k) && $3==pid{n++} END{print n+0}'
 }
 p209_gate_diagnostic() {
+  echo "P209_PC176_TARGET_TAG_COUNT=$(p209_count 'P209_PC176_BRANCH_TARGET=OBSERVED')"
+  echo "P209_PC176_TARGET_HOST_PID_COUNT=$(p209_count_pid 'P209_PC176_BRANCH_TARGET=OBSERVED')"
+  echo "P209_PC176_TARGET_ISOLATED_COUNT=$(p209_count 'P209_PC176_TAKEN_ISOLATED=DENY')"
   echo "P209_PC30_FALL_TAG_COUNT=$(p209_count 'P209_PC30_FALLTHROUGH=OBSERVED')"
   echo "P209_PC30_FALL_HOST_PID_COUNT=$(p209_count_pid 'P209_PC30_FALLTHROUGH=OBSERVED')"
   echo "P209_PC30_FALL_ISOLATED_COUNT=$(p209_count 'P209_PC30_FALL_ISOLATED=DENY')"
@@ -156,6 +159,9 @@ p209_gate_diagnostic() {
   echo "P209_GATE_ORIGINAL_STACK_PASS_COUNT=$(p209_count_pid 'P209_ORIGINAL_CALLSTACK=PASS')"
   echo "P209_GATE_ORIGINAL_STACK_OTHER_COUNT=$(p209_count_pid 'P209_ORIGINAL_CALLSTACK=OTHER')"
 }
+if [[ "$selected" == *P209_PC176_TAKEN_ISOLATED=DENY* ]];then
+  echo P209_PC176_TAKEN_ISOLATED_HOST=DENY;exit 2
+fi
 if [[ "$selected" == *P209_PC30_FALL_ISOLATED=DENY* ]];then
   echo P209_PC30_FALL_ISOLATED=DENY;exit 2
 fi
@@ -188,7 +194,21 @@ if [[ "$fall_host" -gt 0 ]];then
 else
   echo P209_PC26_FALLTHROUGH_TO_PC30=NOT_OBSERVED
 fi
-echo P209_PC26_TAKEN_PC176=NOT_DIRECTLY_ATTESTED
+taken_total="$(p209_count 'P209_PC176_BRANCH_TARGET=OBSERVED')"
+taken_host="$(p209_count_pid 'P209_PC176_BRANCH_TARGET=OBSERVED')"
+[[ "$taken_total" == "$taken_host" && "$taken_host" -le "$guard_host" ]] || {
+  echo P209_PC176_TARGET_FOREIGN_OR_UNMATCHED_GUARD=DENY;exit 2
+}
+if [[ "$guard_host" == 1 && $((fall_host+taken_host)) == 1 ]];then
+  echo P209_PC26_BRANCH_EXACT_ONE_ARM=PASS
+else
+  echo P209_PC26_BRANCH_EXACT_ONE_ARM=NOT_ATTESTED
+fi
+if [[ "$taken_host" -gt 0 ]];then
+  echo P209_PC26_TAKEN_TO_PC176=OBSERVED
+else
+  echo P209_PC26_TAKEN_TO_PC176=NOT_OBSERVED
+fi
 for key in P209_P47_ENTER_UID= P209_P47_FINAL_DENY_UID=;do
   vals="$(printf '%s\n' "$selected" | awk -v pid="$pid" -v key="$key" '
     index($0,key) && $3==pid {n=split($0,a,key);if(n==2){v=a[2];sub(/[[:space:]].*/,"",v);print v}}')"
