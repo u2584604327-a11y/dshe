@@ -68,18 +68,20 @@ class P205Tests(unittest.TestCase):
     def test_builder_single_guard_and_class(self):
         orig=('header\n'
               'if test "${P72_ACCESSOR_FIXTURE_ONLY:-0}" = 1; then\n'
-              '  true\nfi\n'
+              '  test "${P51_SIDE_BY_SIDE:-0}" = 1 || {\nfi\n'
               '  host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java \\\n')
         new=p.patch_builder(orig)
         self.assertEqual(new.count("patch_ci_only.py --inject-smali"),1)
         self.assertEqual(new.count("P205BootEntryWitness.java"),1)
     def test_duplicate_builder_hook_denied(self):
-        orig=('if test "${P72_ACCESSOR_FIXTURE_ONLY:-0}" = 1; then\n'*2
+        orig=(('if test "${P72_ACCESSOR_FIXTURE_ONLY:-0}" = 1; then\n'
+               + '  test "${P51_SIDE_BY_SIDE:-0}" = 1 || {\n')*2
               + '  host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java \\\n')
         self.denied("EXPECTED_ONE_BUILDER_HOOK",lambda:p.patch_builder(orig))
     def test_builder_without_java_line_denied(self):
         self.denied("EXPECTED_ONE_JAVA_COMPILE",lambda:p.patch_builder(
-            'if test "${P72_ACCESSOR_FIXTURE_ONLY:-0}" = 1; then\n'))
+            ('if test "${P72_ACCESSOR_FIXTURE_ONLY:-0}" = 1; then\n'
+             + '  test "${P51_SIDE_BY_SIDE:-0}" = 1 || {'))
     def test_no_native_permission_or_host_start(self):
         src=p.patch_original_smali(fixture())
         for forbidden in ("ProcessBuilder","INTERNET","startOrDeny"):

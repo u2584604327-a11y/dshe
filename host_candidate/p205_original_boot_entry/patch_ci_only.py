@@ -52,7 +52,8 @@ def exact(s,before,after,code):
     return s.replace(before,after,1)
 
 def patch_builder(s):
-    old=("if test \"${P72_ACCESSOR_FIXTURE_ONLY:-0}\" = 1; then\n")
+    old=("if test \"${P72_ACCESSOR_FIXTURE_ONLY:-0}\" = 1; then\n"
+         "  test \"${P51_SIDE_BY_SIDE:-0}\" = 1 || {")
     s=exact(s,old,BRIDGE_BLOCK+old,"BUILDER_HOOK")
     line=("  host_candidate/p43_original_service/android/com/dsh/android/"
           "p43/P43ProbeActivity.java \\\n")
