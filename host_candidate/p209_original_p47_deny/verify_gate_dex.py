@@ -166,6 +166,68 @@ def main():
         print("P209_SIGNED_PC214_FALL_IMMEDIATE_TERMINAL="+
               ("YES" if first.startswith("return") or first=="throw"
                else "NO"))
+        # Static register use/def only. No actual original coroutine calls,
+        # runtime values, string literals, device attributes or raw DEX output.
+        def p209_output_registers(ins):
+            return [int(x) for x in re.findall(r"\bv(\d+)\b",
+                                                 ins.get_output())]
+        for result_pc,branch_pc,expected_call in (
+            (200,202,"Lcom/dsh/android/EngineManager;->access$getProcess$p"),
+            (212,214,"Ljava/lang/Process;->isAlive")):
+            result_ins=by_original_pc[result_pc]
+            branch_ins=by_original_pc[branch_pc]
+            prior=by_original_pc[194 if result_pc==200 else 206]
+            need(expected_call in prior.get_output() and
+                 result_ins.get_name()=="move-result-object"
+                 if result_pc==200 else
+                 expected_call in prior.get_output() and
+                 result_ins.get_name()=="move-result",
+                 "PC214_RESULT_ORIGIN_DRIFT_"+str(result_pc))
+            dest=p209_output_registers(result_ins)
+            args=p209_output_registers(branch_ins)
+            need(len(dest)==1 and
+                 len(args)==(1 if branch_pc==202 else 2),
+                 "PC214_RESULT_GUARD_REG_FORMAT_"+str(branch_pc))
+            relation=("DIRECT" if dest[0] in args else
+                      "NOT_DIRECT_OR_OVERWRITTEN")
+            print("P209_SIGNED_PC"+str(result_pc)+"_TO_PC"+
+                  str(branch_pc)+"_RESULT_GUARD="+relation)
+            print("P209_SIGNED_PC"+str(branch_pc)+
+                  "_REGISTER_OPERANDS="+",".join("v"+str(x) for x in args))
+            if branch_pc==214:
+                others=[r for r in args if r!=dest[0]]
+                if len(others)==1:
+                    target=others[0]
+                    # Last lexical definition is NOT a proven reaching
+                    # definition on a branch-sensitive control flow graph.
+                    writers=[]
+                    for at,ins in rows:
+                        if at>=214:break
+                        op=ins.get_name()
+                        if not op.startswith(("const","move","iget","sget",
+                                              "aget","new-instance",
+                                              "instance-of","array-length")):
+                            continue
+                        v=p209_output_registers(ins)
+                        if v and v[0]==target:writers.append((at,op,
+                                                              ins.get_output()))
+                    if writers:
+                        at,op,out=writers[-1]
+                        print("P209_SIGNED_PC214_OTHER_REG_LAST_LEXICAL_DEF_PC="+str(at))
+                        print("P209_SIGNED_PC214_OTHER_REG_LAST_LEXICAL_DEF_OP="+op)
+                        if op.startswith("const") and not op.startswith("const-string"):
+                            token=out.split(",",1)[-1].strip().split()[0]
+                            numeric=("ZERO" if token in ("0","0x0","-0x0") else
+                                     "ONE" if token in ("1","0x1") else
+                                     "OTHER_OR_UNKNOWN")
+                        else:
+                            numeric="NOT_LITERAL_CONST"
+                        print("P209_SIGNED_PC214_OTHER_REG_LITERAL_CLASS="+numeric)
+                    else:
+                        print("P209_SIGNED_PC214_OTHER_REG_LAST_LEXICAL_DEF_PC=UNRESOLVED")
+                else:
+                    print("P209_SIGNED_PC214_OTHER_REG_LAST_LEXICAL_DEF_PC=UNRESOLVED")
+        print("P209_SIGNED_PC214_REGISTER_PROVENANCE_IS_STATIC_ONLY=YES")
         print("P209_PC214_FALL_EXIT_RUNTIME=NOT_ATTESTED")
         print("P209_SIGNED_STATE_GUARDS_RUNTIME_PATH=NOT_ATTESTED")
         print("P209_ORIGINAL_PC176_POST_CALL_STATIC_AUDIT=PASS")
