@@ -41,6 +41,8 @@ jobs:
           test -s "$p/src/main/java/com/dsh/b1probe/MainProbe.java"
           test "$(grep -c 'android:process=":slot' "$p/src/main/AndroidManifest.xml")" -eq 2
           grep -Fq 'android:allowBackup="false"' "$p/src/main/AndroidManifest.xml"
+          test "$(grep -c 'android:screenOrientation="portrait"' "$p/src/main/AndroidManifest.xml")" -eq 3
+          test "$(grep -c 'android:configChanges=' "$p/src/main/AndroidManifest.xml")" -eq 3
           ! grep -q '<uses-permission' "$p/src/main/AndroidManifest.xml"
           ! grep -RqE 'addJavascriptInterface|ProcessBuilder|Runtime.getRuntime|android.permission.INTERNET' "$p/src/main/java"
           grep -Fq 'WebView.setDataDirectorySuffix("b1_slot_a")' "$p/src/main/java/com/dsh/b1probe/ProbeApp.java"

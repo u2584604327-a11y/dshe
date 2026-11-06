@@ -43,3 +43,12 @@ the initial A-B-A-B and force-stopped relaunch are present. No JS bridge,
 Internet, real browser data, or original DSH application access is added.
 Even success is not evidence of CacheStorage, OPFS, ServiceWorker, OS-level
 work profile separation or AVF protected-guest virtualization.
+
+The Android35 CI may deliver an emulator startup orientation or UI-mode
+configuration transition while the controller awaits each slot. To prevent
+an unrelated Activity-recreate from losing the in-memory phase state,
+all three test-only Activities lock portrait and declare the same bounded
+configuration-change categories as the upstream DSH MainActivity. This
+**does not** bypass the existing onCreate(savedInstanceState) rejection,
+OS force-stop, exact-process checks or any IndexedDB negative predicate.
+An actual process death or unexpected Activity recreation still fails closed.
