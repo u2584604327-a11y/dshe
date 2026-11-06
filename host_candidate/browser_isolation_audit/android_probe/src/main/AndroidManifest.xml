@@ -9,6 +9,8 @@
         <activity android:name=".SlotB" android:process=":slotB"
             android:exported="false" android:screenOrientation="portrait"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode"/>
+        <service android:name=".ConcurrentSlotAService" android:process=":slotA" android:exported="false"/>
+        <service android:name=".ConcurrentSlotBService" android:process=":slotB" android:exported="false"/>
         <activity android:name=".MainProbe" android:exported="true"
             android:screenOrientation="portrait"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode">

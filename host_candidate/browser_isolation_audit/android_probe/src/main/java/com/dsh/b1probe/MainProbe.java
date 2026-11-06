@@ -11,6 +11,7 @@ public final class MainProbe extends Activity {
   private int phase = -1;
   private boolean terminal;
   private boolean restart;
+  private ConcurrentHarness concurrent;
   @Override protected void onCreate(Bundle state) {
     super.onCreate(state);
     if (state != null) { deny("ACTIVITY_RECREATED"); return; }
@@ -20,6 +21,11 @@ public final class MainProbe extends Activity {
     // A launcher without a CI-selected mode must fail closed. Never guess a
     // data-migration or fresh profile mode from existing on-device state.
     final String mode = getIntent().getStringExtra("mode");
+    if ("concurrent".equals(mode)) {
+      concurrent = new ConcurrentHarness(this);
+      concurrent.start();
+      return;
+    }
     if ("seed".equals(mode)) { phase = -1; restart = false; }
     else if ("restart".equals(mode)) { phase = 1; restart = true; }
     else { deny("MODE_REQUIRED"); return; }
@@ -56,6 +62,10 @@ public final class MainProbe extends Activity {
       deny("MISSING_EXACT_PHASE_PROOF");return;
     }
     startNext();
+  }
+  @Override protected void onDestroy() {
+    if (concurrent != null) concurrent.close();
+    super.onDestroy();
   }
   private void deny(String safeReason) {
     if (!terminal) Log.i(TAG,"B1_ANDROID35_" + safeReason + "=DENY");
