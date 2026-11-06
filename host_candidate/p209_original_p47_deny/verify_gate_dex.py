@@ -111,6 +111,37 @@ def main():
         print("P209_SIGNED_PC176_CATCH_HANDLER_DISPATCH=NOT_TRACED")
         print("P209_SIGNED_PC176_RUNTIME_EXCEPTION=NOT_ATTESTED")
         print("P209_PC176_CALLEE_AND_TRY_BOUNDS_STATIC_AUDIT=PASS")
+        # Read-only Kotlin Result parameter provenance, never a success claim.
+        # invokeSuspend(Object) is an instance method: p1 is the final input
+        # register in the original signed DEX register window.
+        ins_size=code.get_ins_size()
+        reg_size=code.get_registers_size()
+        need(ins_size==2 and reg_size>=2,
+             "PC176_INVOKESUSPEND_PARAM_LAYOUT")
+        call_prefix=output.split("Lkotlin/ResultKt;->throwOnFailure",1)[0]
+        raw_args=[int(x) for x in re.findall(r"\\bv(\\d+)\\b",call_prefix)]
+        if raw_args and len(raw_args)<=2 and len(set(raw_args))==1:
+            relation=("INVOKESUSPEND_RESULT_P1" if raw_args[0]==reg_size-1
+                      else "OTHER_LOCAL_OR_COPIED_REGISTER")
+        else:
+            relation="UNDETERMINED"
+        print("P209_SIGNED_PC176_THROW_ARG_RELATION="+relation)
+        print("P209_SIGNED_PC176_THROW_ARG_RUNTIME_VALUE=NOT_ATTESTED")
+        # The next state guards are structural, not taken-edge witnesses.
+        by_original_pc={pc:ins for pc,ins in rows}
+        for guard,expected in ((202,"if-eqz"),(214,"if-ne")):
+            item=by_original_pc.get(guard)
+            need(item is not None and item.get_name()==expected,
+                 "PC176_POSTCALL_STATE_GUARD_DRIFT")
+            sequential=guard+item.get_length()
+            destination=guard+2*item.get_ref_off()
+            need(sequential in by_original_pc and destination in by_original_pc
+                 and sequential!=destination,
+                 "PC176_POSTCALL_STATE_GUARD_TARGET_DRIFT")
+            print("P209_SIGNED_STATE_GUARD_PC="+str(guard)+
+                  ",OP="+expected+",FALL="+str(sequential)+
+                  ",TAKEN="+str(destination))
+        print("P209_SIGNED_STATE_GUARDS_RUNTIME_PATH=NOT_ATTESTED")
         print("P209_ORIGINAL_PC176_POST_CALL_STATIC_AUDIT=PASS")
         print("P209_ORIGINAL_PC176_CALL_NORMAL_RETURN=NOT_ATTESTED")
         calls=[pos for pos,insn in rows if
@@ -176,6 +207,21 @@ def main():
             print("P209_PC3912_PRECALL_SPLIT_GUARD_COUNT="+str(len(candidates)))
             for at,op in candidates[:8]:
                 print("P209_PC3912_PRECALL_GUARD_PC="+str(at)+",OP="+op)
+            # Both branches' conservative reachability: never infer which
+            # side the actual Android coroutine selected.
+            for guard in (202,214):
+                item=by_original_pc[guard]
+                succ=(guard+item.get_length(),
+                      guard+2*item.get_ref_off())
+                if set(edges.get(guard,[]))==set(succ):
+                    for label,target in zip(("FALL","TAKEN"),succ):
+                        reach=cfg.reachable(edges,target,3912)
+                        print("P209_SIGNED_STATE_GUARD_"+str(guard)+"_"+label+
+                              "_PC3912="+("REACHABLE" if reach else
+                              "NOT_PROVEN_REACHABLE"))
+                else:
+                    print("P209_SIGNED_STATE_GUARD_"+str(guard)+
+                          "_PC3912=UNDETERMINED")
             print("P209_CFG_SWITCH_OR_PAYLOAD_UNEXPANDED="+str(len(unknown)))
         except cfg.Blocked:
             print("P209_PC3912_CONSERVATIVE_NORMAL_CFG=UNDETERMINED")
