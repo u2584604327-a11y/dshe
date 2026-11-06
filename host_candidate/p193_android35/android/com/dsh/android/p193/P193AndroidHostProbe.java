@@ -105,7 +105,12 @@ public final class P193AndroidHostProbe implements AutoCloseable {
         // Observe an actual schema+UID-checked replay within a bounded time;
         // never infer replay denial from HTTP success or wait unboundedly.
         boolean httpStatusOk=http.startsWith("HTTP/1.1 200 OK\r\n");
-        boolean replayObserved=httpStatusOk && accepted &&
+        // HTTP 200 may become visible before the Binder main-Looper
+        // callback publishes the volatile accepted flag. Await the genuine
+        // replay latch even if accepted has not yet been published; the
+        // latch is counted down ONLY after the real UID/schema-checked
+        // second callback is rejected. Keep the original 1500ms deadline.
+        boolean replayObserved=httpStatusOk &&
             realReplayChecked.await(1500,TimeUnit.MILLISECONDS);
         boolean httpBodyOk=http.endsWith("P193_FIXTURE_OK");
         if(!closed && replayObserved && duplicateDenied && httpBodyOk) {
