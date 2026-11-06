@@ -32,3 +32,8 @@ all existing logins, no migrations or data deletion. AI browser deferred.
 Sources:
 https://developer.android.com/reference/android/os/Binder
 https://developer.android.com/reference/android/webkit/WebView
+
+An epoch may only increase for each host-owned slot. Explicit revocation does not
+reset the highest accepted epoch: same-epoch reactivation and rollback (ABA)
+are denied before replacing an existing lease. This is in-memory for this
+disposable gate; production must persist/wrap epochs safely across host restart.

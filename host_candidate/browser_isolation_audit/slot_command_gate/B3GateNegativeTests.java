@@ -52,6 +52,16 @@ public final class B3GateNegativeTests {
     eq(Code.REVOKED,call(g,b,Slot.B,201,2,1,1005).code);
     g.revokeAll();
     eq(Code.REVOKED,call(g,fresh,Slot.A,103,2,1,2010).code);
+    boolean abaRejected=false;
+    try{g.activate(Slot.A,103,2020,100);}
+    catch(IllegalArgumentException expected){abaRejected=true;}
+    ok(abaRejected);
+    boolean rollbackRejected=false;
+    try{g.activate(Slot.A,102,2020,100);}
+    catch(IllegalArgumentException expected){rollbackRejected=true;}
+    ok(rollbackRejected);
+    Lease monotonic=g.activate(Slot.A,104,2020,100);
+    eq(Code.ACCEPT,call(g,monotonic,Slot.A,104,1,1,2021).code);
     B3SlotCommandGate race=new B3SlotCommandGate();
     Lease live=race.activate(Slot.A,90,3000,4000);
     CountDownLatch start=new CountDownLatch(1),done=new CountDownLatch(2);

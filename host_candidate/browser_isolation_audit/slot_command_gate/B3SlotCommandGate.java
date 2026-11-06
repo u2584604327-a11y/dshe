@@ -33,16 +33,23 @@ public final class B3SlotCommandGate {
   }
   private final java.util.EnumMap<Slot,Lease> active=
       new java.util.EnumMap<>(Slot.class);
+  // Never allow epoch ABA, even after explicit revoke/revokeAll.
+  private final java.util.EnumMap<Slot,Long> highestEpoch=
+      new java.util.EnumMap<>(Slot.class);
   private static Decision deny(Code code){return new Decision(code,null);}
   /** Host must verify its own account-selection authority BEFORE calling. */
   public synchronized Lease activate(Slot slot,long epoch,long now,long ttl){
     if(slot==null||epoch<=0||now<0||ttl<=0||ttl>MAX_LEASE_MS||
         now>Long.MAX_VALUE-ttl)
       throw new IllegalArgumentException("B3_INVALID_HOST_ACTIVATION");
+    Long prior=highestEpoch.get(slot);
+    if(prior!=null&&epoch<=prior)
+      throw new IllegalArgumentException("B3_STALE_HOST_EPOCH");
     Lease old=active.get(slot);
     if(old!=null){old.revoked=true;old.pending=null;}
     Lease current=new Lease(slot,epoch,now+ttl);
     active.put(slot,current);
+    highestEpoch.put(slot,epoch);
     return current;
   }
   public synchronized void revoke(Slot slot){
