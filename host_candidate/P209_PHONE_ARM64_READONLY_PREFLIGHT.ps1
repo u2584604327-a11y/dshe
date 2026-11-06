@@ -3,6 +3,9 @@
 # Does NOT run adb root, run-as, logcat, dumpsys, backup, shell file reads,
 # or collect private paths, account data, serial numbers, messages or tokens.
 # Result is environment precheck ONLY, not original EngineManager/P47 proof.
+# Public signed v138 source in this repo's Release dsh-baseline-v135dsh-baseline-v135.
+# Canonical offline APK SHA256: 3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5.
+# This script does not download APK bytes or require original com.dsh.android installed.
 $ErrorActionPreference = "Stop"
 function Say([string]$s) { Write-Output $s }
 function Fail([string]$code) {
@@ -54,5 +57,7 @@ if (-not $apiValid) { Fail "ANDROID_API" }
 if (-not $kernelValid -or -not $abiValid) { Fail "NOT_PROVEN_ARM64_ANDROID" }
 if (-not $qemuValid) { Fail "EMULATOR_NOT_PHYSICAL_PHONE" }
 if (-not $selinuxValid) { Fail "SELINUX_NOT_ENFORCING" }
-if ($originalPkg -notmatch '^package:') { Fail "ORIGINAL_DSH_NOT_VERIFIED_INSTALLED" }
+Say "P209_ORIGINAL_APK_SOURCE=PUBLIC_RELEASE_PINNED_NOT_DOWNLOADED"
+Say "P209_ORIGINAL_APK_SIGNATURE_MATCH_INSTALLED=NOT_ATTESTED"
+Say "P209_ORIGINAL_INSTALLED_NOT_REQUIRED_FOR_ABI_TEST=YES"
 Say "P209_PHONE_PREFLIGHT=PASS_ENVIRONMENT_ONLY"
