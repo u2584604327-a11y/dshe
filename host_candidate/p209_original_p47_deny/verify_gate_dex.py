@@ -227,6 +227,88 @@ def main():
                         print("P209_SIGNED_PC214_OTHER_REG_LAST_LEXICAL_DEF_PC=UNRESOLVED")
                 else:
                     print("P209_SIGNED_PC214_OTHER_REG_LAST_LEXICAL_DEF_PC=UNRESOLVED")
+        # Path-specific, bounded static proof for PC26 TAKEN -> PC176 ->
+        # PC214, but NEVER a witness that Android executed the later path.
+        # PC202's non-null edge is the only normal route through PC206.
+        pc24=by_original_pc.get(24)
+        pc26=by_original_pc.get(26)
+        p24regs=(p209_output_registers(pc24) if pc24 else [])
+        p24token=(pc24.get_output().split(",",1)[-1].strip().split()[0]
+                  if pc24 and "," in pc24.get_output() else "")
+        source_one=(pc24 is not None and
+                    pc24.get_name()=="const/4" and p24regs==[7] and
+                    p24token in ("1","0x1") and
+                    24+pc24.get_length()==26 and
+                    pc26 is not None and pc26.get_name()=="if-eqz" and
+                    26+2*pc26.get_ref_off()==176)
+        expected_normal=[
+            (176,"invoke-static/range"),(182,"iget-object"),
+            (186,"check-cast"),(190,"iget-object"),
+            (194,"invoke-static"),(200,"move-result-object"),
+            (202,"if-eqz"),(206,"invoke-virtual"),
+            (212,"move-result"),(214,"if-ne")]
+        actual_normal=[(at,ins.get_name()) for at,ins in rows
+                       if 176<=at<=214]
+        path_shape=(actual_normal==expected_normal and
+                    by_original_pc[202].get_ref_off()*2+202==250 and
+                    by_original_pc[214].get_ref_off()*2+214==250)
+        # Every instruction in this straight normal path is enumerated.
+        # Only iget/check-cast/move-result can write registers here;
+        # no hidden arithmetic, wide writes or other dex writers occur.
+        possible_v7_writers=[]
+        if path_shape:
+            for at in (182,186,190,200,212):
+                ins=by_original_pc[at]
+                regs=p209_output_registers(ins)
+                if len(regs)<1 or regs[0]==7:
+                    possible_v7_writers.append(at)
+        print("P209_SIGNED_PC26_TO_PC214_EXACT_NORMAL_OPCODE_WINDOW="+
+              ("PASS" if path_shape else "NOT_PROVEN"))
+        print("P209_SIGNED_PC24_CONST_V7_ONE="+
+              ("PASS" if source_one else "NOT_PROVEN"))
+        print("P209_SIGNED_PC176_TO_PC214_V7_POSSIBLE_WRITERS="+
+              ",".join(map(str,possible_v7_writers)) if possible_v7_writers
+              else "P209_SIGNED_PC176_TO_PC214_V7_POSSIBLE_WRITERS=NONE_IN_EXACT_WINDOW"
+              if path_shape else
+              "P209_SIGNED_PC176_TO_PC214_V7_POSSIBLE_WRITERS=NOT_PROVEN")
+        proof=(source_one and path_shape and not possible_v7_writers)
+        print("P209_SIGNED_PC214_V7_ONE_IF_NORMAL_PATH_REACHES="+
+              ("PROVEN_STATIC_CONDITIONAL" if proof else "NOT_PROVEN"))
+        print("P209_PC214_V7_ACTUAL_ANDROID_VALUE=NOT_ATTESTED")
+        # Original EngineManager process backing field: source-only writer
+        # inventory, not an original instance or Android process observation.
+        owner="Lcom/dsh/android/EngineManager;"
+        classes=[cls for cls in original.get_classes()
+                 if cls.get_name()==owner]
+        need(len(classes)==1,"ORIGINAL_ENGINE_CLASS_UNIQUE")
+        process_fields=[fld for fld in classes[0].get_fields()
+                        if fld.get_name()=="process"]
+        field_unique=len(process_fields)==1
+        print("P209_ORIGINAL_ENGINE_PROCESS_FIELD_UNIQUE="+
+              ("YES" if field_unique else "NOT_ATTESTED"))
+        writes=[]
+        if field_unique:
+            for cls in original.get_classes():
+                for meth in cls.get_methods():
+                    if meth.get_code() is None:continue
+                    for at,ins in meth.get_instructions_idx():
+                        op=ins.get_name()
+                        if (op.startswith(("iput","sput")) and
+                            owner+"->process" in ins.get_output()):
+                            writes.append((cls.get_name(),meth.get_name(),at))
+                            need(len(writes)<=40,
+                                 "ENGINE_PROCESS_WRITER_COUNT_BOUND")
+        print("P209_ORIGINAL_ENGINE_PROCESS_FIELD_WRITE_SITES="+
+              str(len(writes)) if field_unique else
+              "P209_ORIGINAL_ENGINE_PROCESS_FIELD_WRITE_SITES=UNDETERMINED")
+        for cls_name,meth_name,at in writes[:8]:
+            category=("ORIGINAL_ENGINE" if cls_name==owner else
+                      "ORIGINAL_COROUTINE" if cls_name.startswith(
+                          "Lcom/dsh/android/EngineManager$") else
+                      "OTHER_ORIGINAL")
+            print("P209_ORIGINAL_PROCESS_WRITE_OWNER="+category+
+                  ",METHOD="+meth_name[:80]+",PC="+str(at))
+        print("P209_ORIGINAL_PROCESS_RUNTIME_VALUE=NOT_ATTESTED")
         print("P209_SIGNED_PC214_REGISTER_PROVENANCE_IS_STATIC_ONLY=YES")
         print("P209_PC214_FALL_EXIT_RUNTIME=NOT_ATTESTED")
         print("P209_SIGNED_STATE_GUARDS_RUNTIME_PATH=NOT_ATTESTED")
