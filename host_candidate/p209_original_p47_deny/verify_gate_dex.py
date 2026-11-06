@@ -308,6 +308,44 @@ def main():
                       "OTHER_ORIGINAL")
             print("P209_ORIGINAL_PROCESS_WRITE_OWNER="+category+
                   ",METHOD="+meth_name[:80]+",PC="+str(at))
+        # Call sites, not actual invocations or observed process state.
+        # Scope explicitly only the signed v138 primary classes.dex.
+        getter_name=owner+"->access$getProcess$p"
+        setter_name=owner+"->access$setProcess$p"
+        accessor_calls={"GET":[],"SET":[]}
+        for cls in original.get_classes():
+            cname=cls.get_name()
+            for meth in cls.get_methods():
+                if meth.get_code() is None:continue
+                for at,ins in meth.get_instructions_idx():
+                    if not ins.get_name().startswith("invoke-"):continue
+                    value=ins.get_output()
+                    if setter_name in value:
+                        accessor_calls["SET"].append((cname,meth.get_name(),at))
+                    if getter_name in value:
+                        accessor_calls["GET"].append((cname,meth.get_name(),at))
+            need(sum(map(len,accessor_calls.values()))<=100,
+                 "ORIGINAL_PROCESS_ACCESSOR_CALLS_BOUND")
+        print("P209_ORIGINAL_PROCESS_ACCESSOR_SCAN_SCOPE=PRIMARY_DEX_ONLY")
+        for kind in ("SET","GET"):
+            sites=accessor_calls[kind]
+            print("P209_ORIGINAL_PROCESS_ACCESSOR_"+kind+
+                  "_CALLSITE_COUNT="+str(len(sites)))
+            for cname,mname,at in sites[:20]:
+                role=("ENGINE" if cname==owner else
+                      "ENGINE_COROUTINE" if cname.startswith(
+                          "Lcom/dsh/android/EngineManager$") else
+                      "OTHER_PRIMARY")
+                print("P209_ORIGINAL_PROCESS_ACCESSOR_"+kind+
+                      "_CALLSITE="+role+",METHOD="+mname[:80]+
+                      ",PC="+str(at))
+        start_set=[at for cname,mname,at in accessor_calls["SET"]
+                   if cname=="Lcom/dsh/android/EngineManager$start$2;" and
+                      mname=="invokeSuspend"]
+        print("P209_ORIGINAL_START2_SETTER_PRE_PC3912_COUNT="+
+              str(sum(at<3912 for at in start_set)))
+        print("P209_ORIGINAL_ENGINE_PROCESS_OTHER_DEX_WRITES=NOT_AUDITED")
+        print("P209_ORIGINAL_PROCESS_FIELD_RUNTIME_STATE=NOT_ATTESTED")
         print("P209_ORIGINAL_PROCESS_RUNTIME_VALUE=NOT_ATTESTED")
         print("P209_SIGNED_PC214_REGISTER_PROVENANCE_IS_STATIC_ONLY=YES")
         print("P209_PC214_FALL_EXIT_RUNTIME=NOT_ATTESTED")
