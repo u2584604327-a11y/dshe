@@ -85,6 +85,32 @@ def main():
         for pc,ins in rows[pc176[0]:min(follow+9,len(rows))]:
             if pc>=3912:break
             print("P209_PC176_STATIC_WINDOW_PC="+str(pc)+",OP="+ins.get_name())
+        # Signed-public-DEX metadata only; not a runtime execution witness.
+        import re
+        output=rows[pc176[0]][1].get_output()
+        call=re.search(r"L[^;,\s]+;->[A-Za-z0-9_$<>]+\(",output)
+        need(call is not None,"PC176_ORIGINAL_CALLEE_DESCRIPTOR")
+        callee=call.group(0).removesuffix("(")
+        need(len(callee)<=220 and "\n" not in callee,
+             "PC176_CALLEE_OUTPUT_BOUND")
+        print("P209_SIGNED_PC176_STATIC_CALLEE="+callee)
+        code=start[0].get_code()
+        need(code is not None,"PC176_SIGNED_METHOD_CODE_REQUIRED")
+        items=code.get_tries() or []
+        need(len(items)<=128,"PC176_TRY_RANGE_COUNT_BOUND")
+        bounds=[(2*t.get_start_addr(),
+                 2*(t.get_start_addr()+t.get_insn_count())) for t in items]
+        need(all(0<=begin<end<=code.get_insns_size()*2
+                 for begin,end in bounds),"PC176_TRY_BOUNDS_INVALID")
+        for pc,label in ((176,"PC176"),(rows[follow][0],"POST176")):
+            covers=[(a,b) for a,b in bounds if a<=pc<b]
+            print("P209_SIGNED_"+label+"_TRY_RANGE_COUNT="+str(len(covers)))
+            for begin,end in covers[:3]:
+                print("P209_SIGNED_"+label+"_TRY_START_PC="+str(begin))
+                print("P209_SIGNED_"+label+"_TRY_END_EXCLUSIVE_PC="+str(end))
+        print("P209_SIGNED_PC176_CATCH_HANDLER_DISPATCH=NOT_TRACED")
+        print("P209_SIGNED_PC176_RUNTIME_EXCEPTION=NOT_ATTESTED")
+        print("P209_PC176_CALLEE_AND_TRY_BOUNDS_STATIC_AUDIT=PASS")
         print("P209_ORIGINAL_PC176_POST_CALL_STATIC_AUDIT=PASS")
         print("P209_ORIGINAL_PC176_CALL_NORMAL_RETURN=NOT_ATTESTED")
         calls=[pos for pos,insn in rows if
