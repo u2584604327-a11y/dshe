@@ -58,6 +58,26 @@ jobs:
               exit 2
             }
           echo B1_DISPOSABLE_ANDROID_GRADLE_BUILD=PASS
+          # Fail before any Android boot or install if Gradle produced an
+          # unexpected number of APKs. Only the exact disposable package is
+          # eligible; never select original DSH or an arbitrary artifact.
+          p=host_candidate/browser_isolation_audit/android_probe
+          if [[ "$RUNNER_OS" != Linux ]]; then exit 2; fi
+          found="$(find . -type f -path '*/build/outputs/apk/debug/*.apk' | wc -l)"
+          if [[ "$found" -ne 1 ]];then
+            echo B1_APK_OUTPUT_COUNT_NOT_ONE
+            exit 2
+          fi
+          apk="$(find . -type f -path '*/build/outputs/apk/debug/*.apk' | head -n1)"
+          test -s "$apk"
+          sdk="$ANDROID_HOME"
+          badging="$("$sdk/build-tools/35.0.0/aapt" dump badging "$apk")"
+          [[ "$badging" == *"package: name='com.dsh.b1probe'"* ]] || {
+            echo B1_APK_PACKAGE_MISMATCH
+            exit 2
+          }
+          cp "$apk" "$p/.b1-verified-disposable.apk"
+          echo B1_DISPOSABLE_VERIFIED_APK_FOR_EMULATOR=PASS
       - name: KVM for disposable runner emulator
         shell: bash
         run: |

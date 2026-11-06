@@ -14,9 +14,7 @@ before="$(adb -s "$serial" shell pm list packages "$pkg" | tr -d '\r')"
 [[ "$before" != *"package:$pkg"* ]] || { echo B1_PREEXISTING_PROBE_DENY;exit 2; }
 stage=APK
 dir=host_candidate/browser_isolation_audit/android_probe
-count="$(find "$dir/build/outputs/apk/debug" -maxdepth 1 -name '*.apk' -type f | wc -l)"
-[[ "$count" -eq 1 ]]
-apk="$(find "$dir/build/outputs/apk/debug" -maxdepth 1 -name '*.apk' -type f | head -n1)"
+apk="$dir/.b1-verified-disposable.apk"
 [[ -s "$apk" ]]
 [[ -n "$ANDROID_HOME" ]]
 badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk")"
