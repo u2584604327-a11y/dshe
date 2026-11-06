@@ -63,3 +63,23 @@ there is **no** restored green result or success token. If a fresh seed had
 partially written data, its pre-existing-data checks fail closed. The Main
 controller remains strict on unexpected state restoration; the script still
 requires distinct current-run proofs and a true OS force-stop/relaunch.
+
+### B2 concurrent live-process extension
+
+After B1 passes, the same disposable app is force-stopped again, without
+clearing its synthetic stores. A distinct controller run binds two Android
+non-exported Services in :slotA and :slotB **simultaneously**. Each verifies
+its original A/B Cookie, LocalStorage and IndexedDB; the controller rejects
+identical PIDs, a PID equal to the controller or a UID mismatch. With both
+bound processes live, each Service independently updates its synthetic
+Cookie, LocalStorage and IndexedDB from A/B to A2/B2 and waits for the
+IndexedDB transaction commit, then must read back only its own new value
+and never the other slot's Cookie. Binder commands use strict ordered
+INIT->WRITE->VERIFY and reject duplicates/out-of-order messages; no user
+accounts, private data, external websites, or JavaScript interfaces.
+
+B2 explicitly remains SAME-APPLICATION-UID process-level WebView directory
+isolation, not separate Android user/work profile, pVM, or original DSH
+browser integration. It does not prove native GeckoView profile isolation,
+CacheStorage, OPFS or concurrent cross-UID protection. The next turn should
+check true Android35 CI logs before claiming B2 PASS.

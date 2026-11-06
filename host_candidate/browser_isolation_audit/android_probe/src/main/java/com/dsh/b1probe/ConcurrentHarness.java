@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.Application;
 import android.content.*;
 import android.os.*;
+import android.os.Process;
 import android.util.Log;
 
 /** B2 real two-live-process Binder test; not cross-UID access control. */

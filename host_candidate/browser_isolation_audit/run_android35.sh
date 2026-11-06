@@ -64,7 +64,11 @@ wait_for_proof() {
         MAIN_WRONG_PROCESS MISSING_EXACT_PHASE_PROOF ACTIVITY_RECREATED \
         PHASE_OUT_OF_RANGE RESTORE_UNEXPECTED MODE_REQUIRED \
         INDEXEDDB_INVALID_OPERATION INDEXEDDB_START INDEXEDDB_TIMEOUT \
-        INDEXEDDB_VALUE_OR_ERROR;do
+        INDEXEDDB_VALUE_OR_ERROR \
+        B2_MAIN_PROCESS B2_CONTROLLER_PROCESS B2_SERVICE_IDENTITY \
+        B2_BINDER_DISCONNECTED B2_TIMEOUT B2_BIND B2_MISSING_BINDER \
+        B2_IPC_SEND B2_OS_PID_UID B2_SAME_PROCESS \
+        B2_SLOT_CHECK B2_IPC_ORDER_REPLAY;do
         if [[ "$trace" == *"$reason=DENY"* ]];then echo "B1_SAFE_$reason=DENY";fi
       done
       echo B1_ANDROID35_ISOLATION_PROBE=FAIL_CLOSED
@@ -104,6 +108,23 @@ wait_for_proof B1_ANDROID35_RESTART_A_B_COOKIE_LOCALSTORAGE_ISOLATION=PASS
 wait_for_proof B1_ANDROID35_RESTART_A_B_INDEXEDDB_ISOLATION=PASS
 echo B1_REAL_ANDROID35_AFTER_FORCE_STOP_PERSISTENT_COOKIE_LOCALSTORAGE=PASS
 echo B1_REAL_ANDROID35_AFTER_FORCE_STOP_PERSISTENT_INDEXEDDB=PASS
+# B2 is a separate proof: two concurrently bound live slot processes,
+# each performing a simultaneous mutation and later cross-slot negative
+# recheck of real Cookie/LocalStorage/IndexedDB. Do not fake with prior B1.
+stage=B2_CONCURRENT_LIVE_PROCESSES
+adb -s "$serial" shell am force-stop "$pkg" >/dev/null
+running="$(adb -s "$serial" shell 'pidof com.dsh.b1probe com.dsh.b1probe:slotA com.dsh.b1probe:slotB || true' | tr -d '\r\n')"
+if [[ -n "$running" ]]; then
+  echo B1_ANDROID35_B2_PROCESS_REMAINING=DENY
+  exit 2
+fi
+adb -s "$serial" shell am start -W -n "$pkg/.MainProbe" --es mode concurrent >/dev/null
+wait_for_proof B2_ANDROID35_DISTINCT_LIVE_PIDS_SAME_APP_UID=PASS
+wait_for_proof B2_ANDROID35_LIVE_A_B_COOKIE_LOCALSTORAGE_INDEXEDDB=PASS
+wait_for_proof B2_ANDROID35_OS_USER_OR_VM=NOT_ATTESTED
+echo B2_REAL_ANDROID35_TWO_LIVE_PROCESSES_MUTATION_ISOLATION=PASS
+echo B2_REAL_ANDROID35_DISTINCT_PIDS_SAME_UID=PASS
+echo B2_ANDROID35_WORK_PROFILE_AVF=NOT_ATTESTED
 echo B1_MAIN_PROCESS_WEBVIEW_DISABLED=PASS
 echo B1_PROCESS_PROFILE_STORAGE_ONLY_SAME_APP_UID=YES
 echo B1_WORK_PROFILE_AND_AVF_PROTECTED_VM=NOT_ATTESTED
