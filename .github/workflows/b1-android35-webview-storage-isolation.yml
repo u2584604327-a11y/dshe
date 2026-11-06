@@ -52,6 +52,8 @@ jobs:
           grep -Fq 'WebView.setDataDirectorySuffix("b1_slot_a")' "$p/src/main/java/com/dsh/b1probe/ProbeApp.java"
           grep -Fq 'WebView.setDataDirectorySuffix("b1_slot_b")' "$p/src/main/java/com/dsh/b1probe/ProbeApp.java"
           grep -Fq 'WebView.disableWebView()' "$p/src/main/java/com/dsh/b1probe/ProbeApp.java"
+          grep -Fq 'B1_ONLY_DISPOSABLE_ACTIVITY_RECREATION_FULL_RESEED=1' host_candidate/browser_isolation_audit/run_android35.sh
+          grep -Fq 'B1_SEED_RETRY_OTHER_DENIAL_PRESENT=DENY' host_candidate/browser_isolation_audit/run_android35.sh
           bash -n host_candidate/browser_isolation_audit/run_android35.sh
           echo B1_TWO_NONEXPORTED_BROWSER_PROCESS_SLOTS_NO_INTERNET=PASS
       - name: Build disposable app with no original DSH assets

@@ -83,3 +83,17 @@ isolation, not separate Android user/work profile, pVM, or original DSH
 browser integration. It does not prove native GeckoView profile isolation,
 CacheStorage, OPFS or concurrent cross-UID protection. The next turn should
 check true Android35 CI logs before claiming B2 PASS.
+
+### B1 initial Android35 Activity recreation: bounded full-fixture retry
+
+If **and only if** the first disposable `MainProbe` seed run fails with
+`B1_ANDROID35_ACTIVITY_RECREATED=DENY` and no other negative category,
+the emulator runner may force-stop the **exact** disposable package
+`com.dsh.b1probe`, require no remaining B1 processes, clear that
+package's synthetic data, create a new unpredictable log boundary,
+and re-run the entire fresh A-B-A-B Cookie/LocalStorage/IndexedDB seed
+sequence once. This does NOT restore Activity state, reuse earlier
+SUCCESS markers or accept the old seed. Any actual storage/cross-slot/
+process/UID failure and any repeated Activity recreation fail closed.
+All later force-stop persistence and B2 concurrently live-process gates
+must still pass in the same new run; original DSH data is never touched.
