@@ -152,10 +152,10 @@ def main():
             ins=by_original_pc.get(pc)
             need(ins is not None,"PC214_POSTCALL_SYMBOL_PC_"+str(pc))
             static_symbol=re.search(
-                r"L[^;,\\s]+;->[A-Za-z0-9_$<>]+(?=[(:])",ins.get_output())
+                r"L[^;,\s]+;->[A-Za-z0-9_$<>]+(?=[(:])",ins.get_output())
             symbol=(static_symbol.group(0) if static_symbol else
                     "NOT_UNIQUELY_DECODED")
-            need(len(symbol)<=220 and "\\n" not in symbol,
+            need(len(symbol)<=220 and "\n" not in symbol,
                  "PC214_POSTCALL_SYMBOL_BOUND")
             print("P209_SIGNED_POST176_SYMBOL_PC="+str(pc)+
                   ",OP="+ins.get_name()+",SYMBOL="+symbol)
