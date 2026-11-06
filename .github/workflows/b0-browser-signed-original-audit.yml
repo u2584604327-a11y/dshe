@@ -3,7 +3,9 @@ on:
   pull_request:
     types: [opened, synchronize]
     paths:
-      - 'host_candidate/browser_isolation_audit/**'
+      - 'host_candidate/browser_isolation_audit/audit_signed_v138.py'
+      - 'host_candidate/browser_isolation_audit/test_audit.py'
+      - 'host_candidate/browser_isolation_audit/README.md'
       - '.github/workflows/b0-browser-signed-original-audit.yml'
 permissions:
   contents: read
@@ -33,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -B host_candidate/browser_isolation_audit/test_audit.py 2>&1 | tee "$RUNNER_TEMP/b0-negative.log"
-          grep -Eq '^Ran 8 tests in' "$RUNNER_TEMP/b0-negative.log"
+          grep -Eq '^Ran 11 tests in' "$RUNNER_TEMP/b0-negative.log"
           grep -Fxq 'OK' "$RUNNER_TEMP/b0-negative.log"
           python3 - <<'PY'
           from pathlib import Path
@@ -58,6 +60,42 @@ jobs:
           python3 -B host_candidate/browser_isolation_audit/audit_signed_v138.py "$original" \
             | tee "$RUNNER_TEMP/b0-static-proof.log"
           grep -Fxq 'B0_SIGNED_V138_SHA256_AND_SIZE=PASS' "$RUNNER_TEMP/b0-static-proof.log"
+          grep -Eq '^B0_SIGNED_DEX_SHARED_CMD_LITERAL=(PRESENT|ABSENT)
+          grep -Fxq 'B0_CROSS_PROFILE_COOKIE_LOCALSTORAGE_ISOLATION=BLOCKED' "$RUNNER_TEMP/b0-static-proof.log"
+          grep -Fxq 'B0_AVF_PROTECTED_VM_GUEST=NOT_ATTESTED' "$RUNNER_TEMP/b0-static-proof.log"
+          grep -Fxq 'B0_APP_EXECUTED_OR_USER_DATA_READ=NO' "$RUNNER_TEMP/b0-static-proof.log"
+      - name: Erase scratch and report no-release boundary
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .b0scratch
+          echo B0_SIGNED_V138_STATIC_ONLY=CHECK_ABOVE >> "$GITHUB_STEP_SUMMARY"
+          echo B0_RUNTIME_COOKIE_LOCALSTORAGE_ISOLATION=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo B0_WORK_PROFILE_VIRTUAL_MACHINE=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo B0_AI_BROWSER=DEFERRED >> "$GITHUB_STEP_SUMMARY"
+          echo B0_USER_APP_DATA_READ=NO >> "$GITHUB_STEP_SUMMARY"
+          echo B0_P47_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo B0_GS_CAPTURE=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo B0_V139_RELEASE=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"
+ "$RUNNER_TEMP/b0-static-proof.log"
+          grep -Eq '^B0_SIGNED_DEX_SHARED_RESULT_LITERAL=(PRESENT|ABSENT)
+          grep -Fxq 'B0_CROSS_PROFILE_COOKIE_LOCALSTORAGE_ISOLATION=BLOCKED' "$RUNNER_TEMP/b0-static-proof.log"
+          grep -Fxq 'B0_AVF_PROTECTED_VM_GUEST=NOT_ATTESTED' "$RUNNER_TEMP/b0-static-proof.log"
+          grep -Fxq 'B0_APP_EXECUTED_OR_USER_DATA_READ=NO' "$RUNNER_TEMP/b0-static-proof.log"
+      - name: Erase scratch and report no-release boundary
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .b0scratch
+          echo B0_SIGNED_V138_STATIC_ONLY=CHECK_ABOVE >> "$GITHUB_STEP_SUMMARY"
+          echo B0_RUNTIME_COOKIE_LOCALSTORAGE_ISOLATION=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo B0_WORK_PROFILE_VIRTUAL_MACHINE=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo B0_AI_BROWSER=DEFERRED >> "$GITHUB_STEP_SUMMARY"
+          echo B0_USER_APP_DATA_READ=NO >> "$GITHUB_STEP_SUMMARY"
+          echo B0_P47_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo B0_GS_CAPTURE=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo B0_V139_RELEASE=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"
+ "$RUNNER_TEMP/b0-static-proof.log"
           grep -Fxq 'B0_CROSS_PROFILE_COOKIE_LOCALSTORAGE_ISOLATION=BLOCKED' "$RUNNER_TEMP/b0-static-proof.log"
           grep -Fxq 'B0_AVF_PROTECTED_VM_GUEST=NOT_ATTESTED' "$RUNNER_TEMP/b0-static-proof.log"
           grep -Fxq 'B0_APP_EXECUTED_OR_USER_DATA_READ=NO' "$RUNNER_TEMP/b0-static-proof.log"

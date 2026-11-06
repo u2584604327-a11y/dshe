@@ -8,6 +8,12 @@ BYTES = 147341486
 DEX_NAME = re.compile(r"classes(?:[2-9][0-9]*)?\.dex\Z")
 AI_BROWSER = "Lcom/dsh/android/browser/AiBrowserView;"
 BRIDGE = "Lcom/dsh/android/browser/BrowserBridge;"
+# Only EXACT DEX string-pool literals, not substrings of a message or asset.
+MAILBOX_LITERALS = ("browser-cmd.json", "browser-result.json")
+
+def exact_mailbox_literals(values):
+    found = set(values)
+    return {literal: (literal in found) for literal in MAILBOX_LITERALS}
 API_CALLS = {
     "WEBVIEW_SUFFIX": "Landroid/webkit/WebView;->setDataDirectorySuffix(",
     "GLOBAL_CONFIG_SUFFIX": "Landroidx/webkit/ProcessGlobalConfig;->setDataDirectorySuffix(",
@@ -71,6 +77,13 @@ def analyze(path):
     classes = set()
     direct = []
     main_browser_ctor_count = 0
+    # The signed binary may be different from upstream v91. Query only
+    # bounded known string-pool keys, never dump all string literals.
+    signed_mailbox = {key: False for key in MAILBOX_LITERALS}
+    for dex in dexes:
+        matched = exact_mailbox_literals(dex.get_strings())
+        for key in MAILBOX_LITERALS:
+            signed_mailbox[key] = signed_mailbox[key] or matched[key]
     inspected = 0
     for dex in dexes:
         for cls in dex.get_classes():
@@ -101,6 +114,7 @@ def analyze(path):
         "browser_ctor": main_browser_ctor_count,
         "counts": counts,
         "browser_cookie_calls": browser_cookie_calls,
+        "mailbox": signed_mailbox,
     }
 
 def main():
@@ -120,6 +134,11 @@ def main():
     for key, amount in result["counts"].items():
         print("B0_DIRECT_" + key + "_CALLS=" + str(amount))
     print("B0_AI_BROWSER_COOKIE_API_CALLS=" + str(result["browser_cookie_calls"]))
+    print("B0_SIGNED_DEX_SHARED_CMD_LITERAL=" +
+          ("PRESENT" if result["mailbox"]["browser-cmd.json"] else "ABSENT"))
+    print("B0_SIGNED_DEX_SHARED_RESULT_LITERAL=" +
+          ("PRESENT" if result["mailbox"]["browser-result.json"] else "ABSENT"))
+    print("B0_DEX_LITERAL_PRESENCE_IS_NOT_RUNTIME_MAILBOX_AUTHORIZATION=YES")
     print("B0_RUNTIME_WEBVIEW_PROFILE_STORAGE=NOT_ATTESTED")
     print("B0_CROSS_PROFILE_COOKIE_LOCALSTORAGE_ISOLATION=BLOCKED")
     print("B0_OS_WORK_PROFILE_UID_SEPARATION=NOT_ATTESTED")

@@ -36,6 +36,18 @@ class StrictNegativeTests(unittest.TestCase):
              "Landroid/webkit/CookieManager;->getInstance(")])
         self.assertEqual(2,totals["COOKIE_INSTANCE"])
         self.assertEqual(1,n)
+    def test_signed_mailbox_exact_literals(self):
+        self.assertEqual({"browser-cmd.json": True, "browser-result.json": True},
+                         audit.exact_mailbox_literals(["browser-cmd.json",
+                             "browser-result.json", "unrelated"]))
+    def test_mailbox_substrings_do_not_count(self):
+        values=["prefix-browser-cmd.json", "browser-result.json.backup"]
+        self.assertEqual({"browser-cmd.json": False, "browser-result.json": False},
+                         audit.exact_mailbox_literals(values))
+    def test_one_missing_mailbox_literal_is_not_inferred(self):
+        result=audit.exact_mailbox_literals(["browser-cmd.json"])
+        self.assertTrue(result["browser-cmd.json"])
+        self.assertFalse(result["browser-result.json"])
     def test_missing_original_fails_closed(self):
         with self.assertRaisesRegex(ValueError,"B0_DENY_ORIGINAL_MISSING"):
             audit.analyze("/never_exists/DSH-v138.apk")
