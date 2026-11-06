@@ -59,7 +59,7 @@ selected=
 valid=NO
 for _ in $(seq 1 18);do
   raw="$(adb -s "$serial" logcat -d -v threadtime \
-    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I P209_PREP40:I P209_GUARD:I P209_FALL:I P209_TAKEN:I '*:S')"
+    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I P209_PREP40:I P209_GUARD:I P209_FALL:I P209_TAKEN:I AndroidRuntime:E '*:S')"
   selected="$(printf '%s\n' "$raw" | awk -v m="$marker" '
     index($0,m){count++;after=1;next}
     after{print}
@@ -138,6 +138,16 @@ p209_count_pid() {
     'index($0,k) && $3==pid{n++} END{print n+0}'
 }
 p209_gate_diagnostic() {
+  # Read-only classification of the disposable emulator's current app PID;
+  # no raw AndroidRuntime lines, stacks, messages, or payloads are printed.
+  runtime_fatal="$(printf '%s\n' "$selected" | awk -v host="$pid" '
+    $3==host && index($0,"FATAL EXCEPTION:"){n++} END{print n+0}')"
+  runtime_throwframe="$(printf '%s\n' "$selected" | awk -v host="$pid" '
+    $3==host && index($0,"kotlin.ResultKt.throwOnFailure"){n++}
+    END{print n+0}')"
+  echo "P209_HOST_ANDROID_RUNTIME_FATAL_COUNT=$runtime_fatal"
+  echo "P209_HOST_THROWONFAILURE_STACKFRAME_COUNT=$runtime_throwframe"
+  echo P209_HOST_ANDROID_RUNTIME_FATAL_IS_NOT_PROOF_OF_COROUTINE_RESULT=YES
   echo "P209_PC176_TARGET_TAG_COUNT=$(p209_count 'P209_PC176_BRANCH_TARGET=OBSERVED')"
   echo "P209_PC176_TARGET_HOST_PID_COUNT=$(p209_count_pid 'P209_PC176_BRANCH_TARGET=OBSERVED')"
   echo "P209_PC176_TARGET_ISOLATED_COUNT=$(p209_count 'P209_PC176_TAKEN_ISOLATED=DENY')"
