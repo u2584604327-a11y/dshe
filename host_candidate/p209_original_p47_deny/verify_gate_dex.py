@@ -119,7 +119,7 @@ def main():
         need(ins_size==2 and reg_size>=2,
              "PC176_INVOKESUSPEND_PARAM_LAYOUT")
         call_prefix=output.split("Lkotlin/ResultKt;->throwOnFailure",1)[0]
-        raw_args=[int(x) for x in re.findall(r"\\bv(\\d+)\\b",call_prefix)]
+        raw_args=[int(x) for x in re.findall(r"\bv(\d+)\b",call_prefix)]
         if raw_args and len(raw_args)<=2 and len(set(raw_args))==1:
             relation=("INVOKESUSPEND_RESULT_P1" if raw_args[0]==reg_size-1
                       else "OTHER_LOCAL_OR_COPIED_REGISTER")
