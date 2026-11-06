@@ -16,9 +16,9 @@ the app private files and must not be described as adversarially isolated.
 This B3 Java-8 host-side policy enforces independent A/B lease objects, owner
 epoch, deadline, exact monotonic request sequence, at-most-one in-flight
 operation, bounded request/result size, fixed synthetic action allowlist,
-one-shot result tickets and revocation on account switch. Negative tests reject
+one-shot result tickets bound to the original operation and revocation on account switch. Negative tests reject
 wrong slot/epoch, duplicate, skipped sequence, expired, replayed, oversize,
-cross-slot result, forbidden arbitrary JS/file/cookie export, stale response,
+cross-slot result, mismatched result operation, forbidden arbitrary JS/file/cookie export, stale response,
 and concurrent duplicate requests. Lease/Ticket remain opaque host-only Java
 objects; they are NOT IPC credentials and must never enter JS, URLs or files.
 

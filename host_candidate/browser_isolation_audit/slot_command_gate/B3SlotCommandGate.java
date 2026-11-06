@@ -6,7 +6,7 @@ public final class B3SlotCommandGate {
   public enum Op { PROBE_STATUS, READ_SYNTHETIC, ARBITRARY_JS, FILE_ACCESS, COOKIE_EXPORT }
   public enum Code { ACCEPT, NO_ACTIVE, WRONG_SLOT, WRONG_EPOCH, EXPIRED, REVOKED,
     REPLAY, OUT_OF_ORDER, IN_FLIGHT, ACTION_DENIED, SIZE_DENIED,
-    WRONG_TICKET, RESULT_REPLAY, WRONG_RESULT_SLOT, RESULT_SIZE_DENIED }
+    WRONG_TICKET, RESULT_REPLAY, WRONG_RESULT_SLOT, RESULT_SIZE_DENIED, WRONG_RESULT_OP }
   public static final int MAX_COMMAND_BYTES=256, MAX_RESULT_BYTES=512;
   public static final long MAX_LEASE_MS=15000L;
   public static final class Lease {
@@ -22,8 +22,9 @@ public final class B3SlotCommandGate {
   public static final class Ticket {
     private final Lease lease;
     private final long seq;
+    private final Op op;
     private boolean consumed;
-    private Ticket(Lease lease,long seq){this.lease=lease;this.seq=seq;}
+    private Ticket(Lease lease,long seq,Op op){this.lease=lease;this.seq=seq;this.op=op;}
   }
   public static final class Decision {
     public final Code code;
@@ -73,19 +74,20 @@ public final class B3SlotCommandGate {
     if(trustedMeasuredBytes<0||trustedMeasuredBytes>MAX_COMMAND_BYTES)
       return deny(Code.SIZE_DENIED);
     if(lease.next==Long.MAX_VALUE)return deny(Code.OUT_OF_ORDER);
-    Ticket t=new Ticket(lease,seq);
+    Ticket t=new Ticket(lease,seq,op);
     lease.pending=t;
     lease.next++;
     return new Decision(Code.ACCEPT,t);
   }
   public synchronized Code result(Lease lease,Ticket ticket,Slot slot,
-      long epoch,long seq,int trustedMeasuredBytes,long now){
+      long epoch,long seq,Op responseOp,int trustedMeasuredBytes,long now){
     Code s=state(lease,slot,epoch,now);
     if(s==Code.WRONG_SLOT)return Code.WRONG_RESULT_SLOT;
     if(s!=Code.ACCEPT)return s;
     if(ticket==null||ticket.lease!=lease)return Code.WRONG_TICKET;
     if(ticket.consumed)return Code.RESULT_REPLAY;
     if(lease.pending!=ticket||ticket.seq!=seq)return Code.WRONG_TICKET;
+    if(responseOp==null||ticket.op!=responseOp)return Code.WRONG_RESULT_OP;
     if(trustedMeasuredBytes<0||trustedMeasuredBytes>MAX_RESULT_BYTES)
       return Code.RESULT_SIZE_DENIED;
     ticket.consumed=true;

@@ -96,7 +96,7 @@ public final class HostProbe extends Activity {
                   answer=decision.code.ordinal();
                 } else {
                   answer=policy.result(session.lease,session.ticket,Slot.values()[slotId],
-                      epoch,seq,payload.length,SystemClock.elapsedRealtime()).ordinal();
+                      epoch,seq,Op.values()[opOrdinal],payload.length,SystemClock.elapsedRealtime()).ordinal();
                 }
               }
             }
@@ -188,6 +188,7 @@ public final class HostProbe extends Activity {
       assertCall(0,REQUEST,0,101,1,Op.PROBE_STATUS,3,code(Code.REPLAY));
       assertCall(0,REQUEST,0,101,2,Op.PROBE_STATUS,3,code(Code.IN_FLIGHT));
       assertCall(0,RESULT,0,101,2,Op.PROBE_STATUS,1,code(Code.WRONG_TICKET));
+      assertCall(0,RESULT,0,101,1,Op.READ_SYNTHETIC,1,code(Code.WRONG_RESULT_OP));
       assertCall(0,RESULT,0,101,1,Op.PROBE_STATUS,513,code(Code.RESULT_SIZE_DENIED));
       assertCall(0,RESULT,0,101,1,Op.PROBE_STATUS,3,code(Code.ACCEPT));
       assertCall(0,RESULT,0,101,1,Op.PROBE_STATUS,3,code(Code.RESULT_REPLAY));
