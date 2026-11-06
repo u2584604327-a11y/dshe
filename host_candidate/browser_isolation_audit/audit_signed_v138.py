@@ -47,7 +47,6 @@ def count_invocations(records):
     return totals, browser_cookies
 
 def analyze(path):
-    from androguard.core.dex import DEX
     file = Path(path)
     require(file.is_file(), "ORIGINAL_MISSING")
     require(file.stat().st_size == BYTES, "ORIGINAL_SIZE")
@@ -56,6 +55,8 @@ def analyze(path):
         for chunk in iter(lambda: stream.read(1048576), b""):
             digest.update(chunk)
     require(digest.hexdigest() == SHA, "ORIGINAL_SHA")
+    # Decode only after pinned original size/hash preflight has passed.
+    from androguard.core.dex import DEX
     with zipfile.ZipFile(file) as archive:
         names = sorted([name for name in archive.namelist()
                         if DEX_NAME.fullmatch(name)],
