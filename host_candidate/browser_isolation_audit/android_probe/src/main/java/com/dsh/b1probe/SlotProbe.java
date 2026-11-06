@@ -46,7 +46,12 @@ public abstract class SlotProbe extends Activity {
   }
   @Override protected void onCreate(Bundle state) {
     super.onCreate(state);
-    if (state!=null) { deny("RESTORE_UNEXPECTED");return; }
+    // Android may recreate an Activity after a harmless configuration or
+    // renderer lifecycle change. Do NOT reuse an earlier success, in-memory
+    // WebView, JS result or pending callback; rerun ALL store checks for the
+    // same exact phase from scratch. A seed that wrote partial data must
+    // fail its fresh-data predicate instead of silently continuing.
+    if (state!=null) Log.i(TAG,"B1_ANDROID35_SLOT_RECREATED_REVALIDATING=OBSERVED");
     phase=getIntent().getIntExtra("phase",-1);
     boolean appropriate=("A".equals(slot())&&(phase==0||phase==2)) ||
                         ("B".equals(slot())&&(phase==1||phase==3));
@@ -188,6 +193,9 @@ public abstract class SlotProbe extends Activity {
     },150L);
   }
   @Override protected void onDestroy() {
+    // Invalidate every outstanding WebView/IndexedDB callback from this
+    // Activity instance, even when Android recreates it without finishing.
+    done=true;
     if (web!=null) {
       web.stopLoading();
       web.destroy();

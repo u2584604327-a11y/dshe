@@ -52,3 +52,14 @@ configuration-change categories as the upstream DSH MainActivity. This
 **does not** bypass the existing onCreate(savedInstanceState) rejection,
 OS force-stop, exact-process checks or any IndexedDB negative predicate.
 An actual process death or unexpected Activity recreation still fails closed.
+
+### Activity re-creation handling (test only)
+
+Real Android may recreate one test Slot Activity because of configuration
+or renderer lifecycle changes. The previous instance now invalidates every
+outstanding callback on destruction. A recreated Slot performs all cookie,
+LocalStorage and IndexedDB validations again using its unchanged phase;
+there is **no** restored green result or success token. If a fresh seed had
+partially written data, its pre-existing-data checks fail closed. The Main
+controller remains strict on unexpected state restoration; the script still
+requires distinct current-run proofs and a true OS force-stop/relaunch.
