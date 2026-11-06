@@ -104,14 +104,26 @@ public final class P193AndroidHostProbe implements AutoCloseable {
         // same-worker Binder callback is necessarily dispatched on main.
         // Observe an actual schema+UID-checked replay within a bounded time;
         // never infer replay denial from HTTP success or wait unboundedly.
-        boolean replayObserved=http.startsWith("HTTP/1.1 200 OK\r\n") &&
-            accepted && realReplayChecked.await(1500,TimeUnit.MILLISECONDS);
-        if(!closed && replayObserved && duplicateDenied &&
-            http.startsWith("HTTP/1.1 200 OK\r\n") &&
-            http.endsWith("P193_FIXTURE_OK")) {
+        boolean httpStatusOk=http.startsWith("HTTP/1.1 200 OK\r\n");
+        boolean replayObserved=httpStatusOk && accepted &&
+            realReplayChecked.await(1500,TimeUnit.MILLISECONDS);
+        boolean httpBodyOk=http.endsWith("P193_FIXTURE_OK");
+        if(!closed && replayObserved && duplicateDenied && httpBodyOk) {
           report("P193_ANDROID35_HOST_LOOPBACK_BINDER_TWO_UID=PASS");
           report("P193_ANDROID35_ORIGINAL_NODE_HTTP_TOKEN_READY=NOT_WIRED");
-        }else report("P193_ANDROID35_LOOPBACK_OR_BINDER_VALIDATION=DENY");
+        }else{
+          // Category-only failure classification. Do not log HTTP bytes,
+          // token, Binder payload, UID, nonce, session or a stack trace.
+          // All existing timeouts, network/UID/session guards stay unchanged.
+          if(!httpStatusOk)report("P193_ANDROID35_HTTP_STATUS_MISMATCH=DENY");
+          if(!httpBodyOk)report("P193_ANDROID35_HTTP_BODY_MISMATCH=DENY");
+          if(!accepted)report("P193_ANDROID35_BINDER_ACCEPT_MISSING=DENY");
+          if(realReplayChecked.getCount()!=0)
+            report("P193_ANDROID35_REPLAY_NOT_OBSERVED=DENY");
+          if(!duplicateDenied)
+            report("P193_ANDROID35_REPLAY_NOT_DENIED=DENY");
+          report("P193_ANDROID35_LOOPBACK_OR_BINDER_VALIDATION=DENY");
+        }
       }catch(Exception rejected) {
         report("P193_ANDROID35_FIXED_FIXTURE_ERROR=DENY");
       }finally {
