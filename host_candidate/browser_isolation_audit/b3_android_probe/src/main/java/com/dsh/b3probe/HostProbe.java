@@ -25,7 +25,8 @@ public final class HostProbe extends Activity {
   public static final String HOST_DESCRIPTOR="com.dsh.b3probe.HOST_GATE_V1";
   public static final String SLOT_DESCRIPTOR="com.dsh.b3probe.SLOT_V1";
   public static final int REQUEST=100, RESULT=101, INSTALL=200, FORWARD=201;
-  public static final int UID_DENIED=-2, CAP_DENIED=-3, MALFORMED=-4;
+  public static final int UID_DENIED=-2, CAP_DENIED=-3, MALFORMED=-4,
+      WRONG_SENDER_PROCESS=-5;
   static volatile HostGate GATE;
   private final IBinder[] remote=new IBinder[2];
   private boolean started,failed;
@@ -41,6 +42,7 @@ public final class HostProbe extends Activity {
       final long epoch;
       final Lease lease;
       Ticket ticket;
+      int boundPid;
       Session(Slot slot,long epoch,Lease lease){
         this.slot=slot;this.epoch=epoch;this.lease=lease;
       }
@@ -52,6 +54,7 @@ public final class HostProbe extends Activity {
       return capability;
     }
     synchronized void revoke(Slot slot){policy.revoke(slot);}
+    synchronized void revokeAll(){policy.revokeAll();}
     synchronized boolean topologyProved(){
       return sawTrustedUid&&lastPid[0]>0&&lastPid[1]>0&&
           lastPid[0]!=lastPid[1]&&lastPid[0]!=Process.myPid()&&
@@ -86,13 +89,22 @@ public final class HostProbe extends Activity {
               if(session==null) {
                 answer=CAP_DENIED;
               } else {
-                if(slotId==session.slot.ordinal())lastPid[slotId]=observedPid;
-                if(opOrdinal<0||opOrdinal>=Op.values().length) {
+                // Intra-UID process continuity only, NOT an OS security principal.
+                // Pin the actual Binder sender PID after a first host-authorized command.
+                // A foreign slot process with a transferred valid capability must fail.
+                if(session.boundPid!=0 && session.boundPid!=observedPid){
+                  answer=WRONG_SENDER_PROCESS;
+                } else if(opOrdinal<0||opOrdinal>=Op.values().length) {
                   answer=Code.ACTION_DENIED.ordinal();
                 } else if(tx==REQUEST){
                   Decision decision=policy.command(session.lease,Slot.values()[slotId],
                       epoch,seq,Op.values()[opOrdinal],payload.length,SystemClock.elapsedRealtime());
-                  if(decision.code==Code.ACCEPT)session.ticket=decision.ticket;
+                  if(decision.code==Code.ACCEPT){
+                    if(session.boundPid==0)session.boundPid=observedPid;
+                    session.ticket=decision.ticket;
+                    // Only count a successfully authorized real Binder transaction.
+                    if(slotId==session.slot.ordinal())lastPid[slotId]=observedPid;
+                  }
                   answer=decision.code.ordinal();
                 } else {
                   answer=policy.result(session.lease,session.ticket,Slot.values()[slotId],
@@ -137,6 +149,8 @@ public final class HostProbe extends Activity {
   private void fail(){
     if(failed)return;
     failed=true;
+    HostGate current=GATE;
+    if(current!=null)current.revokeAll();
     Log.i("B3_PROBE","B3_ANDROID35_GATE=DENY");
   }
   private static int code(Code c){return c.ordinal();}
@@ -185,6 +199,12 @@ public final class HostProbe extends Activity {
       assertCall(0,REQUEST,0,101,1,Op.COOKIE_EXPORT,1,code(Code.ACTION_DENIED));
       assertCall(0,REQUEST,0,101,1,Op.PROBE_STATUS,257,code(Code.SIZE_DENIED));
       assertCall(0,REQUEST,0,101,1,Op.PROBE_STATUS,3,code(Code.ACCEPT));
+      // Explicitly transfer the A capability to the *wrong* live slot process.
+      // A matching slot/epoch/seq/result payload must still be rejected,
+      // and the authorized A reply must remain unconsumed afterward.
+      install(1,capA);
+      assertCall(1,RESULT,0,101,1,Op.PROBE_STATUS,3,WRONG_SENDER_PROCESS);
+      install(1,capB);
       assertCall(0,REQUEST,0,101,1,Op.PROBE_STATUS,3,code(Code.REPLAY));
       assertCall(0,REQUEST,0,101,2,Op.PROBE_STATUS,3,code(Code.IN_FLIGHT));
       assertCall(0,RESULT,0,101,2,Op.PROBE_STATUS,1,code(Code.WRONG_TICKET));
@@ -194,6 +214,10 @@ public final class HostProbe extends Activity {
       assertCall(0,RESULT,0,101,1,Op.PROBE_STATUS,3,code(Code.RESULT_REPLAY));
       assertCall(1,REQUEST,1,201,1,Op.PROBE_STATUS,3,code(Code.ACCEPT));
       assertCall(1,RESULT,1,201,1,Op.PROBE_STATUS,3,code(Code.ACCEPT));
+      // Transferred B capability cannot authorize a B request from process A.
+      install(0,capB);
+      assertCall(0,REQUEST,1,201,2,Op.PROBE_STATUS,1,WRONG_SENDER_PROCESS);
+      install(0,capA);
       assertCall(0,REQUEST,0,101,2,Op.PROBE_STATUS,1,code(Code.ACCEPT));
       GATE.revoke(Slot.A);
       assertCall(0,RESULT,0,101,2,Op.PROBE_STATUS,1,code(Code.REVOKED));
@@ -215,6 +239,7 @@ public final class HostProbe extends Activity {
       Log.i("B3_PROBE","B3_ANDROID35_TRANSACTION_UID_AND_DISTINCT_PROCESSES=PASS");
       Log.i("B3_PROBE","B3_ANDROID35_WRONG_SLOT_REPLAY_EPOCH_REVOKE=PASS");
       Log.i("B3_PROBE","B3_ANDROID35_BOUNDED_RESULT_ONE_SHOT=PASS");
+      Log.i("B3_PROBE","B3_ANDROID35_TRANSFERRED_CAP_CROSS_PROCESS_DENIED=PASS");
       Log.i("B3_PROBE","B3_ANDROID35_HOST_CLOCK_AND_REAL_PAYLOAD_SIZE=PASS");
       Log.i("B3_PROBE","B3_ANDROID35_SHARED_UID_HOSTILE_PROCESS_ISOLATION=NOT_ATTESTED");
       Log.i("B3_PROBE","B3_ANDROID35_WORK_PROFILE_AVF=NOT_ATTESTED");
@@ -225,6 +250,8 @@ public final class HostProbe extends Activity {
   @Override protected void onDestroy(){
     for(int i=0;i<2;i++)if(binds[i]!=null)
       try{unbindService(binds[i]);}catch(IllegalArgumentException ignored){}
+    HostGate current=GATE;
+    if(current!=null)current.revokeAll();
     GATE=null;
     super.onDestroy();
   }

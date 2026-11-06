@@ -41,6 +41,7 @@ jobs:
           test -s "$p/b3_android_probe/src/main/java/com/dsh/b3probe/SlotService.java"
           test -s "$p/b3_attacker/src/main/java/com/dsh/b3attacker/AttackerProbe.java"
           test -s "$p/slot_command_gate/B3SlotCommandGate.java"
+          grep -Fq 'WRONG_SENDER_PROCESS' "$p/b3_android_probe/src/main/java/com/dsh/b3probe/HostProbe.java"
           grep -Fq 'Binder.getCallingUidOrThrow()' "$p/b3_android_probe/src/main/java/com/dsh/b3probe/HostProbe.java"
           grep -Fq 'SystemClock.elapsedRealtime()' "$p/b3_android_probe/src/main/java/com/dsh/b3probe/HostProbe.java"
           grep -Fq 'data.dataAvail()' "$p/b3_android_probe/src/main/java/com/dsh/b3probe/HostProbe.java"

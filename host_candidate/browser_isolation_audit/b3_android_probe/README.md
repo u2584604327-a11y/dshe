@@ -34,3 +34,16 @@ Do not install on the owner's phone, build a release, or wire real browsers.
 
 Stop if any exact CI marker is absent. No real profile accounts are
 created, read, modified or deleted. AI/OmniGate and GS capture deferred.
+
+### Defensive intra-UID sender continuity check
+
+The probe additionally transfers a valid A capability into the *B* process
+while A's result ticket is pending, and transfers the valid B capability
+into A for the next request. Both must be denied based on the observed
+Binder transaction PID after the first accepted command. A legitimate
+later response is accepted once, demonstrating failed theft did not consume
+its ticket. The probe's bound PID is diagnostic continuity for a cooperative
+same-UID deployment, **not** an authentication principal or a mitigation
+against a compromised app process. Process death or service disconnect
+revokes the lease; a new process needs a new host-issued session. Production
+multi-user/work-profile isolation and data migration remain NOT_ATTESTED.
