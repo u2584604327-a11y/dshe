@@ -16,6 +16,7 @@ import android.os.Looper;
  * Offline fixed-origin WebView test, no app INTERNET permission. No real login,
  * account, JS bridge, cookie contents printed, URL navigation or user files.
  * Four phases: A write -> B reject A/write -> A verify A -> B verify B.
+ * All phases independently check IndexedDB in addition to Cookie/LocalStorage.
  */
 public abstract class SlotProbe extends Activity {
   private static final String TAG="B1_PROBE";
@@ -97,21 +98,94 @@ public abstract class SlotProbe extends Activity {
           if(done)return;
           String value=expected==null?"null":"\""+expected+"\"";
           if(!value.equals(result)){deny("LOCALSTORAGE_MISMATCH");return;}
-          if(phase==1) {
-            cookies.setCookie(ORIGIN,B_COOKIE+"; Secure; SameSite=Lax", ok->{
-              if (!Boolean.TRUE.equals(ok)) {deny("B_SET_COOKIE");return;}
-              cookies.flush();
-              web.evaluateJavascript("(function(){localStorage.setItem('b1k','B');"
-                  +"return localStorage.getItem('b1k');})()", b->{
-                if(!"\"B\"".equals(b)){deny("B_LOCALSTORAGE_WRITE");return;}
-                succeed();
+          if(phase==0) {
+            // Fresh slot A must not silently overwrite preexisting IndexedDB.
+            checkIndexedDb("EMPTY",false,()->checkIndexedDb("A",true,()->succeed()));
+          } else if(phase==1) {
+            // A new slot B must never see A's IndexedDB even though both
+            // processes belong to the same application Linux UID.
+            checkIndexedDb("EMPTY",false,()->{
+              cookies.setCookie(ORIGIN,B_COOKIE+"; Secure; SameSite=Lax", ok->{
+                if (!Boolean.TRUE.equals(ok)) {deny("B_SET_COOKIE");return;}
+                cookies.flush();
+                web.evaluateJavascript("(function(){localStorage.setItem('b1k','B');"
+                    +"return localStorage.getItem('b1k');})()", b->{
+                  if(!"\"B\"".equals(b)){deny("B_LOCALSTORAGE_WRITE");return;}
+                  checkIndexedDb("B",true,()->succeed());
+                });
               });
             });
-          } else succeed();
+          } else {
+            checkIndexedDb(phase==2?"A":"B",false,()->succeed());
+          }
         });
       }
     });
     web.loadDataWithBaseURL(ORIGIN,HTML,"text/html","UTF-8",null);
+  }
+
+  /**
+   * Asynchronous IndexedDB runs entirely inside the trusted offline fixture.
+   * Java only sees a fixed category A/B/EMPTY/FAIL, never an actual account,
+   * origin payload, credentials or browser data. No JS/native interface.
+   *
+   * A write is acknowledged only after IDB transaction.oncomplete, NOT merely
+   * after the put request onsuccess; this matters for force-stop persistence.
+   */
+  private void checkIndexedDb(String expected,boolean write,Runnable next) {
+    if(done)return;
+    if (write && !("A".equals(expected)||"B".equals(expected))) {
+      deny("INDEXEDDB_INVALID_OPERATION");return;
+    }
+    if (!write && !("A".equals(expected)||"B".equals(expected)||
+            "EMPTY".equals(expected))) {
+      deny("INDEXEDDB_INVALID_OPERATION");return;
+    }
+    String transactionMode=write?"readwrite":"readonly";
+    String operation=write?("put('"+expected+"','owner')"):"get('owner')";
+    String observed=write?("'"+expected+"'"):
+        "(r.result===undefined?'EMPTY':String(r.result))";
+    String js="(function(){try{window.__b1Idb='WAIT';"
+      +"if(!window.indexedDB){window.__b1Idb='FAIL';return 'FAIL';}"
+      +"var opened=indexedDB.open('b1_isolated_profile',1);"
+      +"opened.onupgradeneeded=function(e){var d=e.target.result;"
+      +"if(!d.objectStoreNames.contains('profile'))d.createObjectStore('profile');};"
+      +"opened.onerror=function(){window.__b1Idb='FAIL';};"
+      +"opened.onsuccess=function(){var db=opened.result;"
+      +"var tx=db.transaction('profile','"+transactionMode+"');"
+      +"var r=tx.objectStore('profile')."+operation+";"
+      +"var outcome='FAIL';"
+      +"r.onsuccess=function(){outcome="+observed+";};"
+      +"r.onerror=function(){outcome='FAIL';};"
+      +"tx.onerror=function(){window.__b1Idb='FAIL';};"
+      +"tx.onabort=function(){window.__b1Idb='FAIL';db.close();};"
+      +"tx.oncomplete=function(){window.__b1Idb=outcome;db.close();};"
+      +"};return 'START';"
+      +"}catch(e){window.__b1Idb='FAIL';return 'FAIL';}})()";
+    web.evaluateJavascript(js,started->{
+      if(done)return;
+      if(!"\"START\"".equals(started)) {deny("INDEXEDDB_START");return;}
+      pollIndexedDb(0,expected,next);
+    });
+  }
+
+  private void pollIndexedDb(int count,String expected,Runnable next) {
+    if(done)return;
+    if(count>=30) {deny("INDEXEDDB_TIMEOUT");return;}
+    new Handler(Looper.getMainLooper()).postDelayed(()->{
+      if(done)return;
+      web.evaluateJavascript("(function(){return window.__b1Idb||'MISSING';})()",value->{
+        if(done)return;
+        if("\"WAIT\"".equals(value)) {
+          pollIndexedDb(count+1,expected,next);
+        } else if(("\""+expected+"\"").equals(value)) {
+          next.run();
+        } else {
+          // No JavaScript exception text, database name, or contents logged.
+          deny("INDEXEDDB_VALUE_OR_ERROR");
+        }
+      });
+    },150L);
   }
   @Override protected void onDestroy() {
     if (web!=null) {

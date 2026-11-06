@@ -30,3 +30,16 @@ only their OWN synthetic cookies and LocalStorage after true process death.
 The second run cannot silently write/reseed missing state and has distinct
 required log markers. This is **process-restart persistence**, not reboot,
 IndexedDB, cross-UID, OS work-profile or VM proof.
+
+### B1 IndexedDB extension
+
+The same four synthetic A/B phases additionally test IndexedDB, not inferred
+from Cookie or LocalStorage. A and B first read an empty object store, then
+write fixed A/B values. Later reads require the exact own value and deny any
+foreign value. IndexedDB asynchronous writes count only after the transaction
+commits, and the force-stop/restart pass requires both persisted IDB records.
+The Android35 runner fails unless the independent IndexedDB markers for both
+the initial A-B-A-B and force-stopped relaunch are present. No JS bridge,
+Internet, real browser data, or original DSH application access is added.
+Even success is not evidence of CacheStorage, OPFS, ServiceWorker, OS-level
+work profile separation or AVF protected-guest virtualization.
