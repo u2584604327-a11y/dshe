@@ -344,7 +344,77 @@ def main():
                       mname=="invokeSuspend"]
         print("P209_ORIGINAL_START2_SETTER_PRE_PC3912_COUNT="+
               str(sum(at<3912 for at in start_set)))
-        print("P209_ORIGINAL_ENGINE_PROCESS_OTHER_DEX_WRITES=NOT_AUDITED")
+        # SHA-pinned signed APK only: enumerate every ORIGINAL secondary
+        # DEX; do not inspect the disposable patched DEX or a live process.
+        # Literal code names/PCs are static metadata, never runtime values.
+        with zipfile.ZipFile(source) as signed_secondary:
+            dex_names=sorted(
+                (n for n in signed_secondary.namelist()
+                 if re.fullmatch(r"classes(?:[2-9][0-9]*)?\.dex",n)),
+                key=lambda n:(n!="classes.dex",n))
+            need("classes.dex" in dex_names and
+                 "classes2.dex" in dex_names and
+                 len(dex_names)<=8 and len(set(dex_names))==len(dex_names),
+                 "SIGNED_MULTIDEX_INVENTORY_BOUND")
+            secondary_dex=[(n,DEX(signed_secondary.read(n)))
+                           for n in dex_names if n!="classes.dex"]
+        multi_stats={"FIELD_DECL":[], "FIELD_WRITE":[],
+                     "SET_CALL":[], "GET_CALL":[]}
+        for dex_name,other_dex in secondary_dex:
+            for cls in other_dex.get_classes():
+                cname=cls.get_name()
+                if cname==owner:
+                    for fld in cls.get_fields():
+                        if fld.get_name()=="process":
+                            multi_stats["FIELD_DECL"].append(
+                                (dex_name,cname,"<field>",-1))
+                for meth in cls.get_methods():
+                    if meth.get_code() is None:continue
+                    for at,ins in meth.get_instructions_idx():
+                        op=ins.get_name()
+                        out=ins.get_output()
+                        hit=None
+                        if (op.startswith(("iput","sput")) and
+                            re.search(re.escape(owner)+
+                                      r"->process(?:[:\s]|$)",out)):
+                            hit="FIELD_WRITE"
+                        elif op.startswith("invoke-"):
+                            if setter_name+"(" in out:hit="SET_CALL"
+                            elif getter_name+"(" in out:hit="GET_CALL"
+                        if hit:
+                            multi_stats[hit].append(
+                                (dex_name,cname,meth.get_name(),at))
+                            need(len(multi_stats[hit])<=80,
+                                 "SIGNED_MULTIDEX_"+hit+"_SITE_BOUND")
+        need(len(multi_stats["FIELD_DECL"])==0,
+             "SIGNED_MULTIDEX_ENGINE_PROCESS_FIELD_DUPLICATE")
+        print("P209_ORIGINAL_SIGNED_DEX_COUNT="+str(len(dex_names)))
+        print("P209_ORIGINAL_SIGNED_SECONDARY_DEX_COUNT="+
+              str(len(secondary_dex)))
+        for name in ("FIELD_DECL","FIELD_WRITE","SET_CALL","GET_CALL"):
+            entries=multi_stats[name]
+            print("P209_ORIGINAL_SECONDARY_"+name+"_COUNT="+
+                  str(len(entries)))
+            for dex_name,cname,mname,at in entries[:16]:
+                role=("ENGINE" if cname==owner else
+                      "ENGINE_COROUTINE" if cname.startswith(
+                          "Lcom/dsh/android/EngineManager$") else
+                      "OTHER_ORIGINAL")
+                safe_method=(mname if re.fullmatch(
+                    r"[A-Za-z0-9_$<>]{1,80}",mname) else "OTHER_METHOD")
+                print("P209_ORIGINAL_SECONDARY_"+name+"_SITE="+
+                      dex_name+","+role+","+safe_method+","+str(at))
+        print("P209_ORIGINAL_PROCESS_ACCESSOR_ALL_SIGNED_DEX_SET_COUNT="+
+              str(len(accessor_calls["SET"])+
+                  len(multi_stats["SET_CALL"])))
+        print("P209_ORIGINAL_PROCESS_ACCESSOR_ALL_SIGNED_DEX_GET_COUNT="+
+              str(len(accessor_calls["GET"])+
+                  len(multi_stats["GET_CALL"])))
+        print("P209_ORIGINAL_PROCESS_DIRECT_WRITE_ALL_SIGNED_DEX_COUNT="+
+              str(len(writes)+len(multi_stats["FIELD_WRITE"])))
+        print("P209_ORIGINAL_PROCESS_FIELD_REFLECTIVE_WRITES=NOT_AUDITED")
+        print("P209_ORIGINAL_PROCESS_FIELD_RUNTIME_VALUE=NOT_ATTESTED")
+
         print("P209_ORIGINAL_PROCESS_FIELD_RUNTIME_STATE=NOT_ATTESTED")
         print("P209_ORIGINAL_PROCESS_RUNTIME_VALUE=NOT_ATTESTED")
         print("P209_SIGNED_PC214_REGISTER_PROVENANCE_IS_STATIC_ONLY=YES")
