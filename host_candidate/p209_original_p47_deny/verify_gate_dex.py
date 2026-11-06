@@ -141,6 +141,32 @@ def main():
             print("P209_SIGNED_STATE_GUARD_PC="+str(guard)+
                   ",OP="+expected+",FALL="+str(sequential)+
                   ",TAKEN="+str(destination))
+        # Compact signed-original bytecode structure around both states;
+        # never expose literal strings, argv, device values or runtime data.
+        window=[(pc,ins) for pc,ins in rows if 182<=pc<250]
+        need(1<=len(window)<=40 and 218 in by_original_pc,
+             "PC214_POSTCALL_BOUNDED_WINDOW")
+        print("P209_SIGNED_PC182_PC250_OPCODE_WINDOW="+
+              ",".join(str(pc)+":"+ins.get_name() for pc,ins in window))
+        for pc in (182,190,194,206):
+            ins=by_original_pc.get(pc)
+            need(ins is not None,"PC214_POSTCALL_SYMBOL_PC_"+str(pc))
+            static_symbol=re.search(
+                r"L[^;,\\s]+;->[A-Za-z0-9_$<>]+(?=[(:])",ins.get_output())
+            symbol=(static_symbol.group(0) if static_symbol else
+                    "NOT_UNIQUELY_DECODED")
+            need(len(symbol)<=220 and "\\n" not in symbol,
+                 "PC214_POSTCALL_SYMBOL_BOUND")
+            print("P209_SIGNED_POST176_SYMBOL_PC="+str(pc)+
+                  ",OP="+ins.get_name()+",SYMBOL="+symbol)
+        first=by_original_pc[218].get_name()
+        print("P209_SIGNED_PC214_FALL_PC218_OPCODE="+first)
+        print("P209_SIGNED_PC214_TAKEN_PC250_OPCODE="+
+              by_original_pc[250].get_name())
+        print("P209_SIGNED_PC214_FALL_IMMEDIATE_TERMINAL="+
+              ("YES" if first.startswith("return") or first=="throw"
+               else "NO"))
+        print("P209_PC214_FALL_EXIT_RUNTIME=NOT_ATTESTED")
         print("P209_SIGNED_STATE_GUARDS_RUNTIME_PATH=NOT_ATTESTED")
         print("P209_ORIGINAL_PC176_POST_CALL_STATIC_AUDIT=PASS")
         print("P209_ORIGINAL_PC176_CALL_NORMAL_RETURN=NOT_ATTESTED")
