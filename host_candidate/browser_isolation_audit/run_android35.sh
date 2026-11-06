@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # B1 disposable Android35 emulator only. No owner phone or DSH app.
 set -euo pipefail
-cd "$(dirname "$0")/../../.."
+# This script lives two directories beneath repo root, not three.
+cd "$(dirname "$0")/../.."
 stage=INIT
 trap 'rc=$?; if [[ $rc -ne 0 ]];then echo "B1_STAGE_FAILED_$stage";fi' EXIT
 serial=emulator-5554
