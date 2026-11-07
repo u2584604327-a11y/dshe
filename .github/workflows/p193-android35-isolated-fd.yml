@@ -1,0 +1,87 @@
+name: P193 Android35 isolated Binder FD no-network proof
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p193_isolated_fd_binder/**'
+      - '.github/workflows/p193-android35-isolated-fd.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p193-isolated-fd-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p193-isolated-fd:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 27
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: No app permission, no TCP listener, no real-device runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=host_candidate/p193_isolated_fd_binder
+          src="$p/probe/src"
+          grep -Fq 'android:isolatedProcess="true"' "$src/main/AndroidManifest.xml"
+          grep -Fq 'android:exported="false"' "$src/main/AndroidManifest.xml"
+          grep -Fq 'ParcelFileDescriptor.createReliablePipe()' "$src/main/java/com/dsh/p193probe/ProbeActivity.java"
+          grep -Fq 'Process.isIsolatedUid(msg.sendingUid)' "$src/main/java/com/dsh/p193probe/ProbeActivity.java"
+          grep -Fq 'msg.sendingUid!=getApplicationInfo().uid' "$src/main/java/com/dsh/p193probe/IsolatedPipeService.java"
+          ! grep -RqE '<uses-permission|sharedUserId|android.permission.INTERNET|addJavascriptInterface|ProcessBuilder|ServerSocket|ServerSocketChannel' "$src"
+          grep -Fq 'getprop ro.kernel.qemu' "$p/run_android35.sh"
+          bash -n "$p/run_android35.sh"
+          echo P193_SOURCE_NO_NETWORK_AND_ISOLATED_SERVICE=PASS
+      - name: Build exactly one disposable APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=host_candidate/p193_isolated_fd_binder/probe
+          gradle -p "$p" --no-daemon assembleDebug > "$RUNNER_TEMP/p193-build.log" 2>&1 || {
+            tail -n 60 "$RUNNER_TEMP/p193-build.log"; exit 2;
+          }
+          dir="$p/build/outputs/apk/debug"
+          test "$(find "$dir" -maxdepth 1 -name '*.apk' -type f | wc -l)" -eq 1
+          a="$(find "$dir" -maxdepth 1 -name '*.apk' -type f | head -n1)"
+          badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$a")"
+          [[ "$badging" == *"package: name='com.dsh.p193probe'"* &&
+             "$badging" != *"uses-permission:"* ]]
+          cp "$a" "$p/.p193-disposable.apk"
+          echo P193_OFFLINE_DISPOSABLE_APK=PASS
+      - name: Allow KVM for isolated Android emulator
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_3a
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p193_isolated_fd_binder/run_android35.sh
+      - name: Production never enabled by synthetic IPC
+        if: always()
+        shell: bash
+        run: |
+          echo P193_NODE_INTEGRATION=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P193_ACTUAL_BROWSER_ISOLATION=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P193_USER_PHONE=NOT_TOUCHED >> "$GITHUB_STEP_SUMMARY"
+          echo P193_AVF_PVM=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P193_V139_RELEASE=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"
