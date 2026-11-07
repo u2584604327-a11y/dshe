@@ -70,6 +70,15 @@ public abstract class SlotProbe extends Activity {
     // Third-party cookies never enabled in this disposable probe.
     cookies.setAcceptThirdPartyCookies(web,false);
     String read=cookies.getCookie(ORIGIN);
+    // Diagnostic metadata only: never log cookie contents, account data or URLs.
+    // This is the disposable offline probe, not the original DSH package.
+    Log.i(TAG,"B1_DIAG_PRESEED_PHASE="+phase
+        +" SLOT="+slot()
+        +" RECREATED="+(state!=null)
+        +" PROCESS_MATCH="+(getPackageName()+":slot"+slot()).equals(Application.getProcessName())
+        +" COOKIE_PRESENT="+(read!=null)
+        +" SYNTHETIC_A_PRESENT="+(read!=null&&read.contains("b1a="))
+        +" SYNTHETIC_B_PRESENT="+(read!=null&&read.contains("b1b=")));
     if (phase==0) {
       if (read!=null && (read.contains("b1a=")||read.contains("b1b="))) {
         deny("PREEXISTING_PROFILE_COOKIE");return;
