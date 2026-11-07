@@ -187,8 +187,17 @@ def inject_precall(s, expected_guard_op="if-ne"):
     # the callee or original exception flow. Never read/copy the result object.
     call_re=(r"(?m)^[ \t]+invoke-static/range[ \t]+"
              r"\{(?P<register>[vp][0-9]+)[ \t]*\.\.[ \t]*(?P=register)\},[ \t]*"
-             r"Lkotlin/ResultKt;->throwOnFailure\(Ljava/lang/Object;\)V[ \t]*\n")
+             r"Lkotlin/ResultKt;->throwOnFailure\(Ljava/lang/Object;\)V"
+             r"(?:[ \t]*#[^\r\n]*)?[ \t]*\r?\n")
     found=list(re.finditer(call_re,newbody))
+    candidates=[ln for ln in newbody.splitlines()
+                if "throwOnFailure" in ln]
+    # Counts and opcode categories only; NEVER print registers, source, p1 or args.
+    print("P209_PC176_SMALI_CALLEE_LINE_COUNT="+str(min(len(candidates),100)))
+    print("P209_PC176_SMALI_RANGE_OP_LINE_COUNT="+str(sum(
+        "invoke-static/range" in ln for ln in candidates)))
+    print("P209_PC176_SMALI_HAS_INLINE_COMMENT="+(
+        "YES" if any("#" in ln for ln in candidates) else "NO"))
     need(len(found)==1,"PC176_THROWONFAILURE_EXACT_SMALI")
     start,end=found[0].span()
     need(newbody.index(TARGET_INVOKE)<start<end<=newbody.index(PRE_INVOKE),

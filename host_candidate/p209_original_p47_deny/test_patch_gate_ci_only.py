@@ -135,6 +135,12 @@ class PreCallTests(unittest.TestCase):
         fixture=precall_fixture().replace("{p1 .. p1}","{v7 .. v7}")
         output=p.inject_precall(fixture)
         self.assertEqual(output.count(p.POST_INVOKE.strip()),1)
+    def test_same_register_with_bounded_inline_comment(self):
+        f=precall_fixture()
+        f=f.replace("->throwOnFailure(Ljava/lang/Object;)V\n",
+                    "->throwOnFailure(Ljava/lang/Object;)V  # fixture\n")
+        parsed=p.inject_precall(f)
+        self.assertEqual(parsed.count(p.POST_INVOKE.strip()),1)
     def test_different_start_end_registers_denied(self):
         fixture=precall_fixture().replace("{p1 .. p1}","{v7 .. v8}")
         with self.assertRaises(p.Deny) as denied:p.inject_precall(fixture)
