@@ -78,13 +78,12 @@ def precall_fixture():
       "    if-ne v0, v1, :done\n"+
       "    const/4 v2, 0x0\n"+
       "    :done\n"+
-      "    invoke-static/range {p1 .. p1}, Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V\n"+
       "    invoke-static {v0}, "+p.P40_TARGET+"\n"+
       "    return-object v0\n.end method\n")
 class PreCallTests(unittest.TestCase):
     def test_pre_call_exact_inverse(self):
         s=precall_fixture()
-        self.assertEqual(p.inject_precall(s).replace(p.GUARD_INVOKE,"",1).replace(p.FALL_INVOKE,"",1).replace(p.TARGET_INVOKE,"",1).replace(p.POST_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),s)
+        self.assertEqual(p.inject_precall(s).replace(p.GUARD_INVOKE,"",1).replace(p.FALL_INVOKE,"",1).replace(p.TARGET_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),s)
     def test_missing_p40_fails_closed(self):
         s=precall_fixture().replace(p.P40_TARGET,"Lcom/example/Other;->start()V")
         with self.assertRaises(p.Deny):p.inject_precall(s)
@@ -110,7 +109,7 @@ class PreCallTests(unittest.TestCase):
     def test_dynamic_first_if_op_matches_exact_runtime_pin(self):
         value=precall_fixture().replace("if-ne v0, v1", "if-nez v0")
         result=p.inject_precall(value,expected_guard_op="if-nez")
-        self.assertEqual(result.replace(p.GUARD_INVOKE,"",1).replace(p.FALL_INVOKE,"",1).replace(p.TARGET_INVOKE,"",1).replace(p.POST_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),value)
+        self.assertEqual(result.replace(p.GUARD_INVOKE,"",1).replace(p.FALL_INVOKE,"",1).replace(p.TARGET_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),value)
     def test_fallthrough_marker_once_between_if_and_p40(self):
         result=p.inject_precall(precall_fixture())
         self.assertEqual(result.count(p.FALL_INVOKE.strip()),1)
@@ -120,61 +119,12 @@ class PreCallTests(unittest.TestCase):
         value=precall_fixture().replace("    return-object v0\n",
             p.FALL_INVOKE+"    return-object v0\n")
         with self.assertRaises(p.Deny) as x:p.inject_precall(value)
-        self.assertEqual(str(x.exception),"P209_DENY_PRECALL_OR_GUARD_OR_FALL_OR_TARGET_OR_POST_ALREADY_MARKED")
+        self.assertEqual(str(x.exception),"P209_DENY_PRECALL_OR_GUARD_OR_FALL_OR_TARGET_ALREADY_MARKED")
     def test_taken_target_marker_after_label_and_before_p40(self):
         x=p.inject_precall(precall_fixture())
         self.assertEqual(x.count(p.TARGET_INVOKE.strip()),1)
         self.assertLess(x.index("    :done"),x.index(p.TARGET_INVOKE))
         self.assertLess(x.index(p.TARGET_INVOKE),x.index(p.PRE_INVOKE))
-    def test_after_original_throwonfailure_only(self):
-        x=p.inject_precall(precall_fixture())
-        exact="    invoke-static/range {p1 .. p1}, Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V"
-        self.assertEqual(x.count(p.POST_INVOKE.strip()),1)
-        self.assertTrue(x.index(p.TARGET_INVOKE)<x.index(exact)<x.index(p.POST_INVOKE)<x.index(p.PRE_INVOKE))
-    def test_smali_v_register_alias_with_exact_same_start_end(self):
-        fixture=precall_fixture().replace("{p1 .. p1}","{v7 .. v7}")
-        output=p.inject_precall(fixture)
-        self.assertEqual(output.count(p.POST_INVOKE.strip()),1)
-    def test_same_register_with_bounded_inline_comment(self):
-        f=precall_fixture()
-        f=f.replace("->throwOnFailure(Ljava/lang/Object;)V\n",
-                    "->throwOnFailure(Ljava/lang/Object;)V  # fixture\n")
-        parsed=p.inject_precall(f)
-        self.assertEqual(parsed.count(p.POST_INVOKE.strip()),1)
-    def test_different_start_end_registers_denied(self):
-        fixture=precall_fixture().replace("{p1 .. p1}","{v7 .. v8}")
-        with self.assertRaises(p.Deny) as denied:p.inject_precall(fixture)
-        self.assertEqual(str(denied.exception),"P209_DENY_PC176_THROWONFAILURE_EXACT_SMALI")
-    def test_multiple_other_throwonfailure_call_sites_do_not_change_target(self):
-        f=precall_fixture()
-        other="    invoke-static/range {v2 .. v2}, Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V\n"
-        f=f.replace("    invoke-static {v0}, "+p.P40_TARGET,
-                    other+"    invoke-static {v0}, "+p.P40_TARGET)
-        out=p.inject_precall(f)
-        self.assertLess(out.index(p.POST_INVOKE),out.index(other))
-        self.assertEqual(out.count(p.POST_INVOKE.strip()),1)
-    def test_long_unrelated_method_body_does_not_change_first_opcode(self):
-        f=precall_fixture()
-        orig="    invoke-static {v0}, "+p.P40_TARGET
-        long_directive="    #"+("x"*25000)+"\n"
-        f=f.replace(orig,long_directive+orig)
-        out=p.inject_precall(f)
-        self.assertEqual(out.count(p.POST_INVOKE.strip()),1)
-    def test_target_first_executable_opcode_must_match_pc176(self):
-        f=precall_fixture().replace("    :done\n",
-                                    "    :done\n    const/4 v3, 0x0\n")
-        with self.assertRaises(p.Deny) as error:p.inject_precall(f)
-        self.assertEqual(str(error.exception),"P209_DENY_PC176_THROWONFAILURE_EXACT_SMALI")
-    def test_missing_original_throwonfailure_fails_closed(self):
-        x=precall_fixture().replace("Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V",
-                                    "Lkotlin/Other;->noReturnProof(Ljava/lang/Object;)V")
-        with self.assertRaises(p.Deny) as error:p.inject_precall(x)
-        self.assertEqual(str(error.exception),"P209_DENY_PC176_THROWONFAILURE_EXACT_SMALI")
-    def test_duplicate_after_marker_denied(self):
-        x=precall_fixture().replace("    return-object v0\n",p.POST_INVOKE+"    return-object v0\n")
-        with self.assertRaises(p.Deny) as error:p.inject_precall(x)
-        self.assertEqual(str(error.exception),
-            "P209_DENY_PRECALL_OR_GUARD_OR_FALL_OR_TARGET_OR_POST_ALREADY_MARKED")
     def test_no_first_branch_target_label_refused(self):
         x=precall_fixture().replace(":done",":missing",1)
         with self.assertRaises(p.Deny) as err:p.inject_precall(x)

@@ -42,7 +42,6 @@ GUARD_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->m
 GUARD_MAX_PC=3912
 TARGET_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markTakenTarget()V\n"
 FALL_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markFallthrough()V\n"
-POST_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markAfterThrowOnFailure()V\n"
 
 class Deny(Exception):pass
 def need(v,code):
@@ -144,8 +143,8 @@ def patch_p40(s):
 def inject_precall(s, expected_guard_op="if-ne"):
     import re
     need(all(mark.strip() not in s for mark in
-             (PRE_INVOKE,GUARD_INVOKE,FALL_INVOKE,TARGET_INVOKE,POST_INVOKE)),
-         "PRECALL_OR_GUARD_OR_FALL_OR_TARGET_OR_POST_ALREADY_MARKED")
+             (PRE_INVOKE,GUARD_INVOKE,FALL_INVOKE,TARGET_INVOKE)),
+         "PRECALL_OR_GUARD_OR_FALL_OR_TARGET_ALREADY_MARKED")
     import sys
     sys.path.insert(0,"host_candidate/p208_original_start_coroutine")
     import patch_ci_only as p208
@@ -182,53 +181,12 @@ def inject_precall(s, expected_guard_op="if-ne"):
              body[guard_at:after_cond]+FALL_INVOKE+
              body[after_cond:label_end]+TARGET_INVOKE+
              body[label_end:at]+PRE_INVOKE+body[at:])
-    # Exact signed PC176: invoke-static/range ResultKt.throwOnFailure(p1).
-    # Add a zero-register category marker AFTER its normal return, not inside
-    # the callee or original exception flow. Never read/copy the result object.
-    call_re=(r"(?m)^[ \t]+invoke-static/range[ \t]+"
-             r"\{(?P<register>[vp][0-9]+)[ \t]*\.\.[ \t]*(?P=register)\},[ \t]*"
-             r"Lkotlin/ResultKt;->throwOnFailure\(Ljava/lang/Object;\)V"
-             r"(?:[ \t]*#[^\r\n]*)?[ \t]*\r?\n")
-    candidates=[ln for ln in newbody.splitlines()
-                if "throwOnFailure" in ln]
-    # Category-only: original coroutine has multiple ResultKt call sites.
-    print("P209_PC176_SMALI_CALLEE_LINE_COUNT="+str(min(len(candidates),100)))
-    print("P209_PC176_SMALI_RANGE_OP_LINE_COUNT="+str(sum(
-        "invoke-static/range" in ln for ln in candidates)))
-    print("P209_PC176_SMALI_HAS_INLINE_COMMENT="+(
-        "YES" if any("#" in ln for ln in candidates) else "NO"))
-    # The signed original PC26 taken target is PC176. TARGET_INVOKE is inserted
-    # directly after that exact label. Only the first executable instruction
-    # following the label can be the original PC176; do not select any of the
-    # other three throwOnFailure sites in this method by text alone.
-    begin=newbody.index(TARGET_INVOKE)+len(TARGET_INVOKE)
-    limit=newbody.index(PRE_INVOKE)
-    need(begin<limit,"PC176_BOUND_REGION")
-    # Bound the near-target scan only; unrelated later original instructions
-    # can make the signed method very large without affecting PC176 identity.
-    prefix=newbody[begin:min(limit,begin+4096)]
-    offset=begin
-    first=None
-    for index,line in enumerate(prefix.splitlines(keepends=True)):
-        need(index<32,"PC176_PREFIX_LINE_BOUND")
-        stripped=line.strip()
-        if not stripped or stripped.startswith((".",":","#")):
-            offset+=len(line)
-            continue
-        first=(offset,line)
-        break
-    need(first is not None and re.fullmatch(call_re,first[1]) is not None,
-         "PC176_THROWONFAILURE_EXACT_SMALI")
-    start,end=first[0],first[0]+len(first[1])
-    need(begin<=start<end<=limit,"PC176_POSTCALL_WITHIN_SIGNED_TAKEN_PATH")
-    print("P209_PC176_SELECTED_BY_SIGNED_BRANCH_TARGET_FIRST_OPCODE=PASS")
-    newbody=newbody[:end]+POST_INVOKE+newbody[end:]
     new=s[:a]+newbody+s[b:]
-    for mark in (GUARD_INVOKE,FALL_INVOKE,TARGET_INVOKE,POST_INVOKE,PRE_INVOKE):
+    for mark in (GUARD_INVOKE,FALL_INVOKE,TARGET_INVOKE,PRE_INVOKE):
         need(new.count(mark.strip())==1,"ONLY_ONE_TEST_MARKER_EACH")
     need(new.replace(GUARD_INVOKE,"",1).replace(FALL_INVOKE,"",1).
-         replace(TARGET_INVOKE,"",1).replace(POST_INVOKE,"",1).replace(PRE_INVOKE,"",1)==s,
-         "EXACT_FIVE_REVERSIBLE_CI_MARKERS")
+         replace(TARGET_INVOKE,"",1).replace(PRE_INVOKE,"",1)==s,
+         "EXACT_FOUR_REVERSIBLE_CI_MARKERS")
     return new
 def inject_p40():
     import hashlib
@@ -255,16 +213,6 @@ def inject_p40():
     need(conds and conds[0][0]==26 and conds[0][1]=="if-eqz",
          "SIGNED_FIRST_GUARD_PC26_IF_EQZ")
     original_first_pc,original_first_op=conds[0]
-    # Pin actual signed DEX opcode, callee and immediately following opcode;
-    # smali display registers are allowed to use vN or pN aliases only.
-    original_pc={pc:ins for pc,ins in methods[0].get_instructions_idx()}
-    call=original_pc.get(176)
-    following=original_pc.get(182)
-    need(call is not None and following is not None and
-         call.get_name()=="invoke-static/range" and call.get_length()==6 and
-         "Lkotlin/ResultKt;->throwOnFailure(" in call.get_output() and
-         following.get_name()=="iget-object",
-         "SIGNED_PC176_THROWONFAILURE_PC182_EXACT_PAIR")
     signed_first_instruction=next(ins for pc,ins in methods[0].get_instructions_idx()
                                   if pc==original_first_pc)
     need(original_first_pc+signed_first_instruction.get_length()==30 and
@@ -282,12 +230,11 @@ def inject_p40():
     need(PRE_SRC.is_file() and not PRE_SRC.is_symlink(),"PINNED_START2_SMALI_ONLY")
     original=PRE_SRC.read_text()
     PRE_SRC.write_text(inject_precall(original,original_first_op))
-    need(PRE_SRC.read_text().replace(GUARD_INVOKE,"",1).replace(FALL_INVOKE,"",1).replace(TARGET_INVOKE,"",1).replace(POST_INVOKE,"",1).replace(PRE_INVOKE,"",1)==original,
+    need(PRE_SRC.read_text().replace(GUARD_INVOKE,"",1).replace(FALL_INVOKE,"",1).replace(TARGET_INVOKE,"",1).replace(PRE_INVOKE,"",1)==original,
          "PRECALL_SOURCE_EXACT_INVERSE")
     print("P209_ONLY_TEST_ORIGINAL_FIRST_GUARD_MARKER=PASS")
     print("P209_PC26_FALLTHROUGH_PC30_ONLY_REVERSIBLE_MARKER=PASS")
     print("P209_PC26_TAKEN_LABEL_PC176_ONLY_REVERSIBLE_MARKER=PASS")
-    print("P209_PC176_POST_THROWONFAILURE_ONLY_REVERSIBLE_MARKER=PASS")
     print("P209_ONLY_TEST_PRE_PC3912_MARKER=PASS")
     print("P209_ONLY_TEMP_P40_ONE_LOG_AND_NO_HOST_SPAWN=PASS")
 def main():

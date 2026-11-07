@@ -59,7 +59,7 @@ selected=
 valid=NO
 for _ in $(seq 1 18);do
   raw="$(adb -s "$serial" logcat -d -v threadtime \
-    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I P209_PREP40:I P209_GUARD:I P209_FALL:I P209_TAKEN:I P209_POST176:I AndroidRuntime:E '*:S')"
+    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I P209_PREP40:I P209_GUARD:I P209_FALL:I P209_TAKEN:I AndroidRuntime:E '*:S')"
   selected="$(printf '%s\n' "$raw" | awk -v m="$marker" '
     index($0,m){count++;after=1;next}
     after{print}
@@ -150,8 +150,6 @@ p209_gate_diagnostic() {
   echo P209_HOST_ANDROID_RUNTIME_FATAL_IS_NOT_PROOF_OF_COROUTINE_RESULT=YES
   echo "P209_PC176_TARGET_TAG_COUNT=$(p209_count 'P209_PC176_BRANCH_TARGET=OBSERVED')"
   echo "P209_PC176_TARGET_HOST_PID_COUNT=$(p209_count_pid 'P209_PC176_BRANCH_TARGET=OBSERVED')"
-  echo "P209_PC176_POSTCALL_TAG_COUNT=$(p209_count 'P209_PC176_THROWONFAILURE_RETURNED=OBSERVED')"
-  echo "P209_PC176_POSTCALL_HOST_PID_COUNT=$(p209_count_pid 'P209_PC176_THROWONFAILURE_RETURNED=OBSERVED')"
   echo "P209_PC176_TARGET_ISOLATED_COUNT=$(p209_count 'P209_PC176_TAKEN_ISOLATED=DENY')"
   echo "P209_PC30_FALL_TAG_COUNT=$(p209_count 'P209_PC30_FALLTHROUGH=OBSERVED')"
   echo "P209_PC30_FALL_HOST_PID_COUNT=$(p209_count_pid 'P209_PC30_FALLTHROUGH=OBSERVED')"
@@ -173,9 +171,6 @@ p209_gate_diagnostic() {
 }
 if [[ "$selected" == *P209_PC176_TAKEN_ISOLATED=DENY* ]];then
   echo P209_PC176_TAKEN_ISOLATED_HOST=DENY;exit 2
-fi
-if [[ "$selected" == *P209_PC176_POSTCALL_ISOLATED=DENY* ]];then
-  echo P209_PC176_POSTCALL_WRONG_PROCESS=DENY;exit 2
 fi
 if [[ "$selected" == *P209_PC30_FALL_ISOLATED=DENY* ]];then
   echo P209_PC30_FALL_ISOLATED=DENY;exit 2
@@ -223,22 +218,6 @@ if [[ "$taken_host" -gt 0 ]];then
   echo P209_PC26_TAKEN_TO_PC176=OBSERVED
 else
   echo P209_PC26_TAKEN_TO_PC176=NOT_OBSERVED
-fi
-post_total="$(p209_count 'P209_PC176_THROWONFAILURE_RETURNED=OBSERVED')"
-post_host="$(p209_count_pid 'P209_PC176_THROWONFAILURE_RETURNED=OBSERVED')"
-[[ "$post_total" == "$post_host" && "$post_host" -le "$taken_host" ]] || {
-  echo P209_PC176_POSTCALL_FOREIGN_OR_UNMATCHED_TARGET=DENY;exit 2
-}
-if [[ "$post_host" -gt 0 ]];then
-  printf '%s\n' "$selected" | awk '
-    /P209_PC176_BRANCH_TARGET=OBSERVED/{if(!taken)taken=NR}
-    /P209_PC176_THROWONFAILURE_RETURNED=OBSERVED/{if(!returned)returned=NR}
-    END{if(!taken||!returned||returned<=taken)exit 2}' || {
-    echo P209_PC176_POSTCALL_BEFORE_TARGET=DENY;exit 2
-  }
-  echo P209_PC176_THROWONFAILURE_NORMAL_RETURN=OBSERVED
-else
-  echo P209_PC176_THROWONFAILURE_NORMAL_RETURN=NOT_OBSERVED
 fi
 for key in P209_P47_ENTER_UID= P209_P47_FINAL_DENY_UID=;do
   vals="$(printf '%s\n' "$selected" | awk -v pid="$pid" -v key="$key" '
