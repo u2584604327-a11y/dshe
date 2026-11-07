@@ -153,6 +153,13 @@ class PreCallTests(unittest.TestCase):
         out=p.inject_precall(f)
         self.assertLess(out.index(p.POST_INVOKE),out.index(other))
         self.assertEqual(out.count(p.POST_INVOKE.strip()),1)
+    def test_long_unrelated_method_body_does_not_change_first_opcode(self):
+        f=precall_fixture()
+        orig="    invoke-static {v0}, "+p.P40_TARGET
+        long_directive="    #"+("x"*25000)+"\n"
+        f=f.replace(orig,long_directive+orig)
+        out=p.inject_precall(f)
+        self.assertEqual(out.count(p.POST_INVOKE.strip()),1)
     def test_target_first_executable_opcode_must_match_pc176(self):
         f=precall_fixture().replace("    :done\n",
                                     "    :done\n    const/4 v3, 0x0\n")

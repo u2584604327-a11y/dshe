@@ -203,10 +203,13 @@ def inject_precall(s, expected_guard_op="if-ne"):
     # other three throwOnFailure sites in this method by text alone.
     begin=newbody.index(TARGET_INVOKE)+len(TARGET_INVOKE)
     limit=newbody.index(PRE_INVOKE)
-    need(begin<limit and limit-begin<=20000,"PC176_BOUND_REGION")
+    need(begin<limit,"PC176_BOUND_REGION")
+    # Bound the near-target scan only; unrelated later original instructions
+    # can make the signed method very large without affecting PC176 identity.
+    prefix=newbody[begin:min(limit,begin+4096)]
     offset=begin
     first=None
-    for index,line in enumerate(newbody[begin:limit].splitlines(keepends=True)):
+    for index,line in enumerate(prefix.splitlines(keepends=True)):
         need(index<32,"PC176_PREFIX_LINE_BOUND")
         stripped=line.strip()
         if not stripped or stripped.startswith((".",":","#")):
