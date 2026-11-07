@@ -38,10 +38,18 @@ for _ in $(seq 1 35);do
     live{print}
     END{if(n!=1)print "P193_BOUNDARY_INVALID"}
   ')"
-  [[ "$selected" != *P193_BOUNDARY_INVALID* &&
-     "$selected" != *"=DENY"* ]] || {
-    echo P193_BOUNDARY_OR_DENIAL=DENY;exit 2;
-  }
+  if [[ "$selected" == *P193_BOUNDARY_INVALID* ]];then
+    echo P193_DIAG_UNIQUE_LOG_BOUNDARY=DENY;exit 2
+  fi
+  # Only fixed security categories; never UID, session, trace, or FD bytes.
+  for reason in P193_DENY_BAD_SENDER P193_DENY_BAD_PARCEL P193_DENY_REPLY_TARGET_GONE P193_DENY_HOST;do
+    if [[ "$selected" == *"$reason=DENY"* ]];then
+      echo "P193_DIAG_"$reason"=DENY";exit 2
+    fi
+  done
+  if [[ "$selected" == *"=DENY"* ]];then
+    echo P193_DIAG_OTHER_CATEGORY=DENY;exit 2
+  fi
   if [[ "$selected" == *"P193_ANDROID35_HOST_ISOLATED_BINDER_FD=PASS"* ]];then break;fi
   sleep 1
 done
