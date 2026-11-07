@@ -23,6 +23,18 @@ public final class P209PreCallWitness {
       // No logging side effect may modify original coroutine control flow.
     }
   }
+  /** Diagnostic only: exact signed original PC176 returned normally. */
+  public static void markAfterThrowOnFailure() {
+    try {
+      if (Process.isIsolated()) {
+        Log.i("P209_POST176","P209_PC176_POSTCALL_ISOLATED=DENY");
+        return;
+      }
+      Log.i("P209_POST176","P209_PC176_THROWONFAILURE_RETURNED=OBSERVED");
+    }catch(Throwable ignored) {
+      // Logging failure must not change the original coroutine flow.
+    }
+  }
   public static void markFallthrough() {
     try {
       if (Process.isIsolated()) {

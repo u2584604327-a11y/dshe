@@ -19,3 +19,16 @@ child process. P209 stays BLOCKED until actual final DENY passes.
 P209 original-PC26 fallthrough discriminator: a fourth reversible zero-register fixed diagnostic marker is placed immediately AFTER exact signed original PC26 if-eqz, BEFORE original fallthrough PC30 if-eq, strictly inside a disposable derived APK. The signed target original PC176 remains pinned. Unlike a basic symbolic DEX diff, derived DEX verifier maps every original instruction PC to its derived PC and validates *every* original if/goto destination maps identically after marker relocation, including all register operands; original PC3912 retains only the typed P40 DENY rewrite. A same-run Android35 log token from real host PID distinguishes observed fallthrough from non-observation; it never infers the PC176 arm without direct evidence. P47/P181/P182 DENY, isolated UID bind denial, sensitive tools DENY_ALL, and release BLOCKED remain unchanged.
 
 P209 PC176 taken-edge witness: the exact original signed PC26 if-eqz taken label resolves to signed-original PC176 invoke-static/range. This CI-only change inserts an additional fixed zero-register marker immediately AFTER that existing smali branch-target label, BEFORE its original first instruction. The exact derived DEX verifier checks all original conditional/goto branch targets: any original target PC176 is allowed to land on the marker immediately before that original PC176 instruction (never elsewhere); every other original destination maps exactly to its aligned original instruction. All if-register operands and every other original opcode/operand remain unchanged except the existing strict PC3912 typed P40 DENY redirect. Runtime marker requires actual host PID in the same unique log boundary. No actual Node process is created or claimed; CI fails closed unless actual P47 final DENY occurs.
+
+P209 bounded CI-only post-PC176 observation (not original-code change):
+The exact signed original PC176 must be a single `invoke-static/range`
+to `kotlin.ResultKt.throwOnFailure(p1)`, immediately followed by original
+PC182 `iget-object` (no `move-result`). Only in the disposable derived
+smali, insert `markAfterThrowOnFailure()` after the original invocation.
+The verifier strips all six test markers, checks instruction operand parity
+and original conditional/goto branch target equivalence, and rejects drift.
+A matching host-PID, in-order log category proves that particular PC176
+call returned normally. Missing marker does NOT prove the result was a
+failure; it may also reflect lifecycle/process interruption. No result
+object, stack trace, UID, cookies or user data is logged. The strict P47
+final DENY remains required; no new executable path or child start allowed.

@@ -13,6 +13,7 @@ PRE="Lcom/dsh/android/p209/P209PreCallWitness;->mark()V"
 GUARD="Lcom/dsh/android/p209/P209PreCallWitness;->markFirstGuard()V"
 FALL="Lcom/dsh/android/p209/P209PreCallWitness;->markFallthrough()V"
 TARGET="Lcom/dsh/android/p209/P209PreCallWitness;->markTakenTarget()V"
+POST="Lcom/dsh/android/p209/P209PreCallWitness;->markAfterThrowOnFailure()V"
 P208="Lcom/dsh/android/p208/P208StartCoroutineWitness;->mark()V"
 OLD="Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;"
 NEW="Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;"
@@ -26,30 +27,34 @@ def compare(original,derived):
     after=list(derived.get_instructions_idx())
     def match(ins,sym):return ins.get_name()=="invoke-static" and sym in ins.get_output()
     markers=[[k for k,(_,ins) in enumerate(after) if match(ins,sym)]
-             for sym in (P208,GUARD,FALL,TARGET,PRE)]
+             for sym in (P208,GUARD,FALL,TARGET,POST,PRE)]
     require(markers[0]==[0] and all(len(v)==1 for v in markers[1:]),
-            "EXACT_FIVE_DISPOSABLE_MARKERS")
-    gi,fi,ti,pi=(v[0] for v in markers[1:])
-    require(0<gi<fi<ti<pi and gi+2==fi and
+            "EXACT_SIX_DISPOSABLE_MARKERS")
+    gi,fi,ti,xi,pi=(v[0] for v in markers[1:])
+    require(0<gi<fi<ti<xi<pi and gi+2==fi and xi==ti+2 and
             after[gi+1][1].get_name()=="if-eqz" and
             after[fi+1][1].get_name()=="if-eq" and
             after[ti+1][1].get_name()=="invoke-static/range" and
+            "Lkotlin/ResultKt;->throwOnFailure(" in after[xi-1][1].get_output() and
+            after[xi+1][1].get_name()=="iget-object" and
             after[pi+1][1].get_name()=="invoke-static" and
             NEW in after[pi+1][1].get_output(),
-            "ORIGINAL_PC26_PC30_PC176_PC3912_ORDER")
+            "ORIGINAL_PC26_PC30_PC176_PC182_PC3912_ORDER")
     original_first=[(pc,ins) for pc,ins in before if ins.get_name().startswith("if-")]
     require(original_first and original_first[0][0]==26 and
             original_first[0][1].get_name()=="if-eqz" and
             26+original_first[0][1].get_length()==30 and
             26+2*original_first[0][1].get_ref_off()==176,
             "ORIGINAL_SIGNED_PC26_TWO_SUCCESSORS_PINNED")
-    omit={0,gi,fi,ti,pi}
+    omit={0,gi,fi,ti,xi,pi}
     aligned=[item for k,item in enumerate(after) if k not in omit]
-    require(len(before)==len(aligned),"ORIGINAL_INSTRUCTION_COUNT_EXCEPT_FIVE")
+    require(len(before)==len(aligned),"ORIGINAL_INSTRUCTION_COUNT_EXCEPT_SIX")
     mapping={opc:dpc for (opc,_),(dpc,_) in zip(before,aligned)}
-    require(len(mapping)==len(before) and 176 in mapping and
-            aligned[[pc for pc,_ in before].index(176)][1].get_name()=="invoke-static/range",
-            "ORIGINAL_PC176_OP_MATCH")
+    require(len(mapping)==len(before) and 176 in mapping and 182 in mapping and
+            aligned[[pc for pc,_ in before].index(176)][1].get_name()=="invoke-static/range" and
+            aligned[[pc for pc,_ in before].index(182)][1].get_name()=="iget-object" and
+            after[xi-1][0]==mapping[176] and after[xi+1][0]==mapping[182],
+            "ORIGINAL_PC176_PC182_EXACT_POSTCALL_PROOF")
     target_marker_pc=after[ti][0]
     require(after[ti+1][0]==mapping[176],"TAKEN_MARKER_PRECISELY_BEFORE_ORIGINAL_PC176")
     transformed=[]
@@ -95,7 +100,7 @@ def main():
                 if c.get_name()==prev.START2 and method.get_name()=="invokeSuspend":continue
                 for _,instr in method.get_instructions_idx():
                     out=instr.get_output()
-                    require(PRE not in out and P208 not in out and GUARD not in out and FALL not in out and TARGET not in out,
+                    require(PRE not in out and P208 not in out and GUARD not in out and FALL not in out and TARGET not in out and POST not in out,
                             "EXTRA_MARKER_OUTSIDE_ORIGINAL_COROUTINE")
         for owner,name,desc in [
              (prev.ENGINE,"start","(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"),
@@ -112,13 +117,14 @@ def main():
         require("Lcom/dsh/android/p208/P208StartCoroutineWitness;" in owners and
                 "Lcom/dsh/android/p209/P209PreCallWitness;" in owners,
                 "BOTH_TEST_ONLY_CLASSES3_WITNESSES")
-        print("P209_START2_ENTRY_PC26_PC30_PC176_PC3912_FIVE_TEST_MARKERS=PASS")
+        print("P209_START2_ENTRY_PC26_PC30_PC176_PC182_PC3912_SIX_TEST_MARKERS=PASS")
         print("P209_START2_ORIGINAL_ALL_OTHER_OPCODES_OPERANDS=PARITY")
         print("P209_ORIGINAL_UPSTREAM_ENGINE_BOOT_ONCREATE=PARITY")
         print("P209_FIRST_GUARD_MATCHES_SIGNED_ORIGINAL=PASS")
         print("P209_ALL_ORIGINAL_BRANCH_TARGETS_RELOCATED_EXACTLY=PASS")
         print("P209_PC26_FALLTHROUGH_PC30_MARKER_ONLY_TEST_DEX=PASS")
         print("P209_PC26_TAKEN_PC176_BRANCH_TARGET_MARKER_ONLY_TEST_DEX=PASS")
+        print("P209_PC176_NORMAL_RETURN_MARKER_AFTER_EXACT_THROWONFAILURE=PASS")
         print("P209_FIRST_GUARD_SIGNED_PC="+str([(pc,op) for pc,op,out in ins(prev.find(o,prev.START2,"invokeSuspend","(Ljava/lang/Object;)Ljava/lang/Object;")) if op.startswith("if-")][0][0]))
         print("P209_PRE_PC3912_MARKER_ONLY_IN_DISPOSABLE_CLASSES3=PASS")
         print("P209_REAL_PC3912_RUNTIME_EXECUTION=NOT_ATTESTED")
