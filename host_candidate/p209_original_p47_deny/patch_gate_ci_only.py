@@ -186,7 +186,7 @@ def inject_precall(s, expected_guard_op="if-ne"):
     # Add a zero-register category marker AFTER its normal return, not inside
     # the callee or original exception flow. Never read/copy the result object.
     call_re=(r"(?m)^[ \t]+invoke-static/range[ \t]+"
-             r"\{p1[ \t]*\.\.[ \t]*p1\},[ \t]*"
+             r"\{(?P<register>[vp][0-9]+)[ \t]*\.\.[ \t]*(?P=register)\},[ \t]*"
              r"Lkotlin/ResultKt;->throwOnFailure\(Ljava/lang/Object;\)V[ \t]*\n")
     found=list(re.finditer(call_re,newbody))
     need(len(found)==1,"PC176_THROWONFAILURE_EXACT_SMALI")
@@ -226,6 +226,16 @@ def inject_p40():
     need(conds and conds[0][0]==26 and conds[0][1]=="if-eqz",
          "SIGNED_FIRST_GUARD_PC26_IF_EQZ")
     original_first_pc,original_first_op=conds[0]
+    # Pin actual signed DEX opcode, callee and immediately following opcode;
+    # smali display registers are allowed to use vN or pN aliases only.
+    original_pc={pc:ins for pc,ins in methods[0].get_instructions_idx()}
+    call=original_pc.get(176)
+    following=original_pc.get(182)
+    need(call is not None and following is not None and
+         call.get_name()=="invoke-static/range" and call.get_length()==6 and
+         "Lkotlin/ResultKt;->throwOnFailure(" in call.get_output() and
+         following.get_name()=="iget-object",
+         "SIGNED_PC176_THROWONFAILURE_PC182_EXACT_PAIR")
     signed_first_instruction=next(ins for pc,ins in methods[0].get_instructions_idx()
                                   if pc==original_first_pc)
     need(original_first_pc+signed_first_instruction.get_length()==30 and

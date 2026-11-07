@@ -131,6 +131,14 @@ class PreCallTests(unittest.TestCase):
         exact="    invoke-static/range {p1 .. p1}, Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V"
         self.assertEqual(x.count(p.POST_INVOKE.strip()),1)
         self.assertTrue(x.index(p.TARGET_INVOKE)<x.index(exact)<x.index(p.POST_INVOKE)<x.index(p.PRE_INVOKE))
+    def test_smali_v_register_alias_with_exact_same_start_end(self):
+        fixture=precall_fixture().replace("{p1 .. p1}","{v7 .. v7}")
+        output=p.inject_precall(fixture)
+        self.assertEqual(output.count(p.POST_INVOKE.strip()),1)
+    def test_different_start_end_registers_denied(self):
+        fixture=precall_fixture().replace("{p1 .. p1}","{v7 .. v8}")
+        with self.assertRaises(p.Deny) as denied:p.inject_precall(fixture)
+        self.assertEqual(str(denied.exception),"P209_DENY_PC176_THROWONFAILURE_EXACT_SMALI")
     def test_missing_original_throwonfailure_fails_closed(self):
         x=precall_fixture().replace("Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V",
                                     "Lkotlin/Other;->noReturnProof(Ljava/lang/Object;)V")
