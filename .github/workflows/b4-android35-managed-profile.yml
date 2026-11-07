@@ -37,7 +37,12 @@ jobs:
           p=host_candidate/browser_isolation_audit
           test -s "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
           grep -Fq 'um.isManagedProfile()' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
-          grep -Fq 'FileInputStream(foreign)' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'android.system.Os.open(' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'android.system.OsConstants.EACCES' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'android.system.OsConstants.EPERM' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'android.system.OsConstants.ENOENT' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'B4_ANDROID35_FOREIGN_OPEN_ERRNO=PERMISSION_DENIED' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          ! grep -Fq 'FileInputStream(foreign)' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
           grep -Fq 'android:allowBackup="false"' "$p/b4_os_user_probe/src/main/AndroidManifest.xml"
           ! grep -RqE '<uses-permission|sharedUserId|android.permission.INTERNET|DeviceAdminReceiver|addJavascriptInterface|ProcessBuilder' "$p/b4_os_user_probe/src"
           grep -Fq 'getprop ro.kernel.qemu' "$p/run_b4_android35.sh"

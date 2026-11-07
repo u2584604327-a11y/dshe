@@ -14,3 +14,9 @@ This is not enterprise DPC profile-owner policy proof; not a real phone
 work-profile UI, not original BrowserBridge integration, not AVF/pVM.
 Fail closed on missing emulation, user creation, UID or storage markers.
 Only this test user/package are cleaned up at runner exit.
+
+B4 strict-errno amendment: both parent and work-user verification must
+record the actual app-process Os.open() EACCES/EPERM marker. ENOENT and
+other errno values are inconclusive and fail closed. The runner demands
+exactly two permission-denied markers inside one unique real log boundary.
+This cannot be replaced by FileNotFoundException alone.

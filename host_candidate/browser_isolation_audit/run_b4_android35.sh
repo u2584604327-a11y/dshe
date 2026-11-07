@@ -86,6 +86,24 @@ probe 0 PARENT seed "$work"
 probe "$work" WORK seed 0
 probe 0 PARENT verify "$work"
 probe "$work" WORK verify 0
+# Both users must produce a real kernel EACCES/EPERM, not just an absent path.
+# The exact marker belongs to this fresh, uniquely delimited emulator run.
+trace="$(after_boundary)"
+[[ "$trace" != *"B4_INVALID_MARKER"* && "$trace" != *"=DENY"* ]] || {
+  echo B4_KERNEL_PERMISSION_MARKER_INVALID=DENY
+  exit 2
+}
+count="$(printf '%s\n' "$trace" | grep -Fc 'B4_ANDROID35_FOREIGN_OPEN_ERRNO=PERMISSION_DENIED' || true)"
+[[ "$count" == 2 ]] || {
+  echo B4_KERNEL_PERMISSION_BOTH_USERS_UNATTESTED=DENY
+  exit 2
+}
+[[ "$trace" != *"B4_ANDROID35_FOREIGN_OPEN_ERRNO=ENOENT_INCONCLUSIVE"* &&
+   "$trace" != *"B4_ANDROID35_FOREIGN_OPEN_ERRNO=OTHER_INCONCLUSIVE"* ]] || {
+  echo B4_KERNEL_PERMISSION_OTHER_ERRNO=DENY
+  exit 2
+}
+echo B4_ANDROID35_BOTH_USERS_KERNEL_EACCES_OR_EPERM=PASS
 echo B4_ANDROID35_OS_MANAGED_USER_PRIVATE_STORAGE=PASS
 echo B4_ENTERPRISE_DPC_AND_CROSS_PROFILE_POLICY=NOT_ATTESTED
 echo B4_ORIGINAL_DSH_AND_PHONE_TOUCHED=NO
