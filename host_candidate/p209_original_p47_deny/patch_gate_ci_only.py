@@ -191,7 +191,7 @@ def inject_precall(s, expected_guard_op="if-ne"):
     found=list(re.finditer(call_re,newbody))
     need(len(found)==1,"PC176_THROWONFAILURE_EXACT_SMALI")
     start,end=found[0].span()
-    need(newbody.index(TARGET_INVOKE)<start<end<newbody.index(PRE_INVOKE),
+    need(newbody.index(TARGET_INVOKE)<start<end<=newbody.index(PRE_INVOKE),
          "PC176_POSTCALL_WITHIN_SIGNED_TAKEN_PATH")
     newbody=newbody[:end]+POST_INVOKE+newbody[end:]
     new=s[:a]+newbody+s[b:]

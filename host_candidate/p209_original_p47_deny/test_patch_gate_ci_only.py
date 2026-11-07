@@ -134,10 +134,13 @@ class PreCallTests(unittest.TestCase):
     def test_missing_original_throwonfailure_fails_closed(self):
         x=precall_fixture().replace("Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V",
                                     "Lkotlin/Other;->noReturnProof(Ljava/lang/Object;)V")
-        self.deny("PC176_THROWONFAILURE_EXACT_SMALI",lambda:p.inject_precall(x))
+        with self.assertRaises(p.Deny) as error:p.inject_precall(x)
+        self.assertEqual(str(error.exception),"P209_DENY_PC176_THROWONFAILURE_EXACT_SMALI")
     def test_duplicate_after_marker_denied(self):
         x=precall_fixture().replace("    return-object v0\n",p.POST_INVOKE+"    return-object v0\n")
-        self.deny("PRECALL_OR_GUARD_OR_FALL_OR_TARGET_OR_POST_ALREADY_MARKED",lambda:p.inject_precall(x))
+        with self.assertRaises(p.Deny) as error:p.inject_precall(x)
+        self.assertEqual(str(error.exception),
+            "P209_DENY_PRECALL_OR_GUARD_OR_FALL_OR_TARGET_OR_POST_ALREADY_MARKED")
     def test_no_first_branch_target_label_refused(self):
         x=precall_fixture().replace(":done",":missing",1)
         with self.assertRaises(p.Deny) as err:p.inject_precall(x)
