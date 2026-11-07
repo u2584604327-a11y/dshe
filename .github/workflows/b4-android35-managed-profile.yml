@@ -1,0 +1,93 @@
+name: B4 Android35 managed-profile user and synthetic storage boundary
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/browser_isolation_audit/b4_os_user_probe/**'
+      - 'host_candidate/browser_isolation_audit/run_b4_android35.sh'
+      - '.github/workflows/b4-android35-managed-profile.yml'
+permissions:
+  contents: read
+concurrency:
+  group: b4-work-user-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  b4-true-managed-user:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 29
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Fail closed on source, permission, and physical-device guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=host_candidate/browser_isolation_audit
+          test -s "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'um.isManagedProfile()' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'android.system.Os.open(' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'android.system.OsConstants.EACCES' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'android.system.OsConstants.EPERM' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'android.system.OsConstants.ENOENT' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'B4_ANDROID35_FOREIGN_OPEN_ERRNO=PERMISSION_DENIED' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          ! grep -Fq 'FileInputStream(foreign)' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'android:allowBackup="false"' "$p/b4_os_user_probe/src/main/AndroidManifest.xml"
+          ! grep -RqE '<uses-permission|sharedUserId|android.permission.INTERNET|DeviceAdminReceiver|addJavascriptInterface|ProcessBuilder' "$p/b4_os_user_probe/src"
+          grep -Fq 'getprop ro.kernel.qemu' "$p/run_b4_android35.sh"
+          bash -n "$p/run_b4_android35.sh"
+          echo B4_SOURCE_QEMU_ONLY_ZERO_PERMISSION=PASS
+      - name: Build exactly one offline disposable APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=host_candidate/browser_isolation_audit/b4_os_user_probe
+          gradle -p "$p" --no-daemon assembleDebug > "$RUNNER_TEMP/b4-build.log" 2>&1 || {
+            tail -n 60 "$RUNNER_TEMP/b4-build.log"; exit 2;
+          }
+          apkdir="$p/build/outputs/apk/debug"
+          test "$(find "$apkdir" -maxdepth 1 -name '*.apk' -type f | wc -l)" -eq 1
+          apk="$(find "$apkdir" -maxdepth 1 -name '*.apk' -type f | head -n1)"
+          test -s "$apk"
+          badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk")"
+          [[ "$badging" == *"package: name='com.dsh.b4probe'"* && "$badging" != *"uses-permission:"* ]]
+          cp "$apk" "$p/.b4-disposable.apk"
+          echo B4_DISPOSABLE_BUILD=PASS
+      - name: KVM for CI emulator
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_3a
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/browser_isolation_audit/run_b4_android35.sh
+      - name: Prevent production-level inference
+        if: always()
+        shell: bash
+        run: |
+          echo B4_REAL_MANAGED_USER_UID=SEE_ANDROID35_EMULATOR_LOG >> "$GITHUB_STEP_SUMMARY"
+          echo B4_PERSONAL_PHONE_ORIGINAL_DSH_DATA=NOT_TOUCHED >> "$GITHUB_STEP_SUMMARY"
+          echo B4_ENTERPRISE_DPC_CROSS_PROFILE_POLICY=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo B4_REAL_PHONE_WORK_PROFILE=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo B4_AVF_PROTECTED_VM=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo B4_BROWSER_ROUTING=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo B4_V139_RELEASE=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"

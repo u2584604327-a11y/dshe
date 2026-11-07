@@ -1,0 +1,34 @@
+name: P163 P5 original Android instrument strict exit-vs-marker verifier
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/run_emulator_smoke.sh'
+      - 'host_candidate/p163_p5_instrumentation_evidence.sh'
+      - 'host_candidate/p163_p5_instrumentation_evidence.test.sh'
+      - '.github/workflows/p163-p5-instrumentation-evidence.yml'
+permissions:
+  contents: read
+jobs:
+  p163-original-instrumentation-evidence:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Enforce original mandatory P5 native/FD/UID marker gates without invoking emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p163_p5_instrumentation_evidence.sh
+          bash -n host_candidate/p163_p5_instrumentation_evidence.test.sh
+          bash -n host_candidate/run_emulator_smoke.sh
+          bash host_candidate/p163_p5_instrumentation_evidence.test.sh
+          grep -Fq 'p163_check_p5_instrumentation "$test_status" "$test_output"' host_candidate/run_emulator_smoke.sh
+          echo P163_NATIVE_REAL_ANDROID_SDK_OR_APK=NOT_USED >> "$GITHUB_STEP_SUMMARY"
+          echo P163_P5_NONZERO_ADB_AND_MISSING_MARKERS=STILL_DENIED >> "$GITHUB_STEP_SUMMARY"
+          echo P163_PRODUCTION_V139=BLOCKED >> "$GITHUB_STEP_SUMMARY"

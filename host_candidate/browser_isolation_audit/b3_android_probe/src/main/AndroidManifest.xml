@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:label="B3 Disposable Binder Gate" android:allowBackup="false"
+        android:usesCleartextTraffic="false">
+        <activity android:name=".HostProbe" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <service android:name=".SlotService$A" android:process=":slotA" android:exported="false"/>
+        <service android:name=".SlotService$B" android:process=":slotB" android:exported="false"/>
+        <service android:name=".HostGateService" android:exported="true"/>
+    </application>
+</manifest>

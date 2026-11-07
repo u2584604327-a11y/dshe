@@ -1,0 +1,50 @@
+name: P160 native ARM64 hosted runner Android prerequisite proof (no SDK license)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p160_arm64_native_runner/**'
+      - '.github/workflows/p160-native-arm64-runner-prereq.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p160-native-arm-host-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  native-arm64-environment-preflight:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify only pinned repository scripts, no SDK image install
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p160_arm64_native_runner/p160_arm64_host_preflight.sh
+          python3 -m py_compile host_candidate/p160_arm64_native_runner/p160_arm64_kvm_probe.py
+          python3 host_candidate/p160_arm64_native_runner/p160_arm64_kvm_probe.test.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text=Path('host_candidate/p160_arm64_native_runner/p160_arm64_host_preflight.sh').read_text()
+          probes=Path('host_candidate/p160_arm64_native_runner/p160_arm64_kvm_probe.py').read_text()
+          assert 'uname -m' in text and 'aarch64' in text
+          assert 'P160_LICENSE_ACCEPTANCE=NOT_ATTEMPTED' in text
+          assert not re.search(r'\bsdkmanager\b|\bapt-get\b|\bcurl\b|\bwget\b|\bgh\s+release\s+download\b',text)
+          assert 'CREATE_VM = 0xAE01' in probes and 'API_VERSION = 0xAE00' in probes
+          print('P160_NO_SDK_LICENSE_DOWNLOAD_OR_NODE_EXECUTION=PASS')
+          PY
+      - name: Native ARM64 Linux and KVM capability, preinstalled Android inventory
+        shell: bash
+        run: bash host_candidate/p160_arm64_native_runner/p160_arm64_host_preflight.sh
+      - name: Always retain production release deny gates
+        if: always()
+        shell: bash
+        run: |
+          echo P160_PRODUCTION_ORIGINAL_DSH_ARM64_APP_UID=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P160_FIXED_SIGNED_V139_APK=BLOCKED >> "$GITHUB_STEP_SUMMARY"

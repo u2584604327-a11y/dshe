@@ -1,0 +1,73 @@
+name: P134 real ARM64 kernel and isolated Node candidate guard (JVM + Android compile)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java'
+      - 'host_candidate/p134_real_arm64_gate/**'
+      - '.github/workflows/p134-real-arm64-isolated-guard.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: p134-real-arm64-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-arm64-kernel-deny-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Fail-closed deterministic kernel/ABI/isolated UID contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p134-jvm"
+          javac --release 8 -d "$RUNNER_TEMP/p134-jvm" \
+            host_candidate/p134_real_arm64_gate/src/com/dsh/android/p134/P134RealArm64Gate.java \
+            host_candidate/p134_real_arm64_gate/test/com/dsh/android/p134/P134RealArm64GateTest.java
+          java -cp "$RUNNER_TEMP/p134-jvm" com.dsh.android.p134.P134RealArm64GateTest
+      - name: Compile exact original isolated child with Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -f "$sdk/platforms/android-35/android.jar" || { echo P134_ANDROID_SDK_35=BLOCKED; exit 1; }
+          mkdir -p "$RUNNER_TEMP/p134-android"
+          javac --release 8 -cp "$sdk/platforms/android-35/android.jar" \
+            -d "$RUNNER_TEMP/p134-android" \
+            host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48FixedIsolatedChild.java \
+            host_candidate/p134_real_arm64_gate/src/com/dsh/android/p134/P134RealArm64Gate.java \
+            host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java
+          echo P134_P50_ORIGINAL_ANDROID_SOURCE_COMPILE=PASS >> "$GITHUB_STEP_SUMMARY"
+      - name: Check live candidate actually uses kernel identity prior to ProcessBuilder
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          f=Path('host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java').read_text()
+          assert f.count('P134RealArm64Gate.allow(')==1
+          assert 'Build.SUPPORTED_ABIS,Os.uname().machine' in f
+          assert f.index('P134RealArm64Gate.allow(') < f.index('new ProcessBuilder(')
+          assert 'Process.isIsolated()' in f and 'P50_REQUIRES_REAL_ARM64_ISOLATED_ANDROID' in f
+          assert 'NODE_SHA.equals(sha256(executable))' in f
+          assert 'P50_WORKER_HAS_INTERNET_PERMISSION' in f
+          print('P134_AUTHENTIC_KERNEL_IDENTITY_PRE_EXEC_GATE=PASS')
+          PY
+      - name: Preserve production deny gate and delete classfiles
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/p134-jvm" "$RUNNER_TEMP/p134-android"
+          echo P134_REAL_ARM64_ANDROID_DEVICE_EXEC=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P134_ORIGINAL_NODE_VERSION=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P134_ENGINE_MANAGER_LIFECYCLE=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P134_P109_NATIVE_TOOL_AUTHORITY=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P134_FORMAL_V139_RELEASE=BLOCKED >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,52 @@
+name: P168 isolated Process facade exact UID and session identity JVM gate
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p37_remote_process/**'
+      - 'host_candidate/p75_engine_rendezvous/**'
+      - '.github/workflows/p168-process-proxy-identity-pr80.yml'
+permissions:
+  contents: read
+jobs:
+  p168-bound-proxy-uid-session:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: P168 real JVM cross-thread spoofed-proxy negative and positive cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .p168_jvm
+          javac --release 8 -d .p168_jvm \
+            host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java \
+            host_candidate/p184_verified_child_receipt/src/com/dsh/android/p68/P184ChildStartReceipt.java \
+            host_candidate/p75_engine_rendezvous/src/com/dsh/android/p75/P75EngineStartRendezvous.java \
+            host_candidate/p75_engine_rendezvous/test/com/dsh/android/p75/P75EngineStartRendezvousTest.java
+          java -cp .p168_jvm com.dsh.android.p75.P75EngineStartRendezvousTest | tee p168-result.txt
+          grep -Eq '^P75_CROSS_THREAD_ENGINE_BINDER_RENDEZVOUS_JVM=PASS assertions=[0-9]+$' p168-result.txt
+          grep -Fxq 'P75_UNAUTHORIZED_ARGV_AND_NO_HOST_FALLBACK=PASS' p168-result.txt
+          grep -Fxq 'P75_REAL_PRODUCTION_NODE_AND_READY=NOT_TESTED' p168-result.txt
+          grep -Fxq 'P170_CANCELLED_LEASE_REARM_SAME_SESSION_STALE_THREAD_DENIED=PASS' p168-result.txt
+          grep -Fxq 'P171_ONE_PENDING_LEASE_EXACTLY_ONE_ENGINE_THREAD_CLAIM=PASS' p168-result.txt
+          grep -Fxq 'P177_INTERRUPTED_OLD_LEASE_CANNOT_REVOKE_NEW_SAME_SESSION=PASS' p168-result.txt
+          bash host_candidate/p37_remote_process/run_contract_tests.sh | tee p37-result.txt
+          grep -Eq '^P37_JAVA_PROCESS_LIFECYCLE_PROXY_TESTS=PASS assertions=[0-9]+$' p37-result.txt
+          grep -Fxq 'P37_ORIGINAL_ENGINEMANAGER_WIRING=NO' p37-result.txt
+          echo 'P168_P75_BOUND_SESSION_UID_NEGATIVES=PASS_REAL_JVM' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P168_ORIGINAL_PRODUCTION_ENGINE_NOT_WIRED=YES' >> "$GITHUB_STEP_SUMMARY"
+      - name: Wipe JVM classes
+        if: always()
+        shell: bash
+        run: rm -rf .p168_jvm p168-result.txt p37-result.txt

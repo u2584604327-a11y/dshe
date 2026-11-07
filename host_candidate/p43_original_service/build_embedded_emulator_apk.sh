@@ -31,6 +31,13 @@ python host_candidate/p40_exact_trampoline.py patch "$ORIGINAL" "$DIR/decoded" \
 if test "${P47_NO_HOST_FALLBACK:-0}" = 1; then
   python host_candidate/p47_no_fallback/p47_gate.py patch "$DIR/decoded"
 fi
+# When P181=1, P47's offline patch also interposes the two real v138
+# helper starts. No real Node or host fallback can be granted by this flag.
+if test "${P181_THREE_ORIGINAL_START_DENY:-0}" = 1; then
+  test "${P47_NO_HOST_FALLBACK:-0}" = 1 && test "${P51_SIDE_BY_SIDE:-0}" = 0 || {
+    echo P181_BOUNDED_REAL_V138_DENY_ONLY_REQUIRED;exit 1
+  }
+fi
 if test "${P72_ACCESSOR_FIXTURE_ONLY:-0}" = 1; then
   test "${P51_SIDE_BY_SIDE:-0}" = 1 || { echo 'P72_BLOCKED_NOT_SIDECAR';exit 1; }
   python host_candidate/p72_webview_access/patch_exact_webview_accessor.py patch "$DIR/decoded"
@@ -104,13 +111,24 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p43_original_service/android/com/dsh/android/p43/P46HostBroker.java \
   host_candidate/p43_original_service/android/com/dsh/android/p43/P46WorkerBundle.java \
   "$P74_P47_GATE_SOURCE" \
+  host_candidate/p149_prelaunch_witness/src/com/dsh/android/p149/P149OriginalBuilderWitness.java \
+  host_candidate/p150_original_coroutine/src/com/dsh/android/p150/P150OriginalCoroutineObserver.java \
+  host_candidate/p151_original_state_probe/src/com/dsh/android/p151/P151OriginalEngineStateSampler.java \
+  host_candidate/p152_termux_readonly/src/com/dsh/android/p152/P152CauseClassifier.java \
+  host_candidate/p152_termux_readonly/android/com/dsh/android/p152/P152TermuxReadOnly.java \
+  host_candidate/p153_node_elf/src/com/dsh/android/p153/P153ElfHeader.java \
+  host_candidate/p153_node_elf/android/com/dsh/android/p153/P153OriginalNodeElfProbe.java \
+  host_candidate/p156_original_app_lib_uid/src/com/dsh/android/p156/P156PrivateLibAudit.java \
+  host_candidate/p156_original_app_lib_uid/android/com/dsh/android/p156/P156OriginalAppLibProbe.java \
   host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java \
   host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48FixedIsolatedChild.java \
   host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48HostProcessProbe.java \
   host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java \
+  host_candidate/p134_real_arm64_gate/src/com/dsh/android/p134/P134RealArm64Gate.java \
   host_candidate/p53_child_start/src/com/dsh/android/p53/P53StartOrder.java \
   host_candidate/p67_authenticated_handoff/src/com/dsh/android/p67/P67AuthenticatedHandoff.java \
   host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java \
+  host_candidate/p184_verified_child_receipt/src/com/dsh/android/p68/P184ChildStartReceipt.java \
   host_candidate/p71_browser_runtime/src/com/dsh/android/p71/P71ToolReplyOnce.java \
   host_candidate/p71_browser_runtime/android/com/dsh/android/p71/P71WebViewProfileProbe.java \
   host_candidate/p73_webview_callback/android/com/dsh/android/p73/P73BrowserToolCallbackProbe.java \
@@ -119,8 +137,13 @@ javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
   host_candidate/p76_original_engine_fd/android/com/dsh/android/p76/P76EngineArchiveFdProbe.java \
   host_candidate/p77_engine_tar_audit/src/com/dsh/android/p77/P77TarAudit.java \
   host_candidate/p78_module_slot/src/com/dsh/android/p78/P78ModuleSlot.java \
+  host_candidate/p144_scoped_source_broker/src/com/dsh/android/p144/P144ScopedSourceBroker.java \
+  host_candidate/p145_exact_boot_entry/src/com/dsh/android/p145/P145ExactBootEntry.java \
+  host_candidate/p146_cli_import_hints/src/com/dsh/android/p146/P146DirectImports.java \
+  host_candidate/p147_relative_candidate_lease/src/com/dsh/android/p147/P147ScopedCandidateLease.java \
   host_candidate/p79_browser_native_mailbox/android/com/dsh/android/p79/P79NativeBrowserMailboxProbe.java \
   host_candidate/p83_hidden_browser/android/com/dsh/android/p83/P83HiddenBrowserPane.java \
+  host_candidate/p185_manual_verification/src/com/dsh/android/p185/P185ManualVerificationState.java \
   host_candidate/p85_durable_reply/android/com/dsh/android/p85/P85DurableReplyJournal.java \
   host_candidate/p85_durable_reply/android/com/dsh/android/p85/P85RestartProbe.java \
   host_candidate/p87_omnigate_sse/src/com/dsh/android/p87/P87SseDecoder.java \
@@ -198,13 +221,21 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p43/P46HostBroker;',
                   'Lcom/dsh/android/p43/P46WorkerBundle;',
                   'Lcom/dsh/android/p47/P47LaunchGate;',
+                  'Lcom/dsh/android/p150/P150OriginalCoroutineObserver;',
+                  'Lcom/dsh/android/p151/P151OriginalEngineStateSampler;',
+                  'Lcom/dsh/android/p152/P152TermuxReadOnly;',
+                  'Lcom/dsh/android/p153/P153OriginalNodeElfProbe;',
+                  'Lcom/dsh/android/p156/P156OriginalAppLibProbe;',
+                  'Lcom/dsh/android/p149/P149OriginalBuilderWitness;',
                   'Lcom/dsh/p37/P37RemoteProcess;',
                   'Lcom/dsh/android/p48/P48FixedIsolatedChild;',
                   'Lcom/dsh/android/p48/P48HostProcessProbe;',
                   'Lcom/dsh/android/p50/P50OriginalNodeFixedChild;',
+                  'Lcom/dsh/android/p134/P134RealArm64Gate;',
                   'Lcom/dsh/android/p53/P53StartOrder;',
                   'Lcom/dsh/android/p67/P67AuthenticatedHandoff;',
                   'Lcom/dsh/android/p68/P68AndroidBinderIntake;',
+                  'Lcom/dsh/android/p68/P184ChildStartReceipt;',
                   'Lcom/dsh/android/p71/P71ToolReplyOnce;',
                   'Lcom/dsh/android/p71/P71WebViewProfileProbe;',
                   'Lcom/dsh/android/p73/P73BrowserToolCallbackProbe;',
@@ -215,6 +246,7 @@ with zipfile.ZipFile(sys.argv[1]) as orig, zipfile.ZipFile(sys.argv[2]) as deriv
                   'Lcom/dsh/android/p78/P78ModuleSlot;',
                   'Lcom/dsh/android/p79/P79NativeBrowserMailboxProbe;',
                   'Lcom/dsh/android/p83/P83HiddenBrowserPane;',
+                  'Lcom/dsh/android/p185/P185ManualVerificationState;',
                   'Lcom/dsh/android/p85/P85DurableReplyJournal;',
                   'Lcom/dsh/android/p85/P85RestartProbe;',
                   'Lcom/dsh/android/p87/P87SseDecoder;',

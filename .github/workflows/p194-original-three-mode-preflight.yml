@@ -1,0 +1,75 @@
+name: P194 original v138 three-mode owner preflight source guard (Java8 only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p194_original_modes/**'
+      - '.github/workflows/p194-original-three-mode-preflight.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p194-preflight-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  fixed-original-three-mode-preflight:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Verify strict Java8 source runner and README/third-party nonendorsement
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p194_original_modes/run_java8.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('host_candidate/p194_original_modes/audit_exact_sources.py')
+          compile(p.read_text(),str(p),'exec')
+          print('P194_AUDITOR_SYNTAX=PASS')
+          PY
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+          test -s host_candidate/p194_original_modes/README.md
+          grep -Fq 'v139=STRUCTURAL_BLOCKED' host_candidate/p194_original_modes/README.md
+          echo P194_PINNED_ORIGINAL_SOURCE_ONLY_NO_BINARY_OR_RUNTIME=PASS
+      - name: Run actual P149/P182 regression and P194 owner/thread/mode/epoch negatives
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash host_candidate/p194_original_modes/run_java8.sh | tee "$RUNNER_TEMP/p194.log"
+          grep -Fxq 'P149_HOST_PRELAUNCH_BINDING_NEGATIVES=PASS' "$RUNNER_TEMP/p194.log"
+          grep -Fq 'P182_JVM_TYPED_PROBE_CONFIG_DENY_AND_STDIO_GUARD=PASS checks=' "$RUNNER_TEMP/p194.log"
+          grep -Fq 'P183_JVM_PRIMARY_STREAM_AND_WORKDIR_NEGATIVES=PASS checks=' "$RUNNER_TEMP/p194.log"
+          grep -Fxq 'P194_THREE_ORIGINAL_MODES_DIFFERENT_STDERR_POLICIES=PASS' "$RUNNER_TEMP/p194.log"
+          grep -Fxq 'P194_EXACT_BUILDER_HMAC_OWNER_EPOCH_THREAD_ONE_SHOT=PASS' "$RUNNER_TEMP/p194.log"
+          grep -Fxq 'P194_NO_FILES_NO_EXEC_NO_BINDER_CREDENTIALS=PASS' "$RUNNER_TEMP/p194.log"
+          grep -Eq '^P194_JAVA8_SOURCE_GUARD=PASS checks=[1-9][0-9]*$' "$RUNNER_TEMP/p194.log"
+          grep -Fxq 'P194_SOURCE_CONTRACT=PASS' "$RUNNER_TEMP/p194.log"
+          grep -Fxq 'P194_REAL_ORIGINAL_ENGINE_MANAGER_ALL_THREE=NOT_WIRED' "$RUNNER_TEMP/p194.log"
+          grep -Fxq 'P194_REAL_ORIGINAL_DEX_THIS_JOB=NOT_READ' "$RUNNER_TEMP/p194.log"
+          grep -Fxq 'P194_REAL_ENGINE_MANAGER_HTTP_TOKEN_READY=NOT_WIRED' "$RUNNER_TEMP/p194.log"
+          git diff --exit-code
+      - name: Preserve deny-only release boundary
+        if: always()
+        shell: bash
+        run: |
+          echo P194_ORIGINAL_V138_THREE_MODE_SOURCE_AUDIT=CHECK_PRECEDING_TEST >> "$GITHUB_STEP_SUMMARY"
+          echo P194_P149_HMAC_TEST=CHECK_PRECEDING_TEST >> "$GITHUB_STEP_SUMMARY"
+          echo P194_P184_PRODUCTION_EPOCH_BINDER_HANDOFF=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P194_ACTUAL_ORIGINAL_DEX_APK_THIS_JOB=NOT_READ >> "$GITHUB_STEP_SUMMARY"
+          echo P194_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P194_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P194_P102_NATIVE_APPROVAL=BLOCKED >> "$GITHUB_STEP_SUMMARY"
+          echo P194_GS_SCREENSHOT=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P194_APK_SIGN_DEPLOY_INSTALL=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P194_FORMAL_V139=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"

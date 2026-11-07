@@ -1,0 +1,67 @@
+name: P104 signed v135 to v138 binary entry lineage (read-only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p104_v135_v138_lineage_readonly.py'
+      - '.github/workflows/p104-v135-v138-lineage.yml'
+permissions:
+  contents: read
+jobs:
+  signed-v135-to-v138-exact-assets:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Selftest and verify SHA-pinned historic APK inputs exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = 'u2584604327-a11y/dshe'
+          python3 host_candidate/p104_v135_v138_lineage_readonly.py --selftest
+          mkdir -p .p104inputs
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo "$GH_REPO" \
+            --pattern 'DSH0.4.1-v135-browser-native-device-v1.3.5-fixed-signature.1.apk' \
+            --dir .p104inputs
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo "$GH_REPO" \
+            --pattern 'DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk' \
+            --dir .p104inputs
+          printf '%s  %s\n' \
+            394adfbe85b81ce46c285b1c531ffa307432d777e17af04fe5418272c5cc2e99 \
+            '.p104inputs/DSH0.4.1-v135-browser-native-device-v1.3.5-fixed-signature.1.apk' |
+            sha256sum -c -
+          printf '%s  %s\n' \
+            3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 \
+            '.p104inputs/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk' |
+            sha256sum -c -
+      - name: Compare original modified APK entry bytes without modification or export
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'rm -rf .p104inputs' EXIT
+          python3 host_candidate/p104_v135_v138_lineage_readonly.py \
+            --v135 .p104inputs/DSH0.4.1-v135-browser-native-device-v1.3.5-fixed-signature.1.apk \
+            --v138 .p104inputs/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee .p104report.txt
+          grep -Fqx 'P104_V135_V138_MOST_ENTRIES_SAME=PASS_LIMITED' .p104report.txt
+          grep -Fqx 'P104_V91_UPSTREAM_APK_DIRECT_PARENT=NOT_PROVEN' .p104report.txt
+          grep -Fqx 'P104_APK_DATA_OR_SIGNING_CHANGED=NO' .p104report.txt
+          {
+            echo 'P104_V135_V138_EXACT_SIGNED_APK_SHA=PASS'
+            echo 'P104_BINARY_ENTRY_OVERLAP=CHECK_LOG_REPORT'
+            echo 'P104_PUBLIC_UPSTREAM_V91_DIRECT_ANCESTOR=NOT_PROVEN'
+            echo 'P104_NATIVE_PRODUCTION_TOOL_BINDER=NOT_WIRED'
+            echo 'P104_SIGNED_OR_INSTALLED_APK=NONE'
+          } >> "$GITHUB_STEP_SUMMARY"
+          rm -f .p104report.txt

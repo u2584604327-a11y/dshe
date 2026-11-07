@@ -1,0 +1,63 @@
+name: B3 host browser-slot command negative authorization tests
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/browser_isolation_audit/slot_command_gate/**'
+      - '.github/workflows/b3-host-slot-command-gate.yml'
+permissions:
+  contents: read
+concurrency:
+  group: b3-slot-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  b3-host-negative:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile Java8-only policy, without Android/user account access
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir=host_candidate/browser_isolation_audit/slot_command_gate
+          test -s "$dir/B3SlotCommandGate.java"
+          test -s "$dir/B3GateNegativeTests.java"
+          ! grep -REn 'import android\.|HttpURLConnection|ProcessBuilder|Runtime.getRuntime|addJavascriptInterface' "$dir" --include='*.java'
+          mkdir -p "$RUNNER_TEMP/b3-classes"
+          javac --release 8 -d "$RUNNER_TEMP/b3-classes" \
+            "$dir/B3SlotCommandGate.java" "$dir/B3GateNegativeTests.java"
+          echo B3_JAVA8_COMPILATION=PASS
+      - name: Fail closed if any cross-account lease test fails
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -ea -cp "$RUNNER_TEMP/b3-classes" com.dsh.b3.B3GateNegativeTests \
+            | tee "$RUNNER_TEMP/b3-proof.log"
+          grep -Fxq 'B3_HOST_GATE_REPLAY_WRONG_SLOT_REVOKE=PASS' "$RUNNER_TEMP/b3-proof.log"
+          grep -Fxq 'B3_CONCURRENT_DUPLICATE_DENIAL=PASS' "$RUNNER_TEMP/b3-proof.log"
+          grep -Fxq 'B3_ACTUAL_ANDROID_BINDER_CALLING_UID=NOT_ATTESTED' "$RUNNER_TEMP/b3-proof.log"
+          grep -Fxq 'B3_ORIGINAL_BROWSERBRIDGE_ROUTING=NOT_WIRED' "$RUNNER_TEMP/b3-proof.log"
+          grep -Fxq 'B3_ACCOUNT_USER_DATA_ACCESSED=NO' "$RUNNER_TEMP/b3-proof.log"
+          grep -Fxq 'B3_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/b3-proof.log"
+      - name: Preserve strict production release boundary
+        if: always()
+        shell: bash
+        run: |
+          echo B3_PURE_JAVA_POLICY_ONLY=YES >> "$GITHUB_STEP_SUMMARY"
+          echo B3_REAL_ANDROID_BINDER=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo B3_SIGNED_ORIGINAL_BROWSERBRIDGE=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo B3_USER_COOKIE_OR_PROFILE_DATA_TOUCHED=NO >> "$GITHUB_STEP_SUMMARY"
+          echo B3_WORK_PROFILE_AVF=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo B3_AI_BROWSER=DEFERRED >> "$GITHUB_STEP_SUMMARY"
+          echo B3_V139_RELEASE=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"

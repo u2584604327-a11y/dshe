@@ -14,16 +14,41 @@ public final class P68AndroidBinderIntake {
   private static final int MAX_FIXTURE_BYTES=128;
   private final String trustedSession;
   private final P37RemoteProcess.RemoteControl controls;
+  private final boolean mergeErrorToOutput;
+  private final long p184OwnerEpoch;
+  private P184ChildStartReceipt p184Receipt;
+  private boolean p184Taken;
   private P67AuthenticatedHandoff handoff;
   private int isolatedUid=-1;
   private boolean invalid;
   public P68AndroidBinderIntake(String hostGeneratedSession,
                                  P37RemoteProcess.RemoteControl stopControls) {
+    this(hostGeneratedSession,stopControls,false,0L);
+  }
+  /** Trusted native host opt-in only; not inferred from worker IPC fields.
+   * Existing P48/P51 constructs the two-argument split-stream variant.
+   */
+  public P68AndroidBinderIntake(String hostGeneratedSession,
+                                 P37RemoteProcess.RemoteControl stopControls,
+                                 boolean trustedHostRequestsMergedStderr) {
+    this(hostGeneratedSession,stopControls,trustedHostRequestsMergedStderr,0L);
+  }
+  /**
+   * Opt-in test path: native host owner generation only, not any worker
+   * supplied value. Legacy fixture constructors deliberately issue NO receipt.
+   */
+  public P68AndroidBinderIntake(String hostGeneratedSession,
+      P37RemoteProcess.RemoteControl stopControls,
+      boolean trustedHostRequestsMergedStderr,long trustedHostOwnerEpoch) {
+    if(trustedHostOwnerEpoch<0)
+      throw new IllegalArgumentException("P184_TRUSTED_OWNER_EPOCH_REQUIRED");
     if(stopControls==null || hostGeneratedSession==null ||
        !hostGeneratedSession.matches("[a-f0-9]{64}"))
       throw new IllegalArgumentException("P68_TRUSTED_HOST_SESSION_REQUIRED");
     trustedSession=hostGeneratedSession;
     controls=stopControls;
+    mergeErrorToOutput=trustedHostRequestsMergedStderr;
+    p184OwnerEpoch=trustedHostOwnerEpoch;
   }
   private static boolean exactShape(Bundle b,int kind) {
     if(b==null || !b.containsKey("session") || !b.containsKey("seq"))return false;
@@ -46,6 +71,7 @@ public final class P68AndroidBinderIntake {
   }
   private Result reject() {
     invalid=true;
+    if(p184Receipt!=null)p184Receipt.revoke();
     if(handoff!=null)handoff.onTransportLost();
     return Result.REJECTED;
   }
@@ -66,7 +92,7 @@ public final class P68AndroidBinderIntake {
         isolatedUid=sender;
         handoff=new P67AuthenticatedHandoff(
             isolatedUid,trustedSession,android.os.Process::isIsolatedUid,
-            controls);
+            controls,mergeErrorToOutput);
       }else if(sender!=isolatedUid)return reject();
       byte[] data=null;
       if(msg.what==P53StartOrder.STDOUT||msg.what==P53StartOrder.STDERR){
@@ -78,6 +104,22 @@ public final class P68AndroidBinderIntake {
           b.getInt("exitCode",P37RemoteProcess.SUPERVISOR_FAILURE_EXIT_CODE):0;
       if(!handoff.onAuthenticatedFrame(sender,session,msg.what,sequence,data,code))
         return reject();
+      // P184 receipt is minted ONLY after the real Android Framework UID and
+      // P53 strict CHILD_STARTED sequence were accepted by P67, and bound
+      // to the exact P37 Process facade (never HELLO or worker Bundle UID).
+      if(msg.what==P53StartOrder.CHILD_STARTED && p184OwnerEpoch>0) {
+        Process verified=handoff.processAfterVerifiedChildStart();
+        if(!(verified instanceof P37RemoteProcess) || p184Receipt!=null)
+          return reject();
+        final P37RemoteProcess exact=(P37RemoteProcess)verified;
+        p184Receipt=new P184ChildStartReceipt(
+            exact,sender,trustedSession,p184OwnerEpoch,
+            ()->!invalid && handoff!=null &&
+                handoff.hasVerifiedChildStart() &&
+                handoff.processAfterVerifiedChildStart()==exact &&
+                (exact.terminalReason()==P37RemoteProcess.TerminalReason.RUNNING ||
+                 exact.terminalReason()==P37RemoteProcess.TerminalReason.REMOTE_EXIT));
+      }
       if(msg.what==P53StartOrder.HELLO)return Result.HELLO;
       if(msg.what==P53StartOrder.CHILD_STARTED)return Result.CHILD_STARTED;
       if(msg.what==P53StartOrder.STDOUT)return Result.STDOUT;
@@ -88,6 +130,13 @@ public final class P68AndroidBinderIntake {
     }catch(RuntimeException invalidFrame){return reject();}
   }
   public synchronized int isolatedUid(){return isolatedUid;}
+  /** One-shot delivery to a trusted P48/P75 host adapter, never to a Bundle. */
+  public synchronized P184ChildStartReceipt takeVerifiedChildStartReceipt(){
+    if(invalid || p184OwnerEpoch<=0 || p184Taken || p184Receipt==null)
+      return null;
+    p184Taken=true;
+    return p184Receipt;
+  }
   public synchronized Process processAfterAuthenticatedChildStart(){
     return !invalid && handoff!=null && handoff.hasVerifiedChildStart() ?
         handoff.processAfterVerifiedChildStart():null;

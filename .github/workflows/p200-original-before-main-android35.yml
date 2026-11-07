@@ -1,0 +1,158 @@
+name: P200 original MainActivity prelaunch baseline and genuine Android35 lifecycle callbacks (no Node)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p200_original_prelaunch/**'
+      - '.github/workflows/p200-original-before-main-android35.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p200-before-main-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-original-main-activity-before-and-after-provenance:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 58
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      P49_NODE_STAGE: '0'
+      P51_SIDE_BY_SIDE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Immutable original P43/P150/P151 and fail-closed prelaunch test contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p200_original_prelaunch/run_android35_before_main.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("host_candidate/p200_original_prelaunch/patch_p43_in_ci.py")
+          compile(p.read_text(),str(p),'exec')
+          java=Path("host_candidate/p200_original_prelaunch/android/com/dsh/android/p200/P200OriginalStartupWindow.java").read_text()
+          runner=Path("host_candidate/p200_original_prelaunch/run_android35_before_main.sh").read_text()
+          assert "EngineManager.start(" not in java
+          assert "ProcessBuilder.start(" not in java
+          assert "P200_OS_COROUTINE_PROVENANCE=NOT_ATTESTED" in java
+          assert "P200_PRELAUNCH_BASELINE_BEFORE_MAIN_ACTIVITY=PASS" in java
+          assert runner.count("--ez p200_prelaunch_window true")==1
+          assert p.read_text().count('getBooleanExtra("p200_prelaunch_window",false)')==1
+          assert 'P200_ORIGINAL_START_PRELAUNCH_TO_10S=NOT_OBSERVED' in runner
+          print("P200_EXACT_PREMAIN_INTENT_AND_NO_ENGINE_EXECUTE=PASS")
+          PY
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P181_THREE_ORIGINAL_START_DENY" = 1
+          test "$P49_NODE_STAGE" = 0
+          test "$P51_SIDE_BY_SIDE" = 0
+          test "$(git hash-object host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java)" = 8a83ef4c53c8e527f604023ab5eec2be8f2e12a9
+          test "$(git hash-object host_candidate/p43_original_service/build_embedded_emulator_apk.sh)" = 62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f
+          test "$(git hash-object host_candidate/p150_original_coroutine/src/com/dsh/android/p150/P150OriginalCoroutineObserver.java)" = eb28cea66a80700af523921fb12f8011dba6729b
+          test "$(git hash-object host_candidate/p151_original_state_probe/src/com/dsh/android/p151/P151OriginalEngineStateSampler.java)" = 646e267c457d699604cda6b68a1f45bc21145dc6
+          test "$(git hash-object host_candidate/p47_no_fallback/p47_gate.py)" = 49f0d5d07cf7e8fa1e0323c945ddbb1eed946065
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+          echo P200_PRELAUNCH_PINNED_ORIGINAL_AND_DENY_SOURCE=PASS
+      - name: Patch only original-derived disposable P43 CI activity and compile script
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p200_original_prelaunch/patch_p43_in_ci.py --ci
+          git diff --name-only | sort > .p200_actual
+          printf '%s\n' \
+            host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java \
+            host_candidate/p43_original_service/build_embedded_emulator_apk.sh | sort > .p200_expected
+          cmp .p200_actual .p200_expected
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java").read_text()
+          assert s.count('getBooleanExtra("p200_prelaunch_window",false)')==1
+          assert s.count('P200OriginalStartupWindow.arm(this)')==1
+          assert s.index("P200OriginalStartupWindow.arm(this)") < s.index("if(!assertExactBridgeFailClosed())")
+          src=Path("host_candidate/p200_original_prelaunch/android/com/dsh/android/p200/P200OriginalStartupWindow.java").read_text()
+          assert "registerActivityLifecycleCallbacks" in src
+          assert "onActivityCreated" in src and "onActivityResumed" in src
+          assert "P200_ORIGINAL_START_PRELAUNCH_TO_10S" in src
+          print("P200_FRAMEWORK_LIFECYCLE_REGISTERED_BEFORE_MAIN=PASS")
+          PY
+          echo P200_ONLY_TWO_SHA_PINNED_CI_TEST_FILES_PATCHED=PASS
+      - name: Prepare Android35 original package tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/d8"
+      - name: Build v138-derived P47 all-three-DENY ephemeral APK and verify observer class
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > .p200_build.log 2>&1;then
+            echo P200_DISPOSABLE_P47_DENY_ONLY_BUILD=DENY
+            exit 2
+          fi
+          test -s .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p200_build.log
+          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p200_build.log
+          grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p200_build.log
+          grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p200_build.log
+          python3 - <<'PY'
+          import zipfile
+          from androguard.core.dex import DEX
+          apk=".p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
+          with zipfile.ZipFile(apk) as f:
+            names={c.get_name() for c in DEX(f.read("classes3.dex")).get_classes()}
+          assert "Lcom/dsh/android/p200/P200OriginalStartupWindow;" in names
+          assert "Lcom/dsh/android/p200/P200OriginalStartupWindow$Window;" in names
+          assert "Lcom/dsh/android/p150/P150OriginalCoroutineObserver;" in names
+          print("P200_TRUE_APK_PREMAIN_LIFECYCLE_OBSERVER=PASS")
+          PY
+          echo P200_ORIGINAL_V138_P47_DENY_AND_P200_TEST_APK=PASS
+      - name: Enable disposable emulator KVM
+        shell: bash
+        run: if test -c /dev/kvm;then sudo chmod 666 /dev/kvm;fi
+      - name: Actual Android35 pre-MainActivity baseline and real Application lifecycle callbacks
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p200_original_prelaunch/run_android35_before_main.sh
+      - name: Wipe disposable APK, binary sources and retain runtime blockers
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp .p200_actual .p200_expected .p200_build.log
+          echo P200_ORIGINAL_MAIN_LAUNCHER_FRAMEWORK_CALLBACKS=CHECK_ANDROID35_STEP >> "$GITHUB_STEP_SUMMARY"
+          echo P200_PREMAIN_BASELINE_FOUR_SAMPLES=CHECK_ANDROID35_STEP >> "$GITHUB_STEP_SUMMARY"
+          echo P200_COLD_APPLICATION_STARTUP=NOT_PROVEN >> "$GITHUB_STEP_SUMMARY"
+          echo P200_REAL_COROUTINE_OS_PROVENANCE=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P200_ORIGINAL_PROCESS_READER_LATCH_PARITY=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P200_ORIGINAL_ARM64_NODE_HTTP_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P200_ALL_P47_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P200_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P200_GS_CAPTURE=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P200_EXTERNAL_BROWSER_FINGERPRINT_REQUESTS=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P200_OWNER_PHONE_OR_SIGNED_RELEASE=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P200_FORMAL_V139=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"

@@ -29,6 +29,15 @@ public final class P71ToolReplyOnce {
       throw new IllegalArgumentException("P71_SAFE_ERROR_CATEGORY_REQUIRED");
     return finish(false,category,false,false);
   }
+  /** Execution has been dispatched but no trustworthy side-effect outcome is available.
+   * Never describe this as a confirmed pre-dispatch rejection or a safe retry.
+   */
+  public boolean executorDispatchedOutcomeUnknown(String category) {
+    if(category==null||!category.matches("[A-Z][A-Z0-9_]{1,63}"))
+      throw new IllegalArgumentException("P71_SAFE_ERROR_CATEGORY_REQUIRED");
+    if(!wasDispatched())throw new IllegalStateException("P71_DISPATCH_REQUIRED");
+    return finish(false,category,true,false);
+  }
   public boolean deadlineElapsed(){
     return finish(false,wasDispatched()?"EXECUTOR_TIMEOUT_OUTCOME_UNKNOWN":"QUEUED_TIMEOUT",
                   wasDispatched(),!wasDispatched());

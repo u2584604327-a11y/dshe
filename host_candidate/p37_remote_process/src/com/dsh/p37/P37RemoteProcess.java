@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -33,6 +34,8 @@ public final class P37RemoteProcess extends Process {
   private final String session;
   private final IsolatedUidVerifier uidVerifier;
   private final RemoteControl control;
+  /** Only trusted host constructor may opt in; legacy P51 stays split. */
+  private final boolean mergeErrorToOutput;
   private final BoundedStream stdout = new BoundedStream(BUFFER_BYTES);
   private final BoundedStream stderr = new BoundedStream(BUFFER_BYTES);
   private final CountDownLatch exited = new CountDownLatch(1);
@@ -44,6 +47,15 @@ public final class P37RemoteProcess extends Process {
 
   public P37RemoteProcess(int authenticatedWorkerUid, String hostSession,
       IsolatedUidVerifier verifier, RemoteControl remoteControl) {
+    this(authenticatedWorkerUid, hostSession, verifier, remoteControl, false);
+  }
+  /** P141: reproduces original ProcessBuilder.redirectErrorStream(true).
+   * Binder frame order must already be validated by P53/P67 before routing.
+   * Neither true nor false grants original Node argv or EngineManager READY.
+   */
+  public P37RemoteProcess(int authenticatedWorkerUid, String hostSession,
+      IsolatedUidVerifier verifier, RemoteControl remoteControl,
+      boolean trustedHostRequestsMergedStderr) {
     if (verifier == null || remoteControl == null || hostSession == null ||
         !hostSession.matches("[a-f0-9]{64}") || authenticatedWorkerUid < 0 ||
         !verifier.isIsolatedUid(authenticatedWorkerUid)) {
@@ -53,12 +65,35 @@ public final class P37RemoteProcess extends Process {
     session = hostSession;
     uidVerifier = verifier;
     control = remoteControl;
+    mergeErrorToOutput = trustedHostRequestsMergedStderr;
+    // With redirectErrorStream(true), Java Process.getErrorStream() is EOF;
+    // no reader may wait forever for an unpopulated error pipe.
+    if (mergeErrorToOutput) stderr.finish(false);
+  }
+
+  /** Pure identity comparison; NOT proof that any caller controls Binder.
+   * Trust still requires a separately validated platform Message.sendingUid
+   * and the original P68/P53 authenticated child-start event. No session
+   * contents are exposed, and mismatch never tears down a live Process.
+   */
+  public boolean matchesBoundIdentity(int frameworkUid, String hostSession) {
+    return frameworkUid == boundUid && session.equals(hostSession);
   }
 
   /** Caller MUST pass platform Message.sendingUid, never a Bundle UID. */
   private boolean authenticate(int frameworkUid, String incomingSession) {
-    if (frameworkUid == boundUid && session.equals(incomingSession) &&
-        uidVerifier.isIsolatedUid(frameworkUid)) return true;
+    // UID verification belongs to the trusted native adapter, but a runtime
+    // verifier failure must NOT escape a Binder callback with the remote
+    // Process still RUNNING (and unread token-bearing READY bytes buffered).
+    // Treat an unavailable/throwing verifier exactly as a rejected identity.
+    // Never include the verifier exception or private session in logs.
+    if (frameworkUid == boundUid && session.equals(incomingSession)) {
+      try {
+        if (uidVerifier.isIsolatedUid(frameworkUid)) return true;
+      } catch (RuntimeException ignored) {
+        // Invalidate below; do not let a framework lookup failure fail open.
+      }
+    }
     failClosed(TerminalReason.IDENTITY_MISMATCH);
     return false;
   }
@@ -70,18 +105,31 @@ public final class P37RemoteProcess extends Process {
   }
   public boolean onAuthenticatedStderr(int frameworkUid, String incomingSession,
       byte[] data) {
-    return accept(frameworkUid, incomingSession, data, stderr);
+    // Frame acceptance and bounded buffering share the same host receive
+    // order as STDOUT, including forged-identity and overflow revocation.
+    return accept(frameworkUid, incomingSession, data,
+        mergeErrorToOutput ? stdout : stderr);
   }
   private boolean accept(int uid, String incomingSession, byte[] data,
       BoundedStream stream) {
     if (!authenticate(uid, incomingSession)) return false;
-    if (reason != TerminalReason.RUNNING) return false;
-    if (data == null || data.length < 1 || data.length > MAX_FRAME_BYTES ||
-        !stream.offer(data)) {
-      failClosed(TerminalReason.BUFFER_OVERFLOW);
-      return false;
+    // Serialize the final RUNNING check and frame enqueue with authenticated
+    // EXIT. Otherwise EXIT can publish REMOTE_EXIT while a prior callback is
+    // waiting for the stream monitor, then that callback can append a frame
+    // after terminal publication. Preserve lock order: lock -> stream.
+    boolean callKill;
+    synchronized (lock) {
+      if (reason != TerminalReason.RUNNING) return false;
+      if (data != null && data.length >= 1 && data.length <= MAX_FRAME_BYTES &&
+          stream.offer(data)) return true;
+      // An invalid/full frame must publish BUFFER_OVERFLOW before EXIT can
+      // commit REMOTE_EXIT. Never let a concurrent clean exit mask a
+      // fail-closed transport violation or expose buffered READY bytes.
+      callKill = failClosedUnderLock(TerminalReason.BUFFER_OVERFLOW);
     }
-    return true;
+    // Remote control may reenter the proxy; invoke it only outside lock.
+    if (callKill) requestForceStopSafely();
+    return false;
   }
 
   public boolean onAuthenticatedExit(int frameworkUid, String incomingSession,
@@ -103,22 +151,28 @@ public final class P37RemoteProcess extends Process {
   public void onStopDeadlineExpired() { failClosed(TerminalReason.STOP_TIMEOUT); }
   public TerminalReason terminalReason() { return reason; }
 
+  /** Caller holds lifecycle lock; terminal reason and stream discard are
+   * one indivisible decision against authenticated EXIT. No remote callbacks.
+   */
+  private boolean failClosedUnderLock(TerminalReason cause) {
+    if (reason != TerminalReason.RUNNING) return false;
+    reason = cause;
+    exitCode = SUPERVISOR_FAILURE_EXIT_CODE;
+    stdout.finish(true); // Discard untrusted pending lines; never imply READY.
+    stderr.finish(true);
+    exited.countDown();
+    if (!killSent) { killSent = true; return true; }
+    return false;
+  }
+  private void requestForceStopSafely() {
+    try { control.requestForceStop(); } catch (RuntimeException ignored) {
+      // Failure is terminal; physical worker kill is NOT proven.
+    }
+  }
   private void failClosed(TerminalReason cause) {
-    boolean callKill = false;
-    synchronized (lock) {
-      if (reason != TerminalReason.RUNNING) return;
-      reason = cause;
-      exitCode = SUPERVISOR_FAILURE_EXIT_CODE;
-      stdout.finish(true); // Discard untrusted pending lines; never imply READY.
-      stderr.finish(true);
-      exited.countDown();
-      if (!killSent) { killSent = true; callKill = true; }
-    }
-    if (callKill) {
-      try { control.requestForceStop(); } catch (RuntimeException ignored) {
-        // Failure is already terminal; physical worker kill is NOT proven.
-      }
-    }
+    boolean callKill;
+    synchronized (lock) { callKill = failClosedUnderLock(cause); }
+    if (callKill) requestForceStopSafely();
   }
   @Override public InputStream getInputStream() { return stdout; }
   @Override public InputStream getErrorStream() { return stderr; }
@@ -174,8 +228,12 @@ public final class P37RemoteProcess extends Process {
     private final byte[] buffer;
     private int first = 0, used = 0;
     private boolean done = false;
+    // A local Process InputStream.close() must not kill the remote child.
+    // Keep validating each authenticated bounded frame, then discard it.
+    private boolean closedByReader = false;
     BoundedStream(int cap) { buffer = new byte[cap]; }
     synchronized boolean offer(byte[] source) {
+      if (closedByReader) return true;
       if (done || source.length > buffer.length - used) return false;
       for (byte b : source) {
         buffer[(first + used) % buffer.length] = b;
@@ -185,7 +243,11 @@ public final class P37RemoteProcess extends Process {
       return true;
     }
     synchronized void finish(boolean discard) {
-      if (discard) { used = 0; first = 0; }
+      if (discard) {
+        // A revoked or locally closed stream may hold a token-bearing READY line.
+        Arrays.fill(buffer, (byte) 0);
+        used = 0; first = 0;
+      }
       done = true;
       notifyAll();
     }
@@ -212,11 +274,18 @@ public final class P37RemoteProcess extends Process {
       }
       if (used == 0) return -1;
       int amount = Math.min(used, len);
-      for (int i = 0; i < amount; i++) out[off+i] = buffer[(first+i)%buffer.length];
+      for (int i = 0; i < amount; i++) {
+        int slot = (first+i)%buffer.length;
+        out[off+i] = buffer[slot];
+        buffer[slot] = 0; // Erase consumed bytes, preserve stream ordering.
+      }
       first = (first+amount)%buffer.length;
       used -= amount;
       return amount;
     }
-    @Override public void close() { finish(true); }
+    @Override public synchronized void close() {
+      closedByReader = true;
+      finish(true);
+    }
   }
 }

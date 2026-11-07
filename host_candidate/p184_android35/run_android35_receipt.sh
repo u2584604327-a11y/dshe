@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# P184 actual Android35 emulator and original-v138-derived ephemeral APK only.
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+source host_candidate/p159_emulator_root_reattach.sh
+p159_verify_disposable_root
+serial=emulator-5554
+[[ "$(adb -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r\n')" == 1 ]]
+[[ "$(adb -s "$serial" shell id -u | tr -d '\r\n')" == 0 ]]
+apk=.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+[[ -s "$apk" && -n "$ANDROID_HOME" ]]
+badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk")"
+[[ "$badging" == *"package: name='com.dsh.android'"* ]]
+before="$(adb -s "$serial" shell pm list packages -U com.dsh.android | tr -d '\r')"
+[[ "$before" != *"package:com.dsh.android"* ]] || {
+  echo P184_PREEXISTING_PACKAGE_DENY;exit 2;
+}
+uid=
+cleanup(){
+  adb -s "$serial" shell am force-stop com.dsh.android >/dev/null 2>&1 || true
+  if [[ -n "$uid" ]];then
+    adb -s "$serial" shell iptables -w -D OUTPUT -m owner --uid-owner "$uid" -j REJECT >/dev/null 2>&1 || true
+    adb -s "$serial" shell ip6tables -w -D OUTPUT -m owner --uid-owner "$uid" -j REJECT >/dev/null 2>&1 || true
+  fi
+  adb -s "$serial" shell pm uninstall com.dsh.android >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+if installed="$(adb -s "$serial" install "$apk" 2>&1)";then :;else
+  echo P184_TEST_APK_INSTALL_FAILED;exit 2;
+fi
+[[ "$installed" != *INSTALL_FAILED* && "$installed" != *Failure* &&
+   "$installed" != *Error:* ]]
+uid="$(adb -s "$serial" shell pm list packages -U com.dsh.android | tr -d '\r' |
+  sed -n -E 's/^package:com\.dsh\.android uid:([0-9]+).*/\1/p' | head -n1)"
+[[ "$uid" =~ ^[0-9]+$ && "$uid" -gt 10000 ]]
+paths="$(adb -s "$serial" shell pm path com.dsh.android | tr -d '\r')"
+[[ "$paths" == *package:*base.apk* ]]
+adb -s "$serial" shell iptables -w -I OUTPUT 1 -m owner --uid-owner "$uid" -j REJECT
+adb -s "$serial" shell ip6tables -w -I OUTPUT 1 -m owner --uid-owner "$uid" -j REJECT
+echo P184_ANDROID35_FRESH_DERIVED_APP_AND_NO_HOST_EGRESS=PASS
+launch="$(sed -n "s/^launchable-activity: name='\([^']*\)'.*/\1/p" <<< "$badging" | head -n1)"
+[[ -n "$launch" ]]
+status="$(adb -s "$serial" shell am start -W -n "com.dsh.android/$launch")"
+[[ "$status" =~ Status:\ (ok|warning) ]]
+adb -s "$serial" shell pidof com.dsh.android >/dev/null
+marker="P184_START_$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
+[[ "$marker" =~ ^P184_START_[a-f0-9]{24}$ ]]
+adb -s "$serial" shell log -p i -t P184_BOUNDARY "$marker" >/dev/null
+status="$(adb -s "$serial" shell am start -W -n \
+  com.dsh.android/com.dsh.android.p43.P43ProbeActivity \
+  --ez p184_receipt true)"
+[[ "$status" =~ Status:\ (ok|warning) ]]
+verified=NO
+for _ in $(seq 1 28); do
+  log="$(adb -s "$serial" logcat -d -v brief \
+    -s P184_BOUNDARY:I P43_HOST_BINDER:I '*:S')"
+  selected="$(printf '%s\n' "$log" | awk -v marker="$marker" '
+    index($0,marker){count++;after=1;next}
+    after{print}
+    END{if(count!=1)print "P184_INVALID_RUN_BOUNDARY"}
+  ')"
+  if [[ "$selected" == *P184_INVALID_RUN_BOUNDARY* ]];then sleep 1;continue;fi
+  if [[ "$selected" == *"P184_ANDROID35_"*"=DENY"* ||
+        "$selected" == *"P184_ANDROID35_"*"=FAIL"* ]];then
+    echo P184_ANDROID35_SAFETY_REJECTED;exit 2
+  fi
+  if [[ "$selected" == *P43_REAL_ORIGINAL_APK_BINDER_ISOLATED_UID=PASS* &&
+        "$selected" == *P184_ANDROID35_P75_FIXED_ENGINE_THREAD_WAITING=PASS* &&
+        "$selected" == *P184_ANDROID35_P75_LEGACY_BYPASS_DENIED=PASS* &&
+        "$selected" == *P184_ANDROID35_P68_TO_P75_ONCE=PASS* &&
+        "$selected" == *P184_ANDROID35_REPLAY_DENIED=PASS* &&
+        "$selected" == *P184_ANDROID35_P68_FRAMEWORK_RECEIPT=PASS* &&
+        "$selected" == *P184_ANDROID35_P75_CROSS_THREAD_EXACT_PROCESS=PASS* &&
+        "$selected" == *P184_ANDROID35_FIXED_ISOLATED_CHILD_EXIT=PASS* &&
+        "$selected" == *P184_ANDROID35_REAL_P40_ORIGINAL_COROUTINE=NOT_INVOKED* ]];then
+    verified=YES;break
+  fi
+  sleep 1
+done
+[[ "$verified" == YES ]] || { echo P184_ANDROID35_ACTUAL_RECEIPT_PROOF_INCOMPLETE;exit 2; }
+echo P184_ANDROID35_REAL_MESSAGE_SENDING_UID_TO_ONE_USE_RECEIPT=PASS
+echo P184_ANDROID35_P68_P75_EXACT_PROCESS_AND_REPLAY_DENY=PASS
+echo P184_ANDROID35_FIXED_ISOLATED_ID_UID_ONLY=PASS
+echo P184_ANDROID35_ORIGINAL_P40_ENGINE_COROUTINE=NOT_INVOKED
+echo P184_ANDROID35_ORIGINAL_NODE_HTTP_TOKEN_READY=NOT_WIRED
+echo P184_FORMAL_V139=STRUCTURAL_BLOCKED

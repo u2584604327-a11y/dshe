@@ -1,0 +1,41 @@
+name: P129 Native Bridge guest linker topology (offline read-only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p129_nativebridge_guest_linker_topology.sh'
+      - '.github/workflows/p129-nativebridge-guest-linker-topology.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: p129-nativebridge-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  guest-linker-topology:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Bound script syntax
+        run: bash -n host_candidate/p129_nativebridge_guest_linker_topology.sh
+      - name: Enable disposable emulator KVM
+        run: if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Inspect fixed guest linker paths without executing Node
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p129_nativebridge_guest_linker_topology.sh
+      - name: Freeze release safety gates
+        if: always()
+        run: |
+          echo P129_NO_ORIGINAL_NODE_EXECUTION=YES >> "$GITHUB_STEP_SUMMARY"
+          echo P129_P109_NATIVE_TOOL_GATE=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P129_PRODUCTION_V139_RELEASE=BLOCKED >> "$GITHUB_STEP_SUMMARY"

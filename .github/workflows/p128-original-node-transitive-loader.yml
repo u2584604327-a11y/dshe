@@ -1,0 +1,67 @@
+name: P128 original Node complete ELF DT_NEEDED closure audit (no emulator)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p128_original_arm64_node_transitive_elf_audit.py'
+      - '.github/workflows/p128-original-node-transitive-loader.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: p128-static-loader-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  pinned-original-elf-transitive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Original signed-v138 asset ABI and transitive dependency graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile host_candidate/p123_original_node_elf_isolation_preflight.py \
+            host_candidate/p127_google_apis_nativebridge_original_node_stage.py \
+            host_candidate/p128_original_arm64_node_transitive_elf_audit.py
+          mkdir -p "$RUNNER_TEMP/p128-v138"
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo "$GH_REPO" --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --dir "$RUNNER_TEMP/p128-v138"
+          printf '%s  %s\n' 3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 \
+            "$RUNNER_TEMP/p128-v138/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk" \
+            | sha256sum -c -
+          python3 host_candidate/p128_original_arm64_node_transitive_elf_audit.py \
+            "$RUNNER_TEMP/p128-v138/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk" \
+            --report "$RUNNER_TEMP/p128-report.json" | tee "$RUNNER_TEMP/p128-proof.txt"
+          grep -Fxq 'P128_EXACT_ORIGINAL_ARM64_LOADER_TRANSITIVE_STATIC_AUDIT=PASS' "$RUNNER_TEMP/p128-proof.txt"
+          grep -Fxq 'P128_ANDROID_LINKER_NAMESPACE=NOT_TESTED' "$RUNNER_TEMP/p128-proof.txt"
+          grep -Fxq 'P128_ORIGINAL_ISOLATED_NODE_EXEC=NOT_TESTED' "$RUNNER_TEMP/p128-proof.txt"
+          python3 - <<'PY'
+          import json,os
+          info=json.load(open(os.environ["RUNNER_TEMP"]+"/p128-report.json"))
+          assert info["sensitive_tool_access"]=="DENY_ALL"
+          assert info["formal_v139_release"]=="BLOCKED"
+          assert info["transitive_elf_libraries_visited"]>0
+          assert info["android_isolated_uid_dlopen_and_namespace"]=="NOT_TESTED"
+          print("P128_AUDIT_RESULT=STATIC_ONLY_V139_RELEASE_BLOCKED")
+          PY
+          {
+            echo 'P128_SIGNED_V138_ARM64_TRANSITIVE_DT_NEEDED=PASS_STATIC'
+            echo 'P128_ANDROID_LINKER_NAMESPACE_AND_ELF_EXEC=NOT_TESTED'
+            echo 'P128_P109_NATIVE_TOOLS=DENY_ALL'
+            echo 'P128_PRODUCTION_V139=BLOCKED'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Cleanup signed APK and local loader metadata
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/p128-v138" "$RUNNER_TEMP/p128-report.json" "$RUNNER_TEMP/p128-proof.txt"
