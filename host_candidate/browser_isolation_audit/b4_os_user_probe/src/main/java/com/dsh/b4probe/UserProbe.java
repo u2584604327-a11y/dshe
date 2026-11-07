@@ -47,9 +47,24 @@ public final class UserProbe extends Activity {
           !secret.equals(new String(buf,0,count,StandardCharsets.US_ASCII)))
           throw new SecurityException("MISMATCH");
         File foreign=new File("/data/user/"+other+"/com.dsh.b4probe/files/"+NAME);
-        try(FileInputStream stolen=new FileInputStream(foreign)){
+        // Distinguish an actual kernel permission denial from a missing path.
+        // ENOENT is inconclusive and must fail closed, never count as isolation PASS.
+        try {
+          android.system.Os.close(android.system.Os.open(
+              foreign.getAbsolutePath(), android.system.OsConstants.O_RDONLY, 0));
           throw new SecurityException("FOREIGN_READABLE");
-        }catch(FileNotFoundException expected){/* denied by OS */ }
+        } catch(android.system.ErrnoException denied) {
+          if(denied.errno==android.system.OsConstants.EACCES ||
+             denied.errno==android.system.OsConstants.EPERM) {
+            Log.i("B4_PROBE","B4_ANDROID35_FOREIGN_OPEN_ERRNO=PERMISSION_DENIED");
+          } else if(denied.errno==android.system.OsConstants.ENOENT) {
+            Log.i("B4_PROBE","B4_ANDROID35_FOREIGN_OPEN_ERRNO=ENOENT_INCONCLUSIVE");
+            throw new SecurityException("FOREIGN_PATH_MISSING");
+          } else {
+            Log.i("B4_PROBE","B4_ANDROID35_FOREIGN_OPEN_ERRNO=OTHER_INCONCLUSIVE");
+            throw new SecurityException("FOREIGN_OPEN_UNEXPECTED_ERRNO");
+          }
+        }
       }else throw new SecurityException("INVALID_PHASE");
       Log.i("B4_PROBE","B4_ANDROID35_"+role+"_"+phase.toUpperCase(java.util.Locale.US)+"=PASS");
     }catch(Exception failed){deny();return;}
