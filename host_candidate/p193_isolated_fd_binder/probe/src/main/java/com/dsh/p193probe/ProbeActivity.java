@@ -27,16 +27,27 @@ public final class ProbeActivity extends Activity {
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()){
     @Override public void handleMessage(Message msg){
       if(msg.what!=IsolatedPipeService.REPLY ||
-         !Process.isIsolatedUid(msg.sendingUid)){deny();return;}
+         !Process.isIsolatedUid(msg.sendingUid)){
+        Log.i(TAG,"P193_DENY_REPLY_IDENTITY=DENY");deny();return;
+      }
       String outcome;
       try{outcome=msg.getData().getString("result");}
-      catch(RuntimeException bad){deny();return;}
+      catch(RuntimeException bad){
+        Log.i(TAG,"P193_DENY_REPLY_PARCEL=DENY");deny();return;
+      }
       if(phase==0 && "DENY_MISSING_FD".equals(outcome)){
         Log.i(TAG,"P193_MISSING_FD_REJECTED=PASS");
         phase=1;sendFd();
       }else if(phase==1 && "FD_PAYLOAD_OK".equals(outcome)){
         phase=2;Log.i(TAG,"P193_ANDROID35_HOST_ISOLATED_BINDER_FD=PASS");finish();
-      }else deny();
+      }else {
+        if(phase==1 && "DENY_BAD_FRAME".equals(outcome))
+          Log.i(TAG,"P193_DENY_RETURN_FRAME=DENY");
+        else if(phase==1 && "DENY_FD_READ".equals(outcome))
+          Log.i(TAG,"P193_DENY_RETURN_READ=DENY");
+        else Log.i(TAG,"P193_DENY_REPLY_PHASE=DENY");
+        deny();
+      }
     }
   });
   private final ServiceConnection conn=new ServiceConnection(){
@@ -44,9 +55,13 @@ public final class ProbeActivity extends Activity {
       remote=new Messenger(b);
       Message msg=Message.obtain(null,IsolatedPipeService.REQUEST);
       msg.replyTo=inbox;
-      try{remote.send(msg);}catch(RemoteException e){deny();}
+      try{remote.send(msg);}catch(RemoteException e){
+        Log.i(TAG,"P193_DENY_INITIAL_SEND=DENY");deny();
+      }
     }
-    @Override public void onServiceDisconnected(ComponentName c){if(phase!=2)deny();}
+    @Override public void onServiceDisconnected(ComponentName c){if(phase!=2){
+      Log.i(TAG,"P193_DENY_SERVICE_DISCONNECTED=DENY");deny();
+    }}
   };
   private void sendFd(){
     ParcelFileDescriptor[] pair=null;
@@ -63,7 +78,9 @@ public final class ProbeActivity extends Activity {
         out.flush();
       }
       pair[1]=null;
-    }catch(Exception e){deny();}
+    }catch(Exception e){
+      Log.i(TAG,"P193_DENY_FD_SEND=DENY");deny();
+    }
     finally{if(pair!=null)for(ParcelFileDescriptor fd:pair)if(fd!=null){
       try{fd.close();}catch(Exception ignored){}
     }}
@@ -72,7 +89,9 @@ public final class ProbeActivity extends Activity {
     super.onCreate(old);
     if(old!=null){deny();return;}
     bound=bindService(new Intent(this,IsolatedPipeService.class),conn,Context.BIND_AUTO_CREATE);
-    if(!bound)deny();
+    if(!bound){
+      Log.i(TAG,"P193_DENY_BIND_SERVICE=DENY");deny();
+    }
   }
   @Override public void onDestroy(){
     if(bound){unbindService(conn);bound=false;}
