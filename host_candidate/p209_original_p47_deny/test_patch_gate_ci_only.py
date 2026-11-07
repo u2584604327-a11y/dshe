@@ -145,6 +145,19 @@ class PreCallTests(unittest.TestCase):
         fixture=precall_fixture().replace("{p1 .. p1}","{v7 .. v8}")
         with self.assertRaises(p.Deny) as denied:p.inject_precall(fixture)
         self.assertEqual(str(denied.exception),"P209_DENY_PC176_THROWONFAILURE_EXACT_SMALI")
+    def test_multiple_other_throwonfailure_call_sites_do_not_change_target(self):
+        f=precall_fixture()
+        other="    invoke-static/range {v2 .. v2}, Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V\n"
+        f=f.replace("    invoke-static {v0}, "+p.P40_TARGET,
+                    other+"    invoke-static {v0}, "+p.P40_TARGET)
+        out=p.inject_precall(f)
+        self.assertLess(out.index(p.POST_INVOKE),out.index(other))
+        self.assertEqual(out.count(p.POST_INVOKE.strip()),1)
+    def test_target_first_executable_opcode_must_match_pc176(self):
+        f=precall_fixture().replace("    :done\n",
+                                    "    :done\n    const/4 v3, 0x0\n")
+        with self.assertRaises(p.Deny) as error:p.inject_precall(f)
+        self.assertEqual(str(error.exception),"P209_DENY_PC176_THROWONFAILURE_EXACT_SMALI")
     def test_missing_original_throwonfailure_fails_closed(self):
         x=precall_fixture().replace("Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V",
                                     "Lkotlin/Other;->noReturnProof(Ljava/lang/Object;)V")

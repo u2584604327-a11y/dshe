@@ -32,3 +32,12 @@ call returned normally. Missing marker does NOT prove the result was a
 failure; it may also reflect lifecycle/process interruption. No result
 object, stack trace, UID, cookies or user data is logged. The strict P47
 final DENY remains required; no new executable path or child start allowed.
+
+P209 exact PC176 selection amendment: signed-original PC176 is the
+first executable instruction at the PC26 taken-branch target; in the
+original method there are four throwOnFailure call sites in total.
+The disposable patcher must choose only the first executable instruction
+immediately after the verified target label (ignoring at most 32 bounded
+smali labels/directives), then require the exact opcode/callee/register
+shape. All other throwOnFailure sites remain untouched; signed/derived
+DEX operand and branch-target parity is still mandatory.

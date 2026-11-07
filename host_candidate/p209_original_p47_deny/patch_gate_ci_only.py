@@ -189,19 +189,36 @@ def inject_precall(s, expected_guard_op="if-ne"):
              r"\{(?P<register>[vp][0-9]+)[ \t]*\.\.[ \t]*(?P=register)\},[ \t]*"
              r"Lkotlin/ResultKt;->throwOnFailure\(Ljava/lang/Object;\)V"
              r"(?:[ \t]*#[^\r\n]*)?[ \t]*\r?\n")
-    found=list(re.finditer(call_re,newbody))
     candidates=[ln for ln in newbody.splitlines()
                 if "throwOnFailure" in ln]
-    # Counts and opcode categories only; NEVER print registers, source, p1 or args.
+    # Category-only: original coroutine has multiple ResultKt call sites.
     print("P209_PC176_SMALI_CALLEE_LINE_COUNT="+str(min(len(candidates),100)))
     print("P209_PC176_SMALI_RANGE_OP_LINE_COUNT="+str(sum(
         "invoke-static/range" in ln for ln in candidates)))
     print("P209_PC176_SMALI_HAS_INLINE_COMMENT="+(
         "YES" if any("#" in ln for ln in candidates) else "NO"))
-    need(len(found)==1,"PC176_THROWONFAILURE_EXACT_SMALI")
-    start,end=found[0].span()
-    need(newbody.index(TARGET_INVOKE)<start<end<=newbody.index(PRE_INVOKE),
-         "PC176_POSTCALL_WITHIN_SIGNED_TAKEN_PATH")
+    # The signed original PC26 taken target is PC176. TARGET_INVOKE is inserted
+    # directly after that exact label. Only the first executable instruction
+    # following the label can be the original PC176; do not select any of the
+    # other three throwOnFailure sites in this method by text alone.
+    begin=newbody.index(TARGET_INVOKE)+len(TARGET_INVOKE)
+    limit=newbody.index(PRE_INVOKE)
+    need(begin<limit and limit-begin<=20000,"PC176_BOUND_REGION")
+    offset=begin
+    first=None
+    for index,line in enumerate(newbody[begin:limit].splitlines(keepends=True)):
+        need(index<32,"PC176_PREFIX_LINE_BOUND")
+        stripped=line.strip()
+        if not stripped or stripped.startswith((".",":","#")):
+            offset+=len(line)
+            continue
+        first=(offset,line)
+        break
+    need(first is not None and re.fullmatch(call_re,first[1]) is not None,
+         "PC176_THROWONFAILURE_EXACT_SMALI")
+    start,end=first[0],first[0]+len(first[1])
+    need(begin<=start<end<=limit,"PC176_POSTCALL_WITHIN_SIGNED_TAKEN_PATH")
+    print("P209_PC176_SELECTED_BY_SIGNED_BRANCH_TARGET_FIRST_OPCODE=PASS")
     newbody=newbody[:end]+POST_INVOKE+newbody[end:]
     new=s[:a]+newbody+s[b:]
     for mark in (GUARD_INVOKE,FALL_INVOKE,TARGET_INVOKE,POST_INVOKE,PRE_INVOKE):
