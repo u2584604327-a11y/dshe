@@ -18,8 +18,6 @@ from collections import defaultdict
 SIGNED_SHA="3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5"
 APP_PREFIX="Lcom/dsh/android/"
 TARGET_OWNER="Lcom/dsh/android/EngineManager;"
-MAIN_ACTIVITY_OWNER="Lcom/dsh/android/MainActivity;"
-UPSTREAM_BOOT_NAMES=frozenset(("bootEngine","access$bootEngine"))
 ENGINE_COROUTINE="Lcom/dsh/android/EngineManager$start$2;"
 TARGETS={"start":"MAIN","probeBoot":"PROBE","runDumpConfig":"CONFIG"}
 INVOKE_REF=re.compile(r"(L[^\s,;]+;)->([^\s(,]+)\(([^)]*)\)")
@@ -71,53 +69,6 @@ def source_entry_kind(owner,name):
         return "GENERATED_LAMBDA_AMBIGUOUS"
     return "OTHER_METHOD_NO_UI_PROOF"
 
-def start_owner_family(owner):
-    # Explicitly match only the known original activity family; no private
-    # method/class names, arguments, or DEX strings enter results.
-    if owner.startswith("Lcom/dsh/android/MainActivity$bootEngine$"):
-        return "MAIN_BOOT_ENGINE_COROUTINE_FAMILY"
-    if owner.startswith("Lcom/dsh/android/MainActivity$"):
-        return "OTHER_MAIN_ACTIVITY_NESTED_FAMILY"
-    if owner==MAIN_ACTIVITY_OWNER:return "MAIN_ACTIVITY_DIRECT"
-    return "OTHER_OR_UNCLASSIFIED_FAMILY"
-
-def scan_upstream_boot_methods(methods):
-    """Read-only exact invocations of MainActivity.bootEngine or its accessor.
-    This does NOT prove caller dispatch, user consent, or complete call chains.
-    """
-    rows=[]
-    seen_methods=0
-    for owner,name,instructions in methods:
-        seen_methods+=1
-        require(seen_methods<=MAX_METHODS,"UPSTREAM_METHOD_BOUND")
-        invokes=0
-        for pc,op,operand in instructions:
-            if not op.startswith("invoke-"):continue
-            invokes+=1
-            require(invokes<=MAX_CALLS_PER_METHOD,"UPSTREAM_INVOKES_BOUND")
-            match=INVOKE_REF.search(operand)
-            if not match:continue
-            callee,callee_method,_=match.groups()
-            if callee!=MAIN_ACTIVITY_OWNER or callee_method not in UPSTREAM_BOOT_NAMES:
-                continue
-            rows.append({"owner_category":callable_category(owner),
-                         "source_entry_kind":source_entry_kind(owner,name),
-                         "caller_family":start_owner_family(owner)})
-            require(len(rows)<=MAX_HITS,"UPSTREAM_CALLSITE_BOUND")
-    return rows
-
-def summarize_upstream(rows):
-    kind_counts=defaultdict(int)
-    owner_counts=defaultdict(int)
-    for row in rows:
-        kind_counts[row["source_entry_kind"]]+=1
-        owner_counts[row["owner_category"]+"__"+row["source_entry_kind"]]+=1
-    return {"boot_method_direct_callsites":len(rows),
-            "named_callback_kinds":dict(sorted(kind_counts.items())),
-            "source_owner_kind_matrix":dict(sorted(owner_counts.items())),
-            "user_event_runtime_proven":False,
-            "boot_engine_executed":False}
-
 def scan_stream(methods):
     """Methods: (owner, method_name, instruction iterable) for synthetic tests and DEX."""
     result={mode:[] for mode in TARGETS.values()}
@@ -145,7 +96,6 @@ def scan_stream(methods):
             record={"owner_category":callable_category(owner),
                     "source_method_bucket":"COROUTINE_METHOD" if name=="invokeSuspend" else "OTHER_METHOD",
                     "source_entry_kind":source_entry_kind(owner,name),
-                    "caller_family":start_owner_family(owner),
                     "caller_id_hash":hashlib.sha256((owner+"->"+name).encode()).hexdigest()[:16],
                     "pc":pc}
             result[mode].append(record)
@@ -183,18 +133,15 @@ def summarize(hits):
         grouped=defaultdict(int)
         kinds=defaultdict(int)
         owner_kinds=defaultdict(int)
-        owner_families=defaultdict(int)
         for x in records:
             grouped[x["owner_category"]]+=1
             kinds[x["source_entry_kind"]]+=1
             owner_kinds[x["owner_category"]+"__"+x["source_entry_kind"]]+=1
-            owner_families[x["caller_family"]]+=1
         modes[mode]={
             "direct_callsites":count,
             "caller_categories":dict(sorted(grouped.items())),
             "source_entry_kinds":dict(sorted(kinds.items())),
             "owner_entry_matrix":dict(sorted(owner_kinds.items())),
-            "owner_family_counts":dict(sorted(owner_families.items())),
             "observation":("DIRECT_CALLSITE_PRESENT" if count else
                 "NO_DIRECT_CALLSITE_OBSERVED_INDIRECT_DISPATCH_UNKNOWN"),
             "source_callsite_ids":[{"hash":x["caller_id_hash"],"pc":x["pc"]}
@@ -221,9 +168,7 @@ def main():
     try:
         file=fixed_original(args.original_signed_v138)
         report=summarize(scan_stream(decoder_methods(file)))
-        report["upstream_boot"]=summarize_upstream(
-            scan_upstream_boot_methods(decoder_methods(file)))
-        # No original method/class strings, credentials, tokens or operands are logged.
+        # A report holds only coarse category, method-hash, PC and count.
         pathlib.Path(args.report).write_text(json.dumps(report,indent=2)+"\n")
         print("P198_EXACT_SIGNED_V138_CALLER_GRAPH_DECODED=PASS")
         for mode in ("MAIN","PROBE","CONFIG"):
@@ -235,15 +180,6 @@ def main():
                     print("P198_MAIN_KIND_"+kind+"="+str(count))
                 for kind,count in sorted(row["owner_entry_matrix"].items()):
                     print("P198_MAIN_OWNER_KIND_"+kind+"="+str(count))
-                for family,count in sorted(row["owner_family_counts"].items()):
-                    print("P198_MAIN_OWNER_FAMILY_"+family+"="+str(count))
-        upstream=report["upstream_boot"]
-        print("P198_UPSTREAM_BOOT_DIRECT_CALLSITE_COUNT="+
-              str(upstream["boot_method_direct_callsites"]))
-        for kind,count in sorted(upstream["named_callback_kinds"].items()):
-            print("P198_UPSTREAM_BOOT_METHOD_KIND_"+kind+"="+str(count))
-        for kind,count in sorted(upstream["source_owner_kind_matrix"].items()):
-            print("P198_UPSTREAM_BOOT_OWNER_KIND_"+kind+"="+str(count))
         print("P198_REAL_UI_TRIGGER=NOT_ATTESTED")
         print("P198_REAL_ENGINE_COROUTINE_RUNTIME_ORIGIN=NOT_ATTESTED")
         print("P198_ORIGINAL_ARM64_NODE_HTTP_TOKEN_READY=NOT_WIRED")

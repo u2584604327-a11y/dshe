@@ -42,7 +42,7 @@ jobs:
           set -euo pipefail
           python3 -B host_candidate/p198_original_source/test_entry_callers.py 2>&1 |
             tee "$RUNNER_TEMP/p198-tests.log"
-          grep -Eq '^Ran 25 tests in' "$RUNNER_TEMP/p198-tests.log"
+          grep -Eq '^Ran 20 tests in' "$RUNNER_TEMP/p198-tests.log"
           grep -Fxq 'OK' "$RUNNER_TEMP/p198-tests.log"
           python3 - <<'PY'
           from pathlib import Path
@@ -96,54 +96,6 @@ jobs:
             --report .p198tmp/redacted-summary.json |
             tee "$RUNNER_TEMP/p198-proof.log"
           grep -Fxq 'P198_EXACT_SIGNED_V138_CALLER_GRAPH_DECODED=PASS' "$RUNNER_TEMP/p198-proof.log"
-          grep -Eq '^P198_UPSTREAM_BOOT_DIRECT_CALLSITE_COUNT=[0-9]+ "$RUNNER_TEMP/p198-proof.log"
-          grep -Fxq 'P198_REAL_ENGINE_COROUTINE_RUNTIME_ORIGIN=NOT_ATTESTED' "$RUNNER_TEMP/p198-proof.log"
-          grep -Fxq 'P198_ORIGINAL_ARM64_NODE_HTTP_TOKEN_READY=NOT_WIRED' "$RUNNER_TEMP/p198-proof.log"
-          grep -Fxq 'P198_FORMAL_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p198-proof.log"
-          python3 - <<'PY'
-          import json
-          r=json.load(open(".p198tmp/redacted-summary.json"))
-          assert r["exact_signed_v138_sha256"]=="3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5"
-          assert set(r["targets"])=={"MAIN","PROBE","CONFIG"}
-          assert all(type(r["targets"][mode]["direct_callsites"]) is int
-                     for mode in ("MAIN","PROBE","CONFIG"))
-          assert r["upstream_boot"]["user_event_runtime_proven"] is False
-          assert r["upstream_boot"]["boot_engine_executed"] is False
-          assert isinstance(r["upstream_boot"]["boot_method_direct_callsites"],int)
-          assert sum(r["upstream_boot"]["named_callback_kinds"].values())==r["upstream_boot"]["boot_method_direct_callsites"]
-          assert sum(r["targets"]["MAIN"]["owner_family_counts"].values())==r["targets"]["MAIN"]["direct_callsites"]
-          assert r["genuine_user_action_trigger_attested"] is False
-          assert set(r["targets"]["MAIN"]["source_entry_kinds"]).issubset({
-             "COROUTINE_CONTINUATION","LIFECYCLE_NAMED_METHOD",
-             "UI_CALLBACK_NAMED_METHOD","CLASS_INITIALIZATION",
-             "KOTLIN_INVOKE_AMBIGUOUS","GENERATED_LAMBDA_AMBIGUOUS",
-             "OTHER_METHOD_NO_UI_PROOF"})
-          assert sum(r["targets"]["MAIN"]["source_entry_kinds"].values())==r["targets"]["MAIN"]["direct_callsites"]
-          assert sum(r["targets"]["MAIN"]["owner_entry_matrix"].values())==r["targets"]["MAIN"]["direct_callsites"]
-          assert r["real_android_coroutine_invoked"] is False
-          assert r["original_coroutine_os_generation_attested"] is False
-          assert r["binder_receipt_delivered_to_original_coroutine"] is False
-          assert r["production_node_http_ready"] is False
-          assert r["release"]=="STRUCTURAL_BLOCKED"
-          print("P198_REAL_APK_BOUNDED_CALLER_PROVENANCE_REPORT=PASS")
-          PY
-          echo P198_ORIGINAL_ENGINE_CALLERS_ONLY_NOT_RUNTIME=PASS
-      - name: Erase original APK, derived scratch and token-free reports
-        if: always()
-        shell: bash
-        run: |
-          rm -rf .p43tmp .p198tmp
-          echo P198_SIGNED_V138_CALLER_GRAPH=CHECK_ACTUAL_BINARY_JOB >> "$GITHUB_STEP_SUMMARY"
-          echo P198_ORIGINAL_KOTLIN_COROUTINE_LIVE_SOURCE=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
-          echo P198_HOST_UID_P197_TO_ORIGINAL_COROUTINE=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
-          echo P198_REAL_NODE_HTTP_TOKEN_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
-          echo P198_ALL_P47_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
-          echo P198_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
-          echo P198_GS_SCREENSHOT=OFF >> "$GITHUB_STEP_SUMMARY"
-          echo P198_EXTERNAL_FINGERPRINT_SITES_AUTO_REQUESTED=NO >> "$GITHUB_STEP_SUMMARY"
-          echo P198_RELEASE_SIGN_OR_USER_PHONE_INSTALL=NEVER >> "$GITHUB_STEP_SUMMARY"
-          echo P198_FORMAL_V139=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"
- "$RUNNER_TEMP/p198-proof.log"
           grep -Fxq 'P198_REAL_UI_TRIGGER=NOT_ATTESTED' "$RUNNER_TEMP/p198-proof.log"
           grep -Fxq 'P198_REAL_ENGINE_COROUTINE_RUNTIME_ORIGIN=NOT_ATTESTED' "$RUNNER_TEMP/p198-proof.log"
           grep -Fxq 'P198_ORIGINAL_ARM64_NODE_HTTP_TOKEN_READY=NOT_WIRED' "$RUNNER_TEMP/p198-proof.log"
@@ -155,11 +107,6 @@ jobs:
           assert set(r["targets"])=={"MAIN","PROBE","CONFIG"}
           assert all(type(r["targets"][mode]["direct_callsites"]) is int
                      for mode in ("MAIN","PROBE","CONFIG"))
-          assert r["upstream_boot"]["user_event_runtime_proven"] is False
-          assert r["upstream_boot"]["boot_engine_executed"] is False
-          assert isinstance(r["upstream_boot"]["boot_method_direct_callsites"],int)
-          assert sum(r["upstream_boot"]["named_callback_kinds"].values())==r["upstream_boot"]["boot_method_direct_callsites"]
-          assert sum(r["targets"]["MAIN"]["owner_family_counts"].values())==r["targets"]["MAIN"]["direct_callsites"]
           assert r["genuine_user_action_trigger_attested"] is False
           assert set(r["targets"]["MAIN"]["source_entry_kinds"]).issubset({
              "COROUTINE_CONTINUATION","LIFECYCLE_NAMED_METHOD",
