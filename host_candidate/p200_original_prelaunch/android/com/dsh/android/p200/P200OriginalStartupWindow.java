@@ -34,6 +34,9 @@ public final class P200OriginalStartupWindow {
     final int baselineOriginal,baselineOther,uid,pid;
     int lastOriginal,lastOther;
     boolean mainCreated,mainResumed,ended,originalHint,otherHint;
+    // Strictly category-only second-onCreate triage; never accepts a duplicate.
+    Activity firstOriginal;
+    boolean firstOriginalDestroyed,firstOriginalStateSaved,firstOriginalStopped;
     int samples;
     Object preExistingSingleton; // may be null; main app may instantiate it later.
     Object observedSingleton;
@@ -102,8 +105,20 @@ public final class P200OriginalStartupWindow {
     }
     @Override public void onActivityCreated(Activity activity,Bundle state){
       if(!match(activity))return;
-      if(mainCreated){fail("ORIGINAL_LAUNCHER_DUPLICATE_CREATE");return;}
+      if(mainCreated){
+        final String kind=(activity==firstOriginal)?"SAME_JAVA_INSTANCE":
+            firstOriginalDestroyed?"RECREATED_AFTER_DESTROY":
+            "NEW_WHILE_OLD_ALIVE";
+        emit("P200_DUPLICATE_CREATE_KIND="+kind);
+        emit("P200_DUPLICATE_CREATE_OLD_STATE_SAVED="+
+             (firstOriginalStateSaved?"YES":"NO"));
+        emit("P200_DUPLICATE_CREATE_OLD_STOPPED="+
+             (firstOriginalStopped?"YES":"NO"));
+        // Do not normalize, ignore, retry or deem this lifecycle valid.
+        fail("ORIGINAL_LAUNCHER_DUPLICATE_CREATE");return;
+      }
       if(!valid()){fail("PRELAUNCH_OWNER_REVOKED");return;}
+      firstOriginal=activity;
       mainCreated=true;
       emit("P200_ORIGINAL_LAUNCHER_FRAMEWORK_ONCREATE=PASS");
       snapshot("AFTER_ORIGINAL_ONCREATE");
@@ -137,9 +152,14 @@ public final class P200OriginalStartupWindow {
     }
     @Override public void onActivityStarted(Activity activity){}
     @Override public void onActivityPaused(Activity activity){}
-    @Override public void onActivityStopped(Activity activity){}
-    @Override public void onActivitySaveInstanceState(Activity activity,Bundle state){}
+    @Override public void onActivityStopped(Activity activity){
+      if(activity==firstOriginal && mainCreated && !ended)firstOriginalStopped=true;
+    }
+    @Override public void onActivitySaveInstanceState(Activity activity,Bundle state){
+      if(activity==firstOriginal && mainCreated && !ended)firstOriginalStateSaved=true;
+    }
     @Override public void onActivityDestroyed(Activity activity){
+      if(activity==firstOriginal && mainCreated && !ended)firstOriginalDestroyed=true;
       if(activity==probeActivity && !ended)fail("OBSERVER_DESTROYED_BEFORE_COMPLETE");
       else if(match(activity) && !mainResumed && !ended)
         fail("ORIGINAL_LAUNCHER_DESTROYED_BEFORE_RESUME");

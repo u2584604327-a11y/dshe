@@ -17,3 +17,23 @@ To register lifecycle callbacks **before** original MainActivity launches, P200 
 A real original coroutine, original Process field/reader thread/CountDownLatch/StateFlow paired lifetime, P184 receipt to the genuine Kotlin coroutine and authenticated ARM64 Node/FD native module/JS/Bearer HTTP READY are all **not yet proven**, regardless of a positive or negative P200 counter. P47 always rejects launch with no host ProcessBuilder fallback. P192 isolated UID direct localhost TCP BIND_EACCES remains a security boundary; P102 native approval must be human-entered, never synthetic.
 
 No production deployment, signed v139 APK or user-phone install is authorized. GS screenshots OFF and P109 native-sensitive tools DENY_ALL. BrowserLeaks, original CreepJS GitHub Pages, IPhey, BrowserScan, EFF Cover Your Tracks and AmIUnique remain manual opt-in privacy QA references; no CI external-site visits or fingerprint spoofing. Keep original DSHAPP attribution, MIT notice and nonendorsement ledger. v139=`STRUCTURAL_BLOCKED`.
+
+## 2026-11-08 strict duplicate-creation triage (test-only)
+
+The actual Android35 P200 run
+https://github.com/u2584604327-a11y/dshe/actions/runs/42398154690
+proved a fresh original-derived test package, no external egress,
+pre-MainActivity baseline and same host process, but failed closed at
+`P200_ORIGINAL_LAUNCHER_DUPLICATE_CREATE=DENY`. That category alone does
+not prove a second original EngineManager startup.
+
+The CI-only lifecycle observer now logs a fixed, non-sensitive category
+for the second framework onCreate: `SAME_JAVA_INSTANCE`,
+`RECREATED_AFTER_DESTROY` or `NEW_WHILE_OLD_ALIVE`; plus YES/NO for
+the first instance's save-state and stop callbacks. It **still always**
+calls `fail("ORIGINAL_LAUNCHER_DUPLICATE_CREATE")` with no permit, auto-
+retry, extra Activity launch, external network, lifecycle override, or
+original bytecode change. On any duplicated activity the CI remains red.
+Never use this classification as a security authorization. This work
+does not attest original Node, P209 coroutine, process owner epoch, or
+an actual browser/account isolation boundary.

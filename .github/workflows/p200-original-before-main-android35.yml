@@ -51,6 +51,12 @@ jobs:
           assert "ProcessBuilder.start(" not in java
           assert "P200_OS_COROUTINE_PROVENANCE=NOT_ATTESTED" in java
           assert "P200_PRELAUNCH_BASELINE_BEFORE_MAIN_ACTIVITY=PASS" in java
+          assert "P200_DUPLICATE_CREATE_KIND=" in java
+          assert "SAME_JAVA_INSTANCE" in java
+          assert "RECREATED_AFTER_DESTROY" in java
+          assert "NEW_WHILE_OLD_ALIVE" in java
+          assert 'fail("ORIGINAL_LAUNCHER_DUPLICATE_CREATE")' in java
+          assert "P200_DUPLICATE_CREATE_OLD_STATE_SAVED=" in java
           assert runner.count("--ez p200_prelaunch_window true")==1
           assert p.read_text().count('getBooleanExtra("p200_prelaunch_window",false)')==1
           assert 'P200_ORIGINAL_START_PRELAUNCH_TO_10S=NOT_OBSERVED' in runner
