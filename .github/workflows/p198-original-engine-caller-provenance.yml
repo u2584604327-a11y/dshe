@@ -42,7 +42,7 @@ jobs:
           set -euo pipefail
           python3 -B host_candidate/p198_original_source/test_entry_callers.py 2>&1 |
             tee "$RUNNER_TEMP/p198-tests.log"
-          grep -Eq '^Ran 14 tests in' "$RUNNER_TEMP/p198-tests.log"
+          grep -Eq '^Ran 20 tests in' "$RUNNER_TEMP/p198-tests.log"
           grep -Fxq 'OK' "$RUNNER_TEMP/p198-tests.log"
           python3 - <<'PY'
           from pathlib import Path
@@ -96,6 +96,7 @@ jobs:
             --report .p198tmp/redacted-summary.json |
             tee "$RUNNER_TEMP/p198-proof.log"
           grep -Fxq 'P198_EXACT_SIGNED_V138_CALLER_GRAPH_DECODED=PASS' "$RUNNER_TEMP/p198-proof.log"
+          grep -Fxq 'P198_REAL_UI_TRIGGER=NOT_ATTESTED' "$RUNNER_TEMP/p198-proof.log"
           grep -Fxq 'P198_REAL_ENGINE_COROUTINE_RUNTIME_ORIGIN=NOT_ATTESTED' "$RUNNER_TEMP/p198-proof.log"
           grep -Fxq 'P198_ORIGINAL_ARM64_NODE_HTTP_TOKEN_READY=NOT_WIRED' "$RUNNER_TEMP/p198-proof.log"
           grep -Fxq 'P198_FORMAL_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p198-proof.log"
@@ -106,6 +107,14 @@ jobs:
           assert set(r["targets"])=={"MAIN","PROBE","CONFIG"}
           assert all(type(r["targets"][mode]["direct_callsites"]) is int
                      for mode in ("MAIN","PROBE","CONFIG"))
+          assert r["genuine_user_action_trigger_attested"] is False
+          assert set(r["targets"]["MAIN"]["source_entry_kinds"]).issubset({
+             "COROUTINE_CONTINUATION","LIFECYCLE_NAMED_METHOD",
+             "UI_CALLBACK_NAMED_METHOD","CLASS_INITIALIZATION",
+             "KOTLIN_INVOKE_AMBIGUOUS","GENERATED_LAMBDA_AMBIGUOUS",
+             "OTHER_METHOD_NO_UI_PROOF"})
+          assert sum(r["targets"]["MAIN"]["source_entry_kinds"].values())==r["targets"]["MAIN"]["direct_callsites"]
+          assert sum(r["targets"]["MAIN"]["owner_entry_matrix"].values())==r["targets"]["MAIN"]["direct_callsites"]
           assert r["real_android_coroutine_invoked"] is False
           assert r["original_coroutine_os_generation_attested"] is False
           assert r["binder_receipt_delivered_to_original_coroutine"] is False
