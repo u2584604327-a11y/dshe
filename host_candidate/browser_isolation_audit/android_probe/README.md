@@ -97,3 +97,9 @@ SUCCESS markers or accept the old seed. Any actual storage/cross-slot/
 process/UID failure and any repeated Activity recreation fail closed.
 All later force-stop persistence and B2 concurrently live-process gates
 must still pass in the same new run; original DSH data is never touched.
+
+## B1 Android35 phase-0 synthetic-cookie triage (2026-11-08)
+
+On run #42457706460 the fresh Android35 B1 synthetic fixture failed closed with BOTH `ACTIVITY_RECREATED=DENY` and `PREEXISTING_PROFILE_COOKIE=DENY`. The bounded package-clear retry correctly refused the additional cookie denial; passing prior runs do not override this failure. A synthetically fixed cookie present after Activity recreation is **not** proof of cross-profile leakage or of its originating lifecycle; it may have been written earlier in the same test attempt or may represent a different bug.
+
+The shell runner now reads existing `B1_DIAG_PRESEED_PHASE=0 SLOT=A ...` diagnostics **only after** its unique QEMU current-run log boundary and **only when an existing DENY is present**. It emits fixed enum booleans for whether the initial and recreated phase-0 activity observations contained synthetic slot-A or slot-B cookies. It never prints cookie contents, domain strings, logcat, user data, PIDs, raw phase intents or arbitrary text. Absence is `NOT_OBSERVED`, not silently `NO`. This changes neither the Java test, result admission, bounded retry policy, WebView settings, user account data, nor isolation claims. Both denials remain fatal and the specific `B1_SEED_RETRY_OTHER_DENIAL_PRESENT=DENY` guard stays active. No real phone, original DSH or production APK is touched.

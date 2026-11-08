@@ -58,6 +58,42 @@ wait_for_proof() {
       continue
     fi
     if [[ "$trace" == *B1_ANDROID35_*"=DENY"* ]];then
+      # Only fixed booleans from a fresh synthetic APK and a unique current-run
+      # log boundary. Never print raw logcat, cookie values or arbitrary URLs.
+      phase0_fresh="$(printf '%s\n' "$trace" |
+        grep -F 'B1_DIAG_PRESEED_PHASE=0 SLOT=A RECREATED=false ' || true)"
+      phase0_recreated="$(printf '%s\n' "$trace" |
+        grep -F 'B1_DIAG_PRESEED_PHASE=0 SLOT=A RECREATED=true ' || true)"
+      if [[ -z "$phase0_fresh" ]];then
+        echo B1_DIAG_PHASE0_INITIAL_SAMPLE=NOT_OBSERVED
+      else
+        echo B1_DIAG_PHASE0_INITIAL_SAMPLE=OBSERVED
+        if [[ "$phase0_fresh" == *"SYNTHETIC_A_PRESENT=true"* ]];then
+          echo B1_DIAG_PHASE0_INITIAL_A_COOKIE=YES
+        else
+          echo B1_DIAG_PHASE0_INITIAL_A_COOKIE=NO
+        fi
+        if [[ "$phase0_fresh" == *"SYNTHETIC_B_PRESENT=true"* ]];then
+          echo B1_DIAG_PHASE0_INITIAL_B_COOKIE=YES
+        else
+          echo B1_DIAG_PHASE0_INITIAL_B_COOKIE=NO
+        fi
+      fi
+      if [[ -z "$phase0_recreated" ]];then
+        echo B1_DIAG_PHASE0_RECREATED_SAMPLE=NOT_OBSERVED
+      else
+        echo B1_DIAG_PHASE0_RECREATED_SAMPLE=OBSERVED
+        if [[ "$phase0_recreated" == *"SYNTHETIC_A_PRESENT=true"* ]];then
+          echo B1_DIAG_PHASE0_RECREATED_A_COOKIE=YES
+        else
+          echo B1_DIAG_PHASE0_RECREATED_A_COOKIE=NO
+        fi
+        if [[ "$phase0_recreated" == *"SYNTHETIC_B_PRESENT=true"* ]];then
+          echo B1_DIAG_PHASE0_RECREATED_B_COOKIE=YES
+        else
+          echo B1_DIAG_PHASE0_RECREATED_B_COOKIE=NO
+        fi
+      fi
       for reason in OWNER_OR_PHASE_MISMATCH RESULT_TIMEOUT A_SET_COOKIE \
         B_SET_COOKIE LOCALSTORAGE_MISMATCH COOKIE_PERSISTENCE_OR_CROSS_PROFILE \
         CROSS_COOKIE_A PREEXISTING_PROFILE_COOKIE B_LOCALSTORAGE_WRITE \
