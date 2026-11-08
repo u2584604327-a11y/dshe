@@ -11,3 +11,23 @@ The Android35 runner installs this test-key APK **only on a fresh disposable emu
 All methods except the one disposable local injection retain their original semantics, and release builds never contain the marker. P192 isolated UID localhost TCP BIND_EACCES is a frozen architectural negative; no isolated Internet, SELinux change or host ProcessBuilder fallback. Native-sensitive tools DENY_ALL, GS screenshot OFF. No user-phone installation, account/cookie/credential access, third-party fingerprint website, bot challenge bypass or network identity rotation. The user permits eventual physical ARM64 testing, but that requires separate explicit per-test consent, independent test package, exact signing/package/permission checks and data-preserving preflight; never overwrite/uninstall installed DSH with this differently signed temporary same-package APK. Preserve original DSHAPP/pht88888888 MIT credit, third-party licenses and unofficial modification statement.
 
 Formal v139 remains STRUCTURAL_BLOCKED.
+
+## 2026-11-08 P205 bounded duplicate caller triage (no original DEX change)
+
+The signed-original v138 P205 smali patcher remains exactly pinned and unchanged,
+so the downstream P209 immutable hash requirement stays intact. Only the disposable
+Java witness and P205 runner gain fixed enum telemetry. The witness observes
+`FIRST`, `SECOND`, and `LATER` original method entries and records the immediate
+synchronous Java caller as `ONCREATE`, `MAINACTIVITY_OTHER`,
+`MAINACTIVITY_NESTED`, `OTHER_OR_UNKNOWN`, or `UNAVAILABLE`; it also records
+`MAIN` versus `OTHER` thread category. Neither PID/UID values, stack traces,
+Activity identity, user data, cookies nor arbitrary original class names are emitted.
+The runner prints a matching fixed caller category for the first and second entries
+only, after the current-run boundary. A missing/conflicting category or repeated
+entry still fails closed. Logging these categories cannot distinguish same-instance
+repeated invocation from framework Activity recreation; the P200 independent
+lifecycle callback categorization must not be misrepresented as a same-run join.
+
+No P47 authorization, Node start, native tools, extra test launch, credentials,
+production APK, release signing, physical phone, or original browser data is changed.
+`v139=STRUCTURAL_BLOCKED` remains mandatory.

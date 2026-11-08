@@ -82,7 +82,24 @@ fi
 if [[ "$selected" == *P205_ORIGINAL_BOOTENGINE_METHOD_ENTRY=OBSERVED* ]];then
   count="$(printf '%s\n' "$selected" |
     grep -c 'P205_ORIGINAL_BOOTENGINE_METHOD_ENTRY=OBSERVED' || true)"
+  # The test-only witness classifies the synchronous Java caller,
+  # NOT the identity or lifecycle generation of the Activity instance.
+  # The fixed-constant enum is read only after the unique current-run boundary.
+  emit_fixed_caller(){
+    local phase="$1" found=0 kind
+    for kind in ONCREATE MAINACTIVITY_OTHER MAINACTIVITY_NESTED OTHER_OR_UNKNOWN UNAVAILABLE;do
+      if [[ "$selected" == *"P205_ORIGINAL_BOOTENGINE_${phase}_CALLER=${kind}"* ]];then
+        echo "P205_FIXED_${phase}_CALLER=${kind}"
+        found=$((found+1))
+      fi
+    done
+    [[ "$found" == 1 ]] || {
+      echo "P205_${phase}_CALLER_CATEGORY_MISSING_OR_CONFLICT=DENY";return 2;
+    }
+  }
+  emit_fixed_caller FIRST
   [[ "$count" == 1 ]] || {
+    emit_fixed_caller SECOND
     echo P205_DUPLICATE_ORIGINAL_BOOTENGINE_ENTRY=DENY;exit 2;
   }
   truepid="$(printf '%s\n' "$selected" | awk -v pid="$pid" \
