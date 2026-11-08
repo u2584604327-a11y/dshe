@@ -4,7 +4,9 @@ import dataclasses
 import json
 import unittest
 from audit_entry_callers import (Block,APP_PREFIX,ENGINE_COROUTINE,
-  TARGET_OWNER,scan_stream,summarize,callable_category,source_entry_kind)
+  TARGET_OWNER,scan_stream,summarize,callable_category,source_entry_kind,
+  start_owner_family,scan_upstream_boot_methods,summarize_upstream,
+  MAIN_ACTIVITY_OWNER)
 
 def method(owner, name, *pairs):
     return (owner,name,[(pc,op,out) for pc,op,out in pairs])
@@ -121,6 +123,40 @@ class P198GraphTest(unittest.TestCase):
             (13,"invoke-virtual",target("start")))))
         report=json.dumps(summarize(found),sort_keys=True)
         self.assertNotIn("SECRET_API_KEY",report)
+        self.assertIn("OTHER_METHOD_NO_UI_PROOF",report)
+
+    def test_boot_coroutine_owner_is_only_family_hint(self):
+        self.assertEqual(start_owner_family(APP_PREFIX+"MainActivity$bootEngine$1;"),
+            "MAIN_BOOT_ENGINE_COROUTINE_FAMILY")
+        self.assertEqual(start_owner_family(APP_PREFIX+"MainActivity$onCreate$1;"),
+            "OTHER_MAIN_ACTIVITY_NESTED_FAMILY")
+    def test_boot_upstream_lifecycle_method_synthetic(self):
+        boot="v2, "+MAIN_ACTIVITY_OWNER+"->bootEngine()V"
+        rows=scan_upstream_boot_methods([method(MAIN_ACTIVITY_OWNER,"onCreate",
+             (18,"invoke-direct",boot))])
+        report=summarize_upstream(rows)
+        self.assertEqual(report["boot_method_direct_callsites"],1)
+        self.assertEqual(report["named_callback_kinds"],
+                         {"LIFECYCLE_NAMED_METHOD":1})
+        self.assertFalse(report["boot_engine_executed"])
+    def test_boot_upstream_access_method_statically_only(self):
+        ref="v2, "+MAIN_ACTIVITY_OWNER+"->access$bootEngine(Lcom/dsh/android/MainActivity;)V"
+        rows=scan_upstream_boot_methods([method(APP_PREFIX+"MainActivity$task$1;",
+                "invokeSuspend",(18,"invoke-static",ref))])
+        self.assertEqual(summarize_upstream(rows)["named_callback_kinds"],
+                         {"COROUTINE_CONTINUATION":1})
+    def test_boot_upstream_reject_unrelated_callee_and_near_name(self):
+        ref="v2, "+MAIN_ACTIVITY_OWNER+"->bootEngineAgain()V"
+        bogus="v2, Lcom/other/MainActivity;->bootEngine()V"
+        rows=scan_upstream_boot_methods([method(MAIN_ACTIVITY_OWNER,"onClick",
+             (1,"invoke-direct",ref),(2,"invoke-virtual",bogus))])
+        self.assertEqual(len(rows),0)
+    def test_boot_upstream_not_leaking_malicious_method_name(self):
+        ref="v2, "+MAIN_ACTIVITY_OWNER+"->bootEngine()V"
+        rows=scan_upstream_boot_methods([method(MAIN_ACTIVITY_OWNER,
+              "TOKEN_SECRET_CREDENTIAL",(4,"invoke-direct",ref))])
+        report=json.dumps(summarize_upstream(rows))
+        self.assertNotIn("TOKEN_SECRET",report)
         self.assertIn("OTHER_METHOD_NO_UI_PROOF",report)
 
 if __name__=="__main__":
