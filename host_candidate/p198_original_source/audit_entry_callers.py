@@ -50,25 +50,6 @@ def callable_category(owner):
     if owner.startswith(APP_PREFIX):return "ORIGINAL_APP_OTHER"
     return "EXTERNAL_OR_UNKNOWN"
 
-# Classification is purely syntactic, never proof of an actual user gesture.
-LIFECYCLE_CALLBACKS=frozenset(("onCreate","onStart","onResume","onRestart",
-  "onNewIntent","onActivityResult","onRequestPermissionsResult",
-  "onServiceConnected","onBind","onHandleIntent","onReceive"))
-UI_CALLBACKS=frozenset(("onClick","onLongClick","onItemClick",
-  "onItemLongClick","onOptionsItemSelected","onContextItemSelected",
-  "onMenuItemClick","onNavigationItemSelected","onPreferenceClick","onTouch"))
-
-def source_entry_kind(owner,name):
-    if name=="invokeSuspend":return "COROUTINE_CONTINUATION"
-    if name in LIFECYCLE_CALLBACKS:return "LIFECYCLE_NAMED_METHOD"
-    if name in UI_CALLBACKS:return "UI_CALLBACK_NAMED_METHOD"
-    if name in ("<init>","<clinit>"):return "CLASS_INITIALIZATION"
-    if name in ("invoke","invoke$default"):
-        return "KOTLIN_INVOKE_AMBIGUOUS"
-    if name.startswith("lambda$") or "$lambda$" in name:
-        return "GENERATED_LAMBDA_AMBIGUOUS"
-    return "OTHER_METHOD_NO_UI_PROOF"
-
 def scan_stream(methods):
     """Methods: (owner, method_name, instruction iterable) for synthetic tests and DEX."""
     result={mode:[] for mode in TARGETS.values()}
@@ -95,7 +76,6 @@ def scan_stream(methods):
             # dispatch, an actual invocation, OS-origin or coroutine identity.
             record={"owner_category":callable_category(owner),
                     "source_method_bucket":"COROUTINE_METHOD" if name=="invokeSuspend" else "OTHER_METHOD",
-                    "source_entry_kind":source_entry_kind(owner,name),
                     "caller_id_hash":hashlib.sha256((owner+"->"+name).encode()).hexdigest()[:16],
                     "pc":pc}
             result[mode].append(record)
@@ -131,17 +111,10 @@ def summarize(hits):
         records=hits[mode]
         count=len(records)
         grouped=defaultdict(int)
-        kinds=defaultdict(int)
-        owner_kinds=defaultdict(int)
-        for x in records:
-            grouped[x["owner_category"]]+=1
-            kinds[x["source_entry_kind"]]+=1
-            owner_kinds[x["owner_category"]+"__"+x["source_entry_kind"]]+=1
+        for x in records:grouped[x["owner_category"]]+=1
         modes[mode]={
             "direct_callsites":count,
             "caller_categories":dict(sorted(grouped.items())),
-            "source_entry_kinds":dict(sorted(kinds.items())),
-            "owner_entry_matrix":dict(sorted(owner_kinds.items())),
             "observation":("DIRECT_CALLSITE_PRESENT" if count else
                 "NO_DIRECT_CALLSITE_OBSERVED_INDIRECT_DISPATCH_UNKNOWN"),
             "source_callsite_ids":[{"hash":x["caller_id_hash"],"pc":x["pc"]}
@@ -152,7 +125,6 @@ def summarize(hits):
         "exact_signed_v138_sha256":SIGNED_SHA,
         "targets":modes,
         "real_android_coroutine_invoked":False,
-        "genuine_user_action_trigger_attested":False,
         "original_coroutine_os_generation_attested":False,
         "binder_receipt_delivered_to_original_coroutine":False,
         "host_unauthorized_process_spawn":"DENY",
@@ -175,12 +147,6 @@ def main():
             row=report["targets"][mode]
             print("P198_"+mode+"_DIRECT_CALLSITE_COUNT="+str(row["direct_callsites"]))
             print("P198_"+mode+"_DISPATCH_EVIDENCE="+row["observation"])
-            if mode=="MAIN":
-                for kind,count in sorted(row["source_entry_kinds"].items()):
-                    print("P198_MAIN_KIND_"+kind+"="+str(count))
-                for kind,count in sorted(row["owner_entry_matrix"].items()):
-                    print("P198_MAIN_OWNER_KIND_"+kind+"="+str(count))
-        print("P198_REAL_UI_TRIGGER=NOT_ATTESTED")
         print("P198_REAL_ENGINE_COROUTINE_RUNTIME_ORIGIN=NOT_ATTESTED")
         print("P198_ORIGINAL_ARM64_NODE_HTTP_TOKEN_READY=NOT_WIRED")
         print("P198_FORMAL_V139=STRUCTURAL_BLOCKED")

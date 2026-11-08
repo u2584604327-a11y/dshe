@@ -4,7 +4,7 @@ import dataclasses
 import json
 import unittest
 from audit_entry_callers import (Block,APP_PREFIX,ENGINE_COROUTINE,
-  TARGET_OWNER,scan_stream,summarize,callable_category,source_entry_kind)
+  TARGET_OWNER,scan_stream,summarize,callable_category)
 
 def method(owner, name, *pairs):
     return (owner,name,[(pc,op,out) for pc,op,out in pairs])
@@ -88,40 +88,6 @@ class P198GraphTest(unittest.TestCase):
         self.assertFalse(out["binder_receipt_delivered_to_original_coroutine"])
         self.assertFalse(out["production_node_http_ready"])
         self.assertEqual(out["host_unauthorized_process_spawn"],"DENY")
-
-    def test_start_lifecycle_owner_is_static_name_only(self):
-        found=scan_stream(stream(method(APP_PREFIX+"MainActivity;","onCreate",
-            (16,"invoke-virtual",target("start")))))
-        row=summarize(found)["targets"]["MAIN"]
-        self.assertEqual(row["source_entry_kinds"],{"LIFECYCLE_NAMED_METHOD":1})
-        self.assertEqual(row["owner_entry_matrix"],
-            {"ACTIVITY_CALLER__LIFECYCLE_NAMED_METHOD":1})
-    def test_user_click_name_is_not_a_verified_real_click(self):
-        found=scan_stream(stream(method(APP_PREFIX+"MainActivity;","onClick",
-            (16,"invoke-virtual",target("start")))))
-        report=summarize(found)
-        self.assertEqual(report["targets"]["MAIN"]["source_entry_kinds"],
-                         {"UI_CALLBACK_NAMED_METHOD":1})
-        self.assertFalse(report["genuine_user_action_trigger_attested"])
-    def test_suspend_method_cannot_be_mislabeled_click(self):
-        found=scan_stream(stream(method(APP_PREFIX+"MainActivity$job$1;","invokeSuspend",
-            (16,"invoke-virtual",target("start")))))
-        self.assertEqual(found["MAIN"][0]["source_entry_kind"],
-                         "COROUTINE_CONTINUATION")
-    def test_kotlin_invoke_is_ambiguous_not_ui_proof(self):
-        self.assertEqual(source_entry_kind(APP_PREFIX+"MainActivity$callback$1;","invoke"),
-                         "KOTLIN_INVOKE_AMBIGUOUS")
-    def test_class_initialization_not_ui_proof(self):
-        self.assertEqual(source_entry_kind(APP_PREFIX+"Anything;","<init>"),
-                         "CLASS_INITIALIZATION")
-        self.assertEqual(source_entry_kind(APP_PREFIX+"Anything;","<clinit>"),
-                         "CLASS_INITIALIZATION")
-    def test_malicious_source_text_never_appears_in_categories(self):
-        found=scan_stream(stream(method(APP_PREFIX+"MainActivity;","SECRET_API_KEY",
-            (13,"invoke-virtual",target("start")))))
-        report=json.dumps(summarize(found),sort_keys=True)
-        self.assertNotIn("SECRET_API_KEY",report)
-        self.assertIn("OTHER_METHOD_NO_UI_PROOF",report)
 
 if __name__=="__main__":
     unittest.main(verbosity=2)
