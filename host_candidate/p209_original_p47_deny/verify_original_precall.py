@@ -21,6 +21,43 @@ def require(v,label):
     if not v:raise Deny("P209_PRE_PC3912_DENY_"+label)
 def ins(method):
     return [(pc,i.get_name(),i.get_output()) for pc,i in method.get_instructions_idx()]
+def audit_signed_pc176_to_pc3912(method):
+    """Count only opcode classes in the exact signed-v138 DEX, not runtime state.
+
+    Do not print instruction operands, original strings, user data or traces.
+    No smali instrumentation, branch rewrite, method calls or APK mutation.
+    """
+    sequence=list(method.get_instructions_idx())
+    by_pc={pc:op for pc,op in sequence}
+    require(len(by_pc)==len(sequence),"PC176_DUPLICATE_ORIGINAL_INSTRUCTION_PC")
+    require(all(pc in by_pc for pc in (176,182,3912)),
+            "PC176_PC182_PC3912_ORIGINAL_BOUNDARIES_ABSENT")
+    call=by_pc[176]
+    target="".join(call.get_output().split())
+    require(call.get_name()=="invoke-static/range" and
+            "Lkotlin/ResultKt;->throwOnFailure" in target and
+            176+call.get_length()==182,
+            "PC176_THROWONFAILURE_IMMEDIATE_PC182")
+    require(by_pc[182].get_name()=="iget-object",
+            "PC182_ORIGINAL_NEXT_OPCODE_NOT_IGET_OBJECT")
+    window=[op.get_name() for pc,op in sequence if 182<=pc<3912]
+    require(window and window[0]=="iget-object",
+            "PC182_PC3912_ORIGINAL_WINDOW_MISSING")
+    counts={
+        "CONDITIONALS":sum(op.startswith("if-") for op in window),
+        "GOTOS":sum(op in ("goto","goto/16","goto/32") for op in window),
+        "SWITCHES":sum(op in ("packed-switch","sparse-switch") for op in window),
+        "RETURNS":sum(op.startswith("return") for op in window),
+        "THROWS":sum(op in ("throw","throw-verification-error") for op in window),
+    }
+    print("P209_SIGNED_ORIGINAL_PC176_THROWONFAILURE_NEXT_PC182=PASS")
+    print("P209_SIGNED_ORIGINAL_PC182_PC3912_WINDOW_OPCODE_COUNT="+str(len(window)))
+    for key,value in counts.items():
+        print("P209_PC182_PC3912_STATIC_"+key+"="+str(value))
+    print("P209_PC176_NORMAL_RETURN_AND_RUNTIME_PC182=NOT_ATTESTED")
+    print("P209_PC182_TO_PC3912_RUNTIME_PATH=NOT_ATTESTED")
+    return counts
+
 def compare(original,derived):
     before=list(original.get_instructions_idx())
     after=list(derived.get_instructions_idx())
@@ -99,6 +136,8 @@ def main():
         original,derived=map(Path,sys.argv[1:])
         p208.verify_signed_original_coroutine(original)
         o=prev.load(original);d=prev.load(derived)
+        audit_signed_pc176_to_pc3912(prev.find(o,prev.START2,"invokeSuspend",
+                "(Ljava/lang/Object;)Ljava/lang/Object;"))
         compare(prev.find(o,prev.START2,"invokeSuspend",
                 "(Ljava/lang/Object;)Ljava/lang/Object;"),
                 prev.find(d,prev.START2,"invokeSuspend",
