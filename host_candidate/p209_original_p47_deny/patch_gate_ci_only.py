@@ -40,7 +40,7 @@ PRE_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->mar
 P40_TARGET="Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;"
 GUARD_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markFirstGuard()V\n"
 GUARD_MAX_PC=3912
-TARGET_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markTakenTarget()V\n"
+TARGET_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markPostThrowOnFailure()V\n"
 FALL_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markFallthrough()V\n"
 
 class Deny(Exception):pass
@@ -174,13 +174,25 @@ def inject_precall(s, expected_guard_op="if-ne"):
     guard_at=sum(map(len,rows[:cond_idx]))
     after_cond=guard_at+len(rows[cond_idx])
     label_end=sum(map(len,rows[:label_idx+1]))
-    need(body.index(p208.INSERT)<guard_at<after_cond<=label_end<=at and
-         cond_idx<label_idx<call_idx,
-         "ENTRY_FIRST_IF_TAKEN_LABEL_PRE_PC3912_ORDER")
+    # Reuse the *existing* taken-target witness slot, not an extra marker.
+    # It now runs only after signed-original PC176 throwOnFailure returns.
+    # Refuse any other first real opcode at the branch target.
+    instruction_rows=[i for i in range(label_idx+1,call_idx)
+         if rows[i].strip() and not rows[i].lstrip().startswith(
+             (".",":","#"))]
+    need(instruction_rows and re.fullmatch(
+         r"^[ \t]+invoke-static/range[ \t]+\{[^}]+\},[ \t]*"
+         r"Lkotlin/ResultKt;->throwOnFailure\(Ljava/lang/Object;\)V[ \t]*\n?",
+         rows[instruction_rows[0]]) is not None,
+         "EXACT_SIGNED_PC176_THROWONFAILURE_FIRST_OPCODE")
+    post_call_at=sum(map(len,rows[:instruction_rows[0]+1]))
+    need(body.index(p208.INSERT)<guard_at<after_cond<=label_end<
+         post_call_at<at and cond_idx<label_idx<instruction_rows[0]<call_idx,
+         "PC176_POSTCALL_MARKER_STRICT_ORDER")
     newbody=(body[:guard_at]+GUARD_INVOKE+
              body[guard_at:after_cond]+FALL_INVOKE+
-             body[after_cond:label_end]+TARGET_INVOKE+
-             body[label_end:at]+PRE_INVOKE+body[at:])
+             body[after_cond:post_call_at]+TARGET_INVOKE+
+             body[post_call_at:at]+PRE_INVOKE+body[at:])
     new=s[:a]+newbody+s[b:]
     for mark in (GUARD_INVOKE,FALL_INVOKE,TARGET_INVOKE,PRE_INVOKE):
         need(new.count(mark.strip())==1,"ONLY_ONE_TEST_MARKER_EACH")
@@ -234,7 +246,7 @@ def inject_p40():
          "PRECALL_SOURCE_EXACT_INVERSE")
     print("P209_ONLY_TEST_ORIGINAL_FIRST_GUARD_MARKER=PASS")
     print("P209_PC26_FALLTHROUGH_PC30_ONLY_REVERSIBLE_MARKER=PASS")
-    print("P209_PC26_TAKEN_LABEL_PC176_ONLY_REVERSIBLE_MARKER=PASS")
+    print("P209_PC176_POST_THROWONFAILURE_ONLY_REVERSIBLE_MARKER=PASS")
     print("P209_ONLY_TEST_PRE_PC3912_MARKER=PASS")
     print("P209_ONLY_TEMP_P40_ONE_LOG_AND_NO_HOST_SPAWN=PASS")
 def main():
