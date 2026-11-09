@@ -78,6 +78,8 @@ def precall_fixture():
       "    if-ne v0, v1, :done\n"+
       "    const/4 v2, 0x0\n"+
       "    :done\n"+
+      "    invoke-static/range {p1 .. p1}, Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V\n"+
+      "    iget-object v2, p0, Lcom/dsh/android/EngineManager$start$2;->label:I\n"+
       "    invoke-static {v0}, "+p.P40_TARGET+"\n"+
       "    return-object v0\n.end method\n")
 class PreCallTests(unittest.TestCase):
@@ -120,11 +122,20 @@ class PreCallTests(unittest.TestCase):
             p.FALL_INVOKE+"    return-object v0\n")
         with self.assertRaises(p.Deny) as x:p.inject_precall(value)
         self.assertEqual(str(x.exception),"P209_DENY_PRECALL_OR_GUARD_OR_FALL_OR_TARGET_ALREADY_MARKED")
-    def test_taken_target_marker_after_label_and_before_p40(self):
+    def test_pc176_postcall_marker_after_original_throw_and_before_iget(self):
         x=p.inject_precall(precall_fixture())
         self.assertEqual(x.count(p.TARGET_INVOKE.strip()),1)
-        self.assertLess(x.index("    :done"),x.index(p.TARGET_INVOKE))
+        self.assertLess(x.index("    :done"),x.index("    invoke-static/range {p1 .. p1}"))
+        self.assertLess(x.index("    invoke-static/range {p1 .. p1}"),x.index(p.TARGET_INVOKE))
+        self.assertLess(x.index(p.TARGET_INVOKE),x.index("    iget-object v2, p0"))
         self.assertLess(x.index(p.TARGET_INVOKE),x.index(p.PRE_INVOKE))
+        # A generic or relocated call is not an acceptable post-return witness.
+        tampered=precall_fixture().replace(
+            "Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V",
+            "Lexample/Untrusted;->fake(Ljava/lang/Object;)V")
+        with self.assertRaises(p.Deny) as e:p.inject_precall(tampered)
+        self.assertEqual(str(e.exception),
+            "P209_DENY_EXACT_SIGNED_PC176_THROWONFAILURE_FIRST_OPCODE")
     def test_no_first_branch_target_label_refused(self):
         x=precall_fixture().replace(":done",":missing",1)
         with self.assertRaises(p.Deny) as err:p.inject_precall(x)
