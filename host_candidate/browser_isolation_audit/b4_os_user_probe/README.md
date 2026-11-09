@@ -20,3 +20,23 @@ record the actual app-process Os.open() EACCES/EPERM marker. ENOENT and
 other errno values are inconclusive and fail closed. The runner demands
 exactly two permission-denied markers inside one unique real log boundary.
 This cannot be replaced by FileNotFoundException alone.
+
+## B4 explicit cross-user ContentProvider URI probe (disposable synthetic only)
+
+The APK has a deliberately exported fixture-only `SyntheticRoleProvider`, containing
+**only** a constant role (`PARENT` or `WORK`) for the current Android OS user;
+it never accesses files, cookies, accounts, or real browser data. No URI grants,
+`singleUser` mode, network or app permissions are requested. The source tests
+both users with explicit `content://<selfUserId>@com.dsh.b4probe.synthetic/role`
+positive `ContentResolver.query()` calls, checking exactly one matching
+synthetic role. The corresponding `otherUserId@authority` query must throw
+a real `SecurityException`. A null cursor, unresolved provider, inaccessible
+same-user fixture, path typo, failed user unlock, or other exception does **not**
+count as an Android cross-user security pass. Both directions must be present
+exactly once after the fresh emulator Logcat boundary.
+
+The Android35 emulator proves only this explicit cross-user URI route under
+the disposable package and its no-permission settings, NOT arbitrary
+`Intent`/Binder transfers, enterprise device/profile-owner policy, a real
+phone's work-profile settings, production DSH integration or AVF/pVM.
+No real provider is exposed in the original DSH or production build.
