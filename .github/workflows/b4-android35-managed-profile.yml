@@ -36,6 +36,12 @@ jobs:
           set -euo pipefail
           p=host_candidate/browser_isolation_audit
           test -s "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          test -s "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/SyntheticRoleProvider.java"
+          grep -Fq 'getContentResolver().query(own' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'getContentResolver().query(foreign' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'catch(SecurityException blocked)' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
+          grep -Fq 'B4_ANDROID35_BOTH_USERS_PROVIDER_POSITIVE_AND_CROSSUSER_SECURITY_DENIED=PASS' "$p/run_b4_android35.sh"
+          grep -Fq 'android:grantUriPermissions="false"' "$p/b4_os_user_probe/src/main/AndroidManifest.xml"
           grep -Fq 'um.isManagedProfile()' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
           grep -Fq 'android.system.Os.open(' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
           grep -Fq 'android.system.OsConstants.EACCES' "$p/b4_os_user_probe/src/main/java/com/dsh/b4probe/UserProbe.java"
@@ -86,6 +92,7 @@ jobs:
         run: |
           echo B4_REAL_MANAGED_USER_UID=SEE_ANDROID35_EMULATOR_LOG >> "$GITHUB_STEP_SUMMARY"
           echo B4_PERSONAL_PHONE_ORIGINAL_DSH_DATA=NOT_TOUCHED >> "$GITHUB_STEP_SUMMARY"
+          echo B4_SYNTHETIC_SAME_USER_PROVIDER_AND_CROSS_USER_URI=SEE_ANDROID35_EMULATOR_LOG >> "$GITHUB_STEP_SUMMARY"
           echo B4_ENTERPRISE_DPC_CROSS_PROFILE_POLICY=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
           echo B4_REAL_PHONE_WORK_PROFILE=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
           echo B4_AVF_PROTECTED_VM=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
