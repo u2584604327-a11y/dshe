@@ -103,6 +103,19 @@ count="$(printf '%s\n' "$trace" | grep -Fc 'B4_ANDROID35_FOREIGN_OPEN_ERRNO=PERM
   echo B4_KERNEL_PERMISSION_OTHER_ERRNO=DENY
   exit 2
 }
+# Write-open capability is an independent kernel check; no bytes are written.
+# ENOENT is not evidence of isolation, and each user must attest separately.
+write_count="$(printf '%s\n' "$trace" | grep -Fc 'B4_ANDROID35_FOREIGN_WRITE_OPEN_ERRNO=PERMISSION_DENIED' || true)"
+[[ "$write_count" == 2 ]] || {
+  echo B4_KERNEL_WRITE_PERMISSION_BOTH_USERS_UNATTESTED=DENY
+  exit 2
+}
+[[ "$trace" != *"B4_ANDROID35_FOREIGN_WRITE_OPEN_ERRNO=ENOENT_INCONCLUSIVE"* &&
+   "$trace" != *"B4_ANDROID35_FOREIGN_WRITE_OPEN_ERRNO=OTHER_INCONCLUSIVE"* ]] || {
+  echo B4_KERNEL_WRITE_PERMISSION_OTHER_ERRNO=DENY
+  exit 2
+}
+echo B4_ANDROID35_BOTH_USERS_KERNEL_WRITE_OPEN_DENIED=PASS
 echo B4_ANDROID35_BOTH_USERS_KERNEL_EACCES_OR_EPERM=PASS
 echo B4_ANDROID35_OS_MANAGED_USER_PRIVATE_STORAGE=PASS
 echo B4_ENTERPRISE_DPC_AND_CROSS_PROFILE_POLICY=NOT_ATTESTED
