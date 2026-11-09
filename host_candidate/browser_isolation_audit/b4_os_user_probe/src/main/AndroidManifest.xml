@@ -2,6 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <application android:label="B4 disposable probe" android:allowBackup="false"
     android:usesCleartextTraffic="false">
+    <!-- Exported only in the disposable QEMU fixture. Constant synthetic role,
+         no grant flags, no file descriptors, no sensitive source. -->
+    <provider android:name=".SyntheticRoleProvider"
+      android:authorities="com.dsh.b4probe.synthetic"
+      android:exported="true" android:grantUriPermissions="false" />
     <activity android:name=".UserProbe" android:exported="true">
       <intent-filter>
         <action android:name="android.intent.action.MAIN"/>
