@@ -12,7 +12,7 @@ import zipfile
 PRE="Lcom/dsh/android/p209/P209PreCallWitness;->mark()V"
 GUARD="Lcom/dsh/android/p209/P209PreCallWitness;->markFirstGuard()V"
 FALL="Lcom/dsh/android/p209/P209PreCallWitness;->markFallthrough()V"
-TARGET="Lcom/dsh/android/p209/P209PreCallWitness;->markTakenTarget()V"
+TARGET="Lcom/dsh/android/p209/P209PreCallWitness;->markPostThrowOnFailure()V"
 P208="Lcom/dsh/android/p208/P208StartCoroutineWitness;->mark()V"
 OLD="Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;"
 NEW="Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;"
@@ -33,7 +33,10 @@ def compare(original,derived):
     require(0<gi<fi<ti<pi and gi+2==fi and
             after[gi+1][1].get_name()=="if-eqz" and
             after[fi+1][1].get_name()=="if-eq" and
-            after[ti+1][1].get_name()=="invoke-static/range" and
+            after[ti-1][1].get_name()=="invoke-static/range" and
+            "Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V" in
+                after[ti-1][1].get_output().replace(" ","") and
+            after[ti+1][1].get_name()=="iget-object" and
             after[pi+1][1].get_name()=="invoke-static" and
             NEW in after[pi+1][1].get_output(),
             "ORIGINAL_PC26_PC30_PC176_PC3912_ORDER")
@@ -43,15 +46,26 @@ def compare(original,derived):
             26+original_first[0][1].get_length()==30 and
             26+2*original_first[0][1].get_ref_off()==176,
             "ORIGINAL_SIGNED_PC26_TWO_SUCCESSORS_PINNED")
+    orig_map=dict(before)
+    require(176 in orig_map and 182 in orig_map and
+            orig_map[176].get_name()=="invoke-static/range" and
+            "Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V" in
+                orig_map[176].get_output().replace(" ","") and
+            176+orig_map[176].get_length()==182 and
+            orig_map[182].get_name()=="iget-object",
+            "SIGNED_PC176_THROWONFAILURE_PC182_EXACT_FALLTHROUGH")
     omit={0,gi,fi,ti,pi}
     aligned=[item for k,item in enumerate(after) if k not in omit]
     require(len(before)==len(aligned),"ORIGINAL_INSTRUCTION_COUNT_EXCEPT_FIVE")
     mapping={opc:dpc for (opc,_),(dpc,_) in zip(before,aligned)}
-    require(len(mapping)==len(before) and 176 in mapping and
+    require(len(mapping)==len(before) and 176 in mapping and 182 in mapping and
             aligned[[pc for pc,_ in before].index(176)][1].get_name()=="invoke-static/range",
             "ORIGINAL_PC176_OP_MATCH")
-    target_marker_pc=after[ti][0]
-    require(after[ti+1][0]==mapping[176],"TAKEN_MARKER_PRECISELY_BEFORE_ORIGINAL_PC176")
+    post_marker_pc=after[ti][0]
+    require(after[ti-1][0]==mapping[176] and
+            post_marker_pc==mapping[176]+orig_map[176].get_length() and
+            after[ti+1][0]==mapping[182],
+            "EXACT_REUSED_MARKER_BETWEEN_PC176_NORMAL_RETURN_AND_PC182")
     transformed=[]
     branch_count=0
     for k,((pc,orig),(dpc,der)) in enumerate(zip(before,aligned)):
@@ -63,7 +77,7 @@ def compare(original,derived):
             original_dest=pc+2*orig.get_ref_off()
             derived_dest=dpc+2*der.get_ref_off()
             require(original_dest in mapping,"ORIGINAL_BRANCH_TARGET_NOT_MAPPED")
-            expected=(target_marker_pc if original_dest==176 else mapping[original_dest])
+            expected=mapping[original_dest]
             require(derived_dest==expected,
                     "ORIGINAL_BRANCH_RELOCATION_CHANGED_TARGET_INDEX_"+str(k))
             if op.startswith("if-"):
@@ -118,7 +132,7 @@ def main():
         print("P209_FIRST_GUARD_MATCHES_SIGNED_ORIGINAL=PASS")
         print("P209_ALL_ORIGINAL_BRANCH_TARGETS_RELOCATED_EXACTLY=PASS")
         print("P209_PC26_FALLTHROUGH_PC30_MARKER_ONLY_TEST_DEX=PASS")
-        print("P209_PC26_TAKEN_PC176_BRANCH_TARGET_MARKER_ONLY_TEST_DEX=PASS")
+        print("P209_PC176_POST_THROWONFAILURE_REUSED_MARKER_ONLY_TEST_DEX=PASS")
         print("P209_FIRST_GUARD_SIGNED_PC="+str([(pc,op) for pc,op,out in ins(prev.find(o,prev.START2,"invokeSuspend","(Ljava/lang/Object;)Ljava/lang/Object;")) if op.startswith("if-")][0][0]))
         print("P209_PRE_PC3912_MARKER_ONLY_IN_DISPOSABLE_CLASSES3=PASS")
         print("P209_REAL_PC3912_RUNTIME_EXECUTION=NOT_ATTESTED")
