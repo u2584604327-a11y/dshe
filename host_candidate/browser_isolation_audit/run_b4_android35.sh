@@ -75,11 +75,12 @@ probe(){
   adb -s "$serial" shell am force-stop --user "$user" "$pkg" >/dev/null
   adb -s "$serial" shell am start -W --user "$user" -n "$pkg/.UserProbe" \
     --es phase "$phase" --ei other "$other" >/dev/null
-  if [[ "$phase" == seed ]];then
-    wait_for "B4_ANDROID35_$role""_SEED=PASS"
-  else
-    wait_for "B4_ANDROID35_$role""_VERIFY=PASS"
-  fi
+  case "$phase" in
+    seed) wait_for "B4_ANDROID35_$role""_SEED=PASS" ;;
+    verify) wait_for "B4_ANDROID35_$role""_VERIFY=PASS" ;;
+    uri) wait_for "B4_ANDROID35_$role""_URI=PASS" ;;
+    *) echo B4_INVALID_TEST_PHASE=DENY; exit 2 ;;
+  esac
 }
 stage=STORAGE
 probe 0 PARENT seed "$work"
@@ -118,6 +119,25 @@ write_count="$(printf '%s\n' "$trace" | grep -Fc 'B4_ANDROID35_FOREIGN_WRITE_OPE
 echo B4_ANDROID35_BOTH_USERS_KERNEL_WRITE_OPEN_DENIED=PASS
 echo B4_ANDROID35_BOTH_USERS_KERNEL_EACCES_OR_EPERM=PASS
 echo B4_ANDROID35_OS_MANAGED_USER_PRIVATE_STORAGE=PASS
+stage=PROVIDER_URI
+probe 0 PARENT uri "$work"
+probe "$work" WORK uri 0
+trace="$(after_boundary)"
+[[ "$trace" != *"B4_INVALID_MARKER"* && "$trace" != *"=DENY"* ]] || {
+  echo B4_PROVIDER_URI_RUN_INVALID=DENY
+  exit 2
+}
+for role in PARENT WORK;do
+  for result in PROVIDER_SELF_QUERY PROVIDER_FOREIGN_SECURITY_DENIED;do
+    marker="B4_ANDROID35_${role}_${result}=PASS"
+    count="$(printf '%s\n' "$trace" | grep -Fc "$marker" || true)"
+    [[ "$count" == 1 ]] || {
+      echo B4_PROVIDER_URI_EXPECTED_POSITIVE_AND_NEGATIVE_UNATTESTED=DENY
+      exit 2
+    }
+  done
+done
+echo B4_ANDROID35_BOTH_USERS_PROVIDER_POSITIVE_AND_CROSSUSER_SECURITY_DENIED=PASS
 echo B4_ENTERPRISE_DPC_AND_CROSS_PROFILE_POLICY=NOT_ATTESTED
 echo B4_ORIGINAL_DSH_AND_PHONE_TOUCHED=NO
 echo B4_AVF_PROTECTED_VM=NOT_ATTESTED
