@@ -65,6 +65,24 @@ public final class UserProbe extends Activity {
             throw new SecurityException("FOREIGN_OPEN_UNEXPECTED_ERRNO");
           }
         }
+        // A denied read is insufficient: prove the other OS user's synthetic
+        // file cannot even be opened for writing. No O_CREAT, O_TRUNC, or write.
+        try {
+          android.system.Os.close(android.system.Os.open(
+              foreign.getAbsolutePath(), android.system.OsConstants.O_WRONLY, 0));
+          throw new SecurityException("FOREIGN_WRITABLE");
+        } catch(android.system.ErrnoException denied) {
+          if(denied.errno==android.system.OsConstants.EACCES ||
+             denied.errno==android.system.OsConstants.EPERM) {
+            Log.i("B4_PROBE","B4_ANDROID35_FOREIGN_WRITE_OPEN_ERRNO=PERMISSION_DENIED");
+          } else if(denied.errno==android.system.OsConstants.ENOENT) {
+            Log.i("B4_PROBE","B4_ANDROID35_FOREIGN_WRITE_OPEN_ERRNO=ENOENT_INCONCLUSIVE");
+            throw new SecurityException("FOREIGN_WRITE_PATH_MISSING");
+          } else {
+            Log.i("B4_PROBE","B4_ANDROID35_FOREIGN_WRITE_OPEN_ERRNO=OTHER_INCONCLUSIVE");
+            throw new SecurityException("FOREIGN_WRITE_UNEXPECTED_ERRNO");
+          }
+        }
       }else throw new SecurityException("INVALID_PHASE");
       Log.i("B4_PROBE","B4_ANDROID35_"+role+"_"+phase.toUpperCase(java.util.Locale.US)+"=PASS");
     }catch(Exception failed){deny();return;}
