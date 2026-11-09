@@ -9,6 +9,7 @@ import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Parcel;
+import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
@@ -24,9 +25,9 @@ import java.util.IdentityHashMap;
 public final class HostProbe extends Activity {
   public static final String HOST_DESCRIPTOR="com.dsh.b3probe.HOST_GATE_V1";
   public static final String SLOT_DESCRIPTOR="com.dsh.b3probe.SLOT_V1";
-  public static final int REQUEST=100, RESULT=101, INSTALL=200, FORWARD=201;
+  public static final int REQUEST=100, RESULT=101, INSTALL=200, FORWARD=201, FD_FORWARD=202;
   public static final int UID_DENIED=-2, CAP_DENIED=-3, MALFORMED=-4,
-      WRONG_SENDER_PROCESS=-5;
+      WRONG_SENDER_PROCESS=-5, FD_DENIED=-6;
   static volatile HostGate GATE;
   private final IBinder[] remote=new IBinder[2];
   private boolean started,failed;
@@ -69,6 +70,10 @@ public final class HostProbe extends Activity {
       int answer;
       if(trustedUid!=Process.myUid() || observedPid==Process.myPid()){
         answer=UID_DENIED;
+      } else if(data.hasFileDescriptors()) {
+        // A transferred FD is irrevocable by merely closing the sender's copy.
+        // Never allow FD-bearing Binder messages to bypass the host-owned gate.
+        answer=FD_DENIED;
       } else {
         sawTrustedUid=true;
         try {
@@ -187,11 +192,39 @@ public final class HostProbe extends Activity {
       Op op,int size,int expected) throws RemoteException{
     require(expected,transact(slot,tx,null,null,claim,epoch,seq,op,size));
   }
+  /** Actual Binder FD-transfer attempt from an authorized synthetic slot process.
+   *  The FD contains no user data; it must be denied even with a valid lease. */
+  private int fdAttempt(int slot,int claim,long epoch,long seq) throws Exception {
+    ParcelFileDescriptor[] pipe=ParcelFileDescriptor.createPipe();
+    try(ParcelFileDescriptor sender=pipe[0];ParcelFileDescriptor unusedWriter=pipe[1]){
+      Parcel d=Parcel.obtain(),r=Parcel.obtain();
+      try{
+        d.writeInterfaceToken(SLOT_DESCRIPTOR);
+        d.writeInt(REQUEST);
+        d.writeInt(claim);
+        d.writeLong(epoch);
+        d.writeLong(seq);
+        d.writeInt(Op.PROBE_STATUS.ordinal());
+        d.writeByteArray(new byte[]{42});
+        d.writeFileDescriptor(sender.getFileDescriptor());
+        if(!d.hasFileDescriptors())throw new IllegalStateException("B3_FD_NOT_ATTACHED");
+        if(!remote[slot].transact(FD_FORWARD,d,r,0))
+          throw new RemoteException("B3_FD_FORWARD_MISSING");
+        r.readException();
+        return r.readInt();
+      }finally{d.recycle();r.recycle();}
+    }
+  }
+  private void assertFdDenied(int slot,int claim,long epoch,long seq) throws Exception {
+    require(FD_DENIED,fdAttempt(slot,claim,epoch,seq));
+  }
   private void test(){
     try {
       IBinder capA=GATE.activate(Slot.A,101,12000);
       IBinder capB=GATE.activate(Slot.B,201,12000);
       install(0,capA);install(1,capB);
+      assertFdDenied(0,0,101,1); // Valid lease, synthetic real FD: never accepted.
+      assertFdDenied(1,0,201,1); // Cross-slot claim must not admit an FD.
       assertCall(0,REQUEST,1,101,1,Op.PROBE_STATUS,1,code(Code.WRONG_SLOT));
       assertCall(1,REQUEST,0,201,1,Op.PROBE_STATUS,1,code(Code.WRONG_SLOT));
       assertCall(0,REQUEST,0,999,1,Op.PROBE_STATUS,1,code(Code.WRONG_EPOCH));
@@ -222,9 +255,11 @@ public final class HostProbe extends Activity {
       GATE.revoke(Slot.A);
       assertCall(0,RESULT,0,101,2,Op.PROBE_STATUS,1,code(Code.REVOKED));
       assertCall(0,REQUEST,0,101,3,Op.PROBE_STATUS,1,code(Code.REVOKED));
+      assertFdDenied(0,0,101,3); // FD cannot revive a revoked lease.
       IBinder renewed=GATE.activate(Slot.A,102,12000);
       install(0,renewed);
       assertCall(0,REQUEST,0,101,1,Op.PROBE_STATUS,1,code(Code.WRONG_EPOCH));
+      assertFdDenied(0,0,101,1); // Old epoch cannot smuggle an FD.
       assertCall(0,REQUEST,0,102,1,Op.PROBE_STATUS,1,code(Code.ACCEPT));
       assertCall(0,RESULT,0,102,1,Op.PROBE_STATUS,1,code(Code.ACCEPT));
       assertCall(1,REQUEST,1,201,2,Op.PROBE_STATUS,1,code(Code.ACCEPT));
@@ -233,6 +268,7 @@ public final class HostProbe extends Activity {
       install(0,expired);
       Thread.sleep(90);
       assertCall(0,REQUEST,0,103,1,Op.PROBE_STATUS,1,code(Code.EXPIRED));
+      assertFdDenied(0,0,103,1); // Expired lease cannot smuggle an FD.
       install(0,new Binder());
       assertCall(0,REQUEST,0,104,1,Op.PROBE_STATUS,1,CAP_DENIED);
       if(!GATE.topologyProved())throw new IllegalStateException("B3_TOPOLOGY_NOT_PROVED");
@@ -241,6 +277,7 @@ public final class HostProbe extends Activity {
       Log.i("B3_PROBE","B3_ANDROID35_BOUNDED_RESULT_ONE_SHOT=PASS");
       Log.i("B3_PROBE","B3_ANDROID35_TRANSFERRED_CAP_CROSS_PROCESS_DENIED=PASS");
       Log.i("B3_PROBE","B3_ANDROID35_HOST_CLOCK_AND_REAL_PAYLOAD_SIZE=PASS");
+      Log.i("B3_PROBE","B3_ANDROID35_SYNTHETIC_FD_TRANSFER_ALL_STATES_DENIED=PASS");
       Log.i("B3_PROBE","B3_ANDROID35_SHARED_UID_HOSTILE_PROCESS_ISOLATION=NOT_ATTESTED");
       Log.i("B3_PROBE","B3_ANDROID35_WORK_PROFILE_AVF=NOT_ATTESTED");
       Log.i("B3_PROBE","B3_ORIGINAL_DSH_AND_USER_DATA_TOUCHED=NO");
