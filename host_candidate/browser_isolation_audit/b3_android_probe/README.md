@@ -47,3 +47,19 @@ same-UID deployment, **not** an authentication principal or a mitigation
 against a compromised app process. Process death or service disconnect
 revokes the lease; a new process needs a new host-issued session. Production
 multi-user/work-profile isolation and data migration remain NOT_ATTESTED.
+
+### B3 synthetic Binder file-descriptor negative gate
+
+The **disposable** live slot process now forwards a *real* kernel pipe FD,
+with a fixed synthetic one-byte request, through synchronous Binder. The host
+must return `FD_DENIED` before parsing or accepting the request. The Android35
+runner requires `B3_ANDROID35_SYNTHETIC_FD_TRANSFER_ALL_STATES_DENIED=PASS`
+after attempts under a valid lease, wrong-slot claim, revoked lease, stale
+epoch, and expired lease. The regular no-FD request/reply and one-use ticket
+must remain functional; the slot closes its temporary received FD.
+
+This is an explicit **no-FD transport** contract, not an FD revocation
+implementation. Closing the sender's descriptor does **not** revoke a copy
+already transferred to another process. Never put real browser, account,
+cookie, file or other sensitive FDs into this test. No production Binder,
+BrowserBridge, IPC exports or app permissions are changed.
