@@ -47,3 +47,31 @@ P192 isolated-UID loopback TCP remains fail-closed. B1/B2, B3, and the
 B4 strictly attested Android35 OS-user/errno probes are independent.
 Do not merge PR #80, publish v139, install test APKs on the owner's
 phone, migrate accounts, or claim AVF/pVM.
+
+## Reused-marker normal-return variant (new test-only experiment, not pre-approved PASS)
+
+A prior **additive** marker after PC176 widened a branch and was correctly
+rejected. This narrower experiment **moves** the existing PC176 taken-edge
+witness to the instruction slot immediately after signed-v138 PC176
+`invoke-static/range kotlin.ResultKt.throwOnFailure`, before original PC182
+`iget-object`. The total number of disposable start$2 witness invokes stays
+five, not six. The first-guard marker and PC26->PC30 fallthrough marker remain.
+
+The signed-source verifier requires exact PC26 if-eqz successors (PC30, PC176),
+exact original PC176 throwOnFailure / PC182 iget adjacency, original
+instructions/operands and **every** conditional/goto opcode, width and
+destination mapping. A branch to original PC176 must still land on the
+original throwOnFailure, not the moved marker. If the assembler widens one
+branch or redirects a target, CI FAILS CLOSED. Original DSH v138, P47
+typed-deny source and network restrictions remain unchanged.
+
+This variant deliberately relinquishes a *direct before-call PC176 event*
+in favor of a *post-return PC176 event*. If the host PID logs
+`P209_PC176_POST_THROWONFAILURE=OBSERVED`, the pinned PC26 branch
+shape and exact relocated jump targets show the coroutine reached the
+normal-return edge of the original call during this disposable run.
+If absent, the result is `NOT_ATTESTED` -- it **does not** prove an
+exception, UID mismatch, or direct cause. This is not real P47 start,
+child process creation, or production BrowserBridge integration. Current
+P209 release gate remains blocked unless the genuine same-run original
+P47 final DENY evidence is also obtained.
