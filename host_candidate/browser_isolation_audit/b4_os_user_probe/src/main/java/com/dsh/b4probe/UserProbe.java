@@ -4,11 +4,44 @@ import android.os.Bundle;
 import android.os.Process;
 import android.os.UserManager;
 import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.net.Uri;
 import android.util.Log;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 public final class UserProbe extends Activity {
   private static final String NAME="b4_synthetic.bin";
+  /** Positive same-user queries exclude missing-provider and unreadable-provider
+   *  false positives. Only a real SecurityException from cross-user query counts. */
+  private void verifySyntheticProvider(int self,int other,String role) {
+    String authority=SyntheticRoleProvider.AUTHORITY;
+    String path="/"+SyntheticRoleProvider.PATH;
+    Uri own=Uri.parse("content://"+self+"@"+authority+path);
+    Uri foreign=Uri.parse("content://"+other+"@"+authority+path);
+    if(!String.valueOf(self).equals(own.getUserInfo()) ||
+        !String.valueOf(other).equals(foreign.getUserInfo()) ||
+        own.equals(foreign))
+      throw new IllegalStateException("B4_EXPLICIT_USER_URI_INVALID");
+    try(Cursor cursor=getContentResolver().query(own,new String[]{"role"},
+        null,null,null)){
+      if(cursor==null || !cursor.moveToFirst() || cursor.getCount()!=1 ||
+          !"role".equals(cursor.getColumnName(0)) ||
+          !role.equals(cursor.getString(0)))
+        throw new IllegalStateException("B4_SAME_USER_PROVIDER_UNATTESTED");
+    }
+    Log.i("B4_PROBE","B4_ANDROID35_"+role+"_PROVIDER_SELF_QUERY=PASS");
+    boolean osDenied=false;
+    try(Cursor cursor=getContentResolver().query(foreign,new String[]{"role"},
+        null,null,null)){
+      // A null/empty result is not a permission proof. An accessible
+      // foreign cursor is also a failure. Both must stop the test.
+    }catch(SecurityException blocked){
+      // Android framework/transport rejected an explicitly other-user URI.
+      osDenied=true;
+    }
+    if(!osDenied)throw new IllegalStateException("B4_FOREIGN_PROVIDER_NO_OS_DENIAL");
+    Log.i("B4_PROBE","B4_ANDROID35_"+role+"_PROVIDER_FOREIGN_SECURITY_DENIED=PASS");
+  }
   private void deny(){Log.i("B4_PROBE","B4_ANDROID35_DENIED=DENY");finish();}
   @Override public void onCreate(Bundle saved) {
     super.onCreate(saved);
@@ -83,6 +116,8 @@ public final class UserProbe extends Activity {
             throw new SecurityException("FOREIGN_WRITE_UNEXPECTED_ERRNO");
           }
         }
+      }else if("uri".equals(phase)){
+        verifySyntheticProvider(self,other,role);
       }else throw new SecurityException("INVALID_PHASE");
       Log.i("B4_PROBE","B4_ANDROID35_"+role+"_"+phase.toUpperCase(java.util.Locale.US)+"=PASS");
     }catch(Exception failed){deny();return;}
