@@ -70,7 +70,7 @@ test('concurrent optional HTTP requests share a bounded, read-only provider snap
     effect(install) { install(); }
   };
   installModelCatalog({ inject(deps, cb) {
-    assert.deepEqual(deps, ['webServer', 'llm']);
+    assert.deepEqual(deps, ['webServer']);
     callback = cb;
   }});
   callback(scope);
