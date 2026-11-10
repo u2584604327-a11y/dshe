@@ -16,7 +16,7 @@ test('generated client keeps stable official settings and mounts isolated picker
   assert.match(client, /const inject = \[\]/);
   assert.match(client, /function QMobilePicker/);
   assert.match(client, /QMobilePicker, \{ form, patch \}/);
-  assert.doesNotMatch(client, /\bfetchJson\("/qqbot/q-mobile/models"/);
+  assert.ok(!client.includes('fetchJson("/qqbot/q-mobile/models"'));
   assert.match(generator, /Q_MOBILE_ISOLATED_PICKER/);
   assert.ok(!generator.includes('Q_MOBILE_MODEL_HOOK'));
 });
