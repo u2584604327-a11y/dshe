@@ -102,3 +102,38 @@ unrecognized process getter/isAlive shape, missing positive entry, PID
 mismatch, changed production P47 typed DENY, or assembler branch widening
 must fail closed. No new APK release, account data, real phone,
 privileged profile operations, or network access.
+
+## PC202 relocation rejected by signed-original DEX parity (2026-11-10)
+
+A follow-up experiment reused the **existing** disposable PC30 marker at
+the signed PC202 non-null fallthrough before PC206 `Process.isAlive()`,
+while retaining the successful original PC176 post-return witness. No
+new test marker, production DEX change, access permission or host Node
+fallback was authorized. Strict negative unit tests increased 30 -> 33,
+all 33 passed on GitHub Actions. The first trial failed *before* build
+because the workflow still expected 30 tests; CI was corrected.
+
+The next CI run built the SHA-pinned disposable derived APK, but the
+mandatory signed-original instruction comparison refused the relocated
+variant with the exact output:
+
+`P209_PRE_PC3912_DENY_BRANCH_OPCODE_OR_WIDTH_CHANGED_INDEX_46`
+
+Source: [run 42751062118, job 129614532304](https://github.com/u2584604327-a11y/dshe/actions/runs/42751062118).
+**No Android35 runtime PC202 witness was obtained.** This is a genuine
+fail-closed DEX branch parity rejection, NOT evidence that the original
+`EngineManager.process` is null or alive, and not P47 admission.
+Do NOT relax opcode/width parity, change signed-original branch widths,
+or infer runtime values from an experiment that did not launch.
+
+All six CI-only runtime/compiler/workflow files modified for this
+experiment were restored byte-for-byte to their last validated
+`53f0a860da5788df010f004d0fc07243360608af` blob contents,
+without resetting history or changing any original DSH source.
+The incident documentation is intentionally retained as evidence.
+Return to the previously observed PC176 post-return path and investigate
+the signed-original EngineManager process state through a separate
+non-mutating method, or require an independently proven branch-preserving
+instrumentation strategy before further Android runtime experiments.
+P192 isolated UID TCP EACCES and all production release DENY rules
+are unaffected.
