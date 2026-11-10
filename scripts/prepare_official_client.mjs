@@ -97,6 +97,12 @@ if(qqTitleIndex>=0) {
   console.log("Q_MOBILE_DIAG_PUBLIC_UI_SNIPPET="+JSON.stringify(
     code.slice(Math.max(0,qqTitleIndex-140),qqTitleIndex+280)));
 }
+for(const token of ['"手动填写"','"模型"','"provider"','"Model"','"imqq-model"']) {
+  const i=code.lastIndexOf(token);
+  console.log("Q_MOBILE_DIAG_TOKEN="+JSON.stringify(token)+" INDEX="+i);
+  if(i>=0)console.log("Q_MOBILE_DIAG_SOURCE="+JSON.stringify(
+    code.slice(Math.max(0,i-420),i+900)));
+}
 one('"模型与提示词"),','"模型与提示词"),\\n'+mobileModelPicker+',','Q_MOBILE_MODEL_PICKER');
 code=code.replace(/\n\/\/# sourceMappingURL=client\.js\.map\s*$/,'\n');
 const markers=[
