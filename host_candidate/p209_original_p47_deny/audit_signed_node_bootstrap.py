@@ -91,7 +91,7 @@ def callsite_shape(call_ins,result_ins,guard_ins,exit_ins,descriptor):
 def linked_delegate_names(rows):
     """A class name alone is insufficient: an original invoke must mention it."""
     expression=re.compile(
-        r"(Lcom/dsh/android/termux/TermuxBootstrap\\$installNodeRuntime\\$[0-9]+;)")
+        r"(Lcom/dsh/android/termux/TermuxBootstrap\$installNodeRuntime\$[0-9]+;)")
     linked=set()
     for _,ins in rows:
         if not ins.get_name().startswith("invoke-"):
