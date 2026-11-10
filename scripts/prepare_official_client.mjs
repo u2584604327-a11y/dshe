@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Q Mobile v0.1.6 nonblocking browser integration of OFFICIAL QQ Bot UI.
+ * Q Mobile v0.1.7 nonblocking browser integration of OFFICIAL QQ Bot UI.
  *
  * Upstream @tencent-connect/dsh-qqbot@0.5.5 (MIT, © 2026 Tencent Connect).
  * Reuses official QR / AppID / secret binding UI, API routes and CSRF logic.
@@ -83,7 +83,7 @@ one('}, "im-qqbot-client.binding");\n\t\t}\n\t\t/**',
       '/**'
     ].join('\n'),'FAIL_CLOSED_BOOT_END');
 // Q Mobile optional UI: real DSH model discovery; no QQ credential handling.
-one("useConfigPanelStyles();","useConfigPanelStyles();\nconst [qmModels, setQmModels] = (0, react.useState)([]);\nconst [qmCatalogStatus, setQmCatalogStatus] = (0, react.useState)(\"等待读取当前 DSH 模型目录…\");\n(0, react.useEffect)(() => {\n  /* Model selection works before QQ bind and while QQ is offline. */\n  const controller = new AbortController();\n  fetchJson(\"/qqbot/q-mobile/models\", { cache: \"no-store\", signal: controller.signal }, 7000)\n    .then(result => {\n      if (controller.signal.aborted) return;\n      setQmModels(Array.isArray(result.models) ? result.models : []);\n      setQmCatalogStatus(result.available ? \"下方可直接选择已注册的模型：\" : \"当前宿主未返回模型列表。可在 QQ 发送 /model 使用官方模型选择，或继续手动配置。\");\n    })\n    .catch(() => {\n      if (!controller.signal.aborted) setQmCatalogStatus(\"模型列表暂不可用。在 QQ 中发送 /model 可使用官方可点击选项。\");\n    });\n  return () => controller.abort();\n}, []);",'Q_MOBILE_MODEL_HOOK');
+one("useConfigPanelStyles();","useConfigPanelStyles();\nconst [qmModels, setQmModels] = (0, react.useState)([]);\nconst [qmCatalogStatus, setQmCatalogStatus] = (0, react.useState)(\"等待读取当前 DSH 模型目录…\");\n(0, react.useEffect)(() => {\n  /* Model selection works before QQ bind and while QQ is offline. */\n  const controller = new AbortController();\n  const qmTimer = setTimeout(() => controller.abort(), 7000);\n  Promise.resolve()\n    .then(() => globalThis.fetch(\"/qqbot/q-mobile/models\", {\n      method: \"GET\", cache: \"no-store\", credentials: \"same-origin\",\n      signal: controller.signal\n    }))\n    .then(response => {\n      if (!response.ok) throw new Error(\"MODEL_CATALOG_HTTP_\" + response.status);\n      return response.json();\n    })\n    .then(result => {\n      if (controller.signal.aborted) return;\n      setQmModels(Array.isArray(result.models) ? result.models : []);\n      setQmCatalogStatus(result.available ? \"下方可直接选择已注册的模型：\" : \"当前宿主未返回模型列表。可在 QQ 发送 /model 使用官方模型选择，或继续手动配置。\");\n    })\n    .catch(() => {\n      if (!controller.signal.aborted) setQmCatalogStatus(\"模型列表暂不可用。在 QQ 中发送 /model 可使用官方可点击选项。\");\n    })\n    .finally(() => clearTimeout(qmTimer));\n  return () => { clearTimeout(qmTimer); controller.abort(); };\n}, []);",'Q_MOBILE_MODEL_HOOK');
 // Anchor on the unique title token rather than whitespace-sensitive generated JSX.
 // Matches npm-packaged official 0.5.5 and rejects unexpected upstream changes.
 const mobileModelPicker="(0, react.createElement)(\"div\", { className: \"imqb2-field\", style: { padding: \"12px\", border: \"1px solid var(--border, #424242)\", borderRadius: \"12px\", maxWidth: \"100%\", boxSizing: \"border-box\" } },\n  (0, react.createElement)(\"label\", { className: \"imqb2-label\", htmlFor: \"qm-model-picker\" }, \"选择模型（自动读取 DSH）\"),\n  (0, react.createElement)(\"select\", {\n    id: \"qm-model-picker\",\n    style: { width: \"100%\", maxWidth: \"100%\", minHeight: 44, padding: \"8px\", borderRadius: 8, color: \"inherit\", background: \"var(--bg, #272727)\" },\n    value: form.provider && form.model ? JSON.stringify([form.provider, form.model]) : \"\",\n    onChange: (event) => {\n      if (!event.target.value) { patch(\"provider\", \"\"); patch(\"model\", \"\"); return; }\n      const selected=JSON.parse(event.target.value);\n      if (!Array.isArray(selected) || selected.length!==2) return;\n      patch(\"provider\", selected[0]);\n      patch(\"model\", selected[1]);\n    }\n  },\n    (0, react.createElement)(\"option\", { value: \"\" }, \"跟随 DSH 默认模型\"),\n    ...qmModels.map(entry => (0, react.createElement)(\"option\",\n      { key: entry.provider+\"/\"+entry.id, value: JSON.stringify([entry.provider,entry.id]) },\n      (entry.name || entry.id) + \" · \" + entry.provider+\"/\"+entry.id)),\n    ...(form.provider && form.model && !qmModels.some(entry =>\n      entry.provider===form.provider && entry.id===form.model) ? [\n      (0, react.createElement)(\"option\",\n        { key: \"custom\", value: JSON.stringify([form.provider,form.model]) },\n        \"当前自定义：\" + form.provider+\"/\"+form.model)\n      ] : [])),\n  (0, react.createElement)(\"p\", { className: \"imqb2-hint\" }, qmCatalogStatus),\n  (0, react.createElement)(\"p\", { className: \"imqb2-hint\" }, \"选择后点击保存；下方 Provider/Model 可手动输入。\")\n)";
@@ -111,7 +111,7 @@ if(code.includes('@tencent-connect/dsh-qqbot'))
   throw Error('UNPATCHED_CLIENT_ID');
 const copyright=[
   '/*',
-  ' * Q Mobile v0.1.6: nonblocking Android DSH client integration.',
+  ' * Q Mobile v0.1.7: nonblocking Android DSH client integration.',
   ' * Official @tencent-connect/dsh-qqbot@0.5.5 client (MIT).',
   ' * Copyright (c) 2026 Tencent Connect.',
   ' * Unmodified QR, auth, API routes and QQ protocol.',
@@ -124,7 +124,7 @@ const license=fs.readFileSync('node_modules/@tencent-connect/dsh-qqbot/LICENSE',
 if(!license.includes('MIT License')||!license.includes('Copyright (c) 2026 Tencent Connect'))
   throw Error('UPSTREAM_MIT_LICENSE_MISMATCH');
 fs.writeFileSync('THIRD_PARTY_LICENSE_TENCENT.txt',license,'utf8');
-console.log('Q_MOBILE_VERSION=0.1.6');
+console.log('Q_MOBILE_VERSION=0.1.7');
 console.log('WEB_BOOT_REQUIRED_SERVICES=NONE');
 console.log('SETTINGS=DEFERRED_SCOPED_SLOTS');
 console.log('SIDEBAR=OPTIONAL_SCOPED');
