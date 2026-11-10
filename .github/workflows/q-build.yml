@@ -1,7 +1,7 @@
 name: Build verified Q Mobile direct TGZ
 on:
   push:
-    branches: [release/q-mobile-0.1.5]
+    branches: [release/q-mobile-0.1.6]
     paths:
       - "lib/**"
       - "bin/**"
@@ -64,7 +64,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           FILE="$(npm pack --ignore-scripts --pack-destination dist --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s)[0].filename))")"
-          test "$FILE" = "dsh-qqbot-q-mobile-0.1.5.tgz"
+          test "$FILE" = "dsh-qqbot-q-mobile-0.1.6.tgz"
           tar -tzf "dist/$FILE" | sort | tee /tmp/q-mobile-files.txt
           for file in package/package.json package/lib/index.js package/lib/model-catalog.js package/lib/client.js package/THIRD_PARTY_LICENSE_TENCENT.txt package/cordis.patch.yml package/README.md package/THIRD_PARTY_NOTICES.md package/LICENSE package/bin/q-mobile-doctor.mjs; do
             grep -Fxq "$file" /tmp/q-mobile-files.txt
@@ -77,22 +77,22 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: q-mobile-0.1.5-ci-test
+          name: q-mobile-0.1.6-ci-test
           path: |
-            dist/dsh-qqbot-q-mobile-0.1.5.tgz
-            dist/dsh-qqbot-q-mobile-0.1.5.tgz.sha256
+            dist/dsh-qqbot-q-mobile-0.1.6.tgz
+            dist/dsh-qqbot-q-mobile-0.1.6.tgz.sha256
           retention-days: 7
       - name: Publish verified public .tgz and checksum to main
-        if: github.ref == 'refs/heads/release/q-mobile-0.1.5' && github.event_name == 'push'
+        if: github.ref == 'refs/heads/release/q-mobile-0.1.6' && github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f dist/dsh-qqbot-q-mobile-0.1.5.tgz dist/dsh-qqbot-q-mobile-0.1.5.tgz.sha256
+          git add -f dist/dsh-qqbot-q-mobile-0.1.6.tgz dist/dsh-qqbot-q-mobile-0.1.6.tgz.sha256
           if git diff --cached --quiet; then
             echo "Raw TGZ already current"
           else
-            git commit -m "dist: publish Q Mobile 0.1.5 official-core adapter"
-            git push origin HEAD:release/q-mobile-0.1.5
+            git commit -m "dist: publish Q Mobile 0.1.6 official-core adapter"
+            git push origin HEAD:release/q-mobile-0.1.6
           fi
