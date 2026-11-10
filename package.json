@@ -1,7 +1,7 @@
 {
   "name": "dsh-qqbot-q-mobile",
-  "version": "0.1.8",
-  "description": "Q Mobile QQ Bot: safe official QQ settings UI, bounded group background and reliable chat defaults.",
+  "version": "0.1.9",
+  "description": "Q Mobile QQ Bot: official QQ settings with optional on-demand model picker and bounded group background.",
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
@@ -14,6 +14,7 @@
   },
   "files": [
     "lib/index.js",
+    "lib/model-catalog.js",
     "lib/client.js",
     "bin/q-mobile-doctor.mjs",
     "cordis.patch.yml",
