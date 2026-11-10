@@ -75,3 +75,30 @@ exception, UID mismatch, or direct cause. This is not real P47 start,
 child process creation, or production BrowserBridge integration. Current
 P209 release gate remains blocked unless the genuine same-run original
 P47 final DENY evidence is also obtained.
+
+## PC202 non-null successor variant (disposable P209 CI only)
+
+After a previous real Android35 test witnessed the original PC176
+`ResultKt.throwOnFailure` normal-return edge in the host process, the
+**existing** fixed PC30 fallthrough witness was moved to just after the
+signed-original PC202 `if-eqz` and just before PC206
+`Process.isAlive()`. The PC176 post-return marker is retained. The
+disposable `EngineManager$start$2` still contains exactly five witnesses,
+not six. Original signed v138 and live production code remain untouched.
+
+A process-ID-matched `P209_PC202_PROCESS_NONNULL_FALLTHROUGH=OBSERVED`
+would prove only that the coroutine executed PC202's non-null successor
+and approached the original `isAlive()` call, **not** that the process
+was alive, PC214 took any branch, or P47 started. Non-observation is
+`NOT_ATTESTED`; it does not prove the process field was null because
+the original coroutine may exit through other edges or time out.
+Since PC30 no longer has a direct witness, do NOT claim the PC26
+exact-one-arm attestation in this experiment; the earlier successful
+PC26 test remains historical separate evidence.
+
+Every signed-original conditional/goto opcode, width, operand and target
+must retain exact parity after the witness relocation. Invalid placement,
+unrecognized process getter/isAlive shape, missing positive entry, PID
+mismatch, changed production P47 typed DENY, or assembler branch widening
+must fail closed. No new APK release, account data, real phone,
+privileged profile operations, or network access.
