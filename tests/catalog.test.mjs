@@ -38,14 +38,13 @@ test('unavailable runtime services must not block official QQ boot',()=>{
   assert.equal(installModelCatalog({inject(deps,callback){requests.push(deps);}}),true);
   assert.deepEqual(requests,[['webServer','llm']]);
 });
-test('official client includes both model picker and nonblocking settings integration',()=>{
-  const client=readFileSync(new URL('../lib/client.js',import.meta.url),'utf8');
-  assert.match(client,/qm-model-picker/);
-  assert.match(client,/qqbot\/q-mobile\/models/);
-  assert.match(client,/const inject = \[\]/);
-  assert.match(client,/ctx\.inject\(\["slots"\]/);
+test('safe mode does not insert an unverified model-picker component', () => {
+  const script = readFileSync(new URL('../scripts/prepare_official_client.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(script, /qm-model-picker|Q_MOBILE_MODEL_PICKER|fetchJson/);
+  assert.match(script, /SCOPED_LAYOUT|LAZY_SETTINGS_START/);
+  const wrapper = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(wrapper, /installModelCatalog|\.\/model-catalog\.js/);
 });
-
 test('hung provider never stalls model catalog indefinitely or hides healthy models', async () => {
   const started = Date.now();
   const result = await discoverModels({
