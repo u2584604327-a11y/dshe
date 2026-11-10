@@ -22,7 +22,7 @@ function loadOfficialClient(){
   return {id,client};
 }
 test('bundle contains official QR/settings and Tencent copyright',()=>{
-  assert.equal(pkg.version,'0.1.8');
+  assert.equal(pkg.version,'0.1.9');
   assert.equal(pkg.exports['./client'],'./lib/client.js');
   assert.equal(pkg.dsh.client.platform,'web');
   assert.deepEqual(pkg.dsh.client.inject,[]);
