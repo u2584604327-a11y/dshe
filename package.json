@@ -1,7 +1,7 @@
 {
   "name": "dsh-qqbot-q-mobile",
-  "version": "0.1.7",
-  "description": "Q Mobile QQ Bot: small recent group context, natural tone and resilient DSH model-picker dropdown in settings.",
+  "version": "0.1.8",
+  "description": "Q Mobile QQ Bot: safe official QQ settings UI, bounded group background and reliable chat defaults.",
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
@@ -14,7 +14,6 @@
   },
   "files": [
     "lib/index.js",
-    "lib/model-catalog.js",
     "lib/client.js",
     "bin/q-mobile-doctor.mjs",
     "cordis.patch.yml",
