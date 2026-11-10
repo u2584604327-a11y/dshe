@@ -45,3 +45,51 @@ test('official client includes both model picker and nonblocking settings integr
   assert.match(client,/const inject = \[\]/);
   assert.match(client,/ctx\.inject\(\["slots"\]/);
 });
+
+test('hung provider never stalls model catalog indefinitely or hides healthy models', async () => {
+  const started = Date.now();
+  const result = await discoverModels({
+    listProviders: () => ['hung', 'healthy'],
+    listModels: id => id === 'hung' ? new Promise(() => {}) : ['working-model']
+  });
+  assert.ok(Date.now() - started < 3000, 'one provider cannot freeze settings');
+  assert.deepEqual(result, [{
+    provider: 'healthy', id: 'working-model', name: 'working-model'
+  }]);
+});
+test('concurrent optional HTTP requests share a bounded, read-only provider snapshot', async () => {
+  let callback, handle, providerCalls = 0, modelCalls = 0;
+  const scope = {
+    llm: {
+      listProviders: async () => { ++providerCalls; return ['local']; },
+      listModels: async () => { ++modelCalls; return ['stable']; }
+    },
+    webServer: { register(spec) { handle = spec.handler; return () => {}; } },
+    effect(install) { install(); }
+  };
+  installModelCatalog({ inject(deps, cb) {
+    assert.deepEqual(deps, ['webServer', 'llm']);
+    callback = cb;
+  }});
+  callback(scope);
+  assert.equal(typeof handle, 'function');
+  const get = async () => {
+    let body, status;
+    await handle({ method: 'GET', headers: { host: 'dsh.local' } }, {
+      writeHead(code) { status = code; },
+      end(payload) { body = JSON.parse(payload); }
+    });
+    assert.equal(status, 200);
+    return body.models;
+  };
+  const all = await Promise.all([get(), get(), get()]);
+  assert.ok(all.every(x => x.length === 1 && x[0].id === 'stable'));
+  await get();
+  assert.equal(providerCalls, 1);
+  assert.equal(modelCalls, 1);
+});
+test('model-picker fetch is not gated on successful QQ authentication', () => {
+  const script = readFileSync(new URL('../scripts/prepare_official_client.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(script, /if \\(bindPhase !== /);
+  assert.match(script, /Model selection works before QQ bind/);
+});
