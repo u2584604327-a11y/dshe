@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Q Mobile v0.1.8 nonblocking browser integration of OFFICIAL QQ Bot UI.
+ * Q Mobile v0.1.9 nonblocking browser integration of OFFICIAL QQ Bot UI.
  *
  * Upstream @tencent-connect/dsh-qqbot@0.5.5 (MIT, © 2026 Tencent Connect).
  * Reuses official QR / AppID / secret binding UI, API routes and CSRF logic.
@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
+import { PICKER_SOURCE } from './optional-model-picker.mjs';
 const upstream=require('@tencent-connect/dsh-qqbot/package.json');
 if(upstream.name!=='@tencent-connect/dsh-qqbot'||upstream.version!=='0.5.5')
   throw Error('OFFICIAL_CLIENT_PIN_MISMATCH');
@@ -82,6 +83,15 @@ one('}, "im-qqbot-client.binding");\n\t\t}\n\t\t/**',
       '}',
       '/**'
     ].join('\n'),'FAIL_CLOSED_BOOT_END');
+// Optional settings UI remains isolated in its own React component: no hook
+// is injected into the existing Tencent ConfigPanel. Failed catalog discovery
+// cannot stop rendering the official config editor and QR bind panel.
+one('function ConfigPanel({ bindPhase } = {}) {',
+  PICKER_SOURCE + '\nfunction ConfigPanel({ bindPhase } = {}) {',
+  'Q_MOBILE_ISOLATED_PICKER');
+one('"模型"), (0, react.createElement)(FieldRow, {',
+  '"模型"), (0, react.createElement)(QMobilePicker, { form, patch }), (0, react.createElement)(FieldRow, {',
+  'Q_MOBILE_PICKER_MOUNT');
 code=code.replace(/\n\/\/# sourceMappingURL=client\.js\.map\s*$/,'\n');
 const markers=[
   'const inject = [];',
@@ -90,7 +100,8 @@ const markers=[
   '/qqbot/im-qqbot/bind',
   '/qqbot/im-qqbot/bind/manual',
   'settings.section','plugins.detail.actions','sidebar.right.pane.tab',
-  '"手动填写"'
+  '"手动填写"', 'QMobilePicker', 'qm-safe-model-select',
+  '/qqbot/q-mobile/models'
 ];
 for(const marker of markers)
   if(!code.includes(marker))throw Error('OFFICIAL_UI_MARKER_MISSING_'+marker);
@@ -98,7 +109,7 @@ if(code.includes('@tencent-connect/dsh-qqbot'))
   throw Error('UNPATCHED_CLIENT_ID');
 const copyright=[
   '/*',
-  ' * Q Mobile v0.1.8: nonblocking Android DSH client integration.',
+  ' * Q Mobile v0.1.9: nonblocking Android DSH client integration.',
   ' * Official @tencent-connect/dsh-qqbot@0.5.5 client (MIT).',
   ' * Copyright (c) 2026 Tencent Connect.',
   ' * Unmodified QR, auth, API routes and QQ protocol.',
@@ -111,7 +122,7 @@ const license=fs.readFileSync('node_modules/@tencent-connect/dsh-qqbot/LICENSE',
 if(!license.includes('MIT License')||!license.includes('Copyright (c) 2026 Tencent Connect'))
   throw Error('UPSTREAM_MIT_LICENSE_MISMATCH');
 fs.writeFileSync('THIRD_PARTY_LICENSE_TENCENT.txt',license,'utf8');
-console.log('Q_MOBILE_VERSION=0.1.8');
+console.log('Q_MOBILE_VERSION=0.1.9');
 console.log('WEB_BOOT_REQUIRED_SERVICES=NONE');
 console.log('SETTINGS=DEFERRED_SCOPED_SLOTS');
 console.log('SIDEBAR=OPTIONAL_SCOPED');
