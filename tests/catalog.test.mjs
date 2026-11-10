@@ -90,6 +90,6 @@ test('concurrent optional HTTP requests share a bounded, read-only provider snap
 });
 test('model-picker fetch is not gated on successful QQ authentication', () => {
   const script = readFileSync(new URL('../scripts/prepare_official_client.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(script, /if \\(bindPhase !== /);
+  assert.ok(!script.includes('if (bindPhase !== '));
   assert.match(script, /Model selection works before QQ bind/);
 });
