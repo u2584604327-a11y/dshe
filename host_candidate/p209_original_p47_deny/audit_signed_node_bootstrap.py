@@ -88,6 +88,44 @@ def callsite_shape(call_ins,result_ins,guard_ins,exit_ins,descriptor):
          "PC414_ARGUMENT_REGISTER_DRIFT")
     return True
 
+def linked_delegate_names(rows):
+    """A class name alone is insufficient: an original invoke must mention it."""
+    expression=re.compile(
+        r"(Lcom/dsh/android/termux/TermuxBootstrap\\$installNodeRuntime\\$[0-9]+;)")
+    linked=set()
+    for _,ins in rows:
+        if not ins.get_name().startswith("invoke-"):
+            continue
+        match=expression.search(ins.get_output())
+        if match:linked.add(match.group(1))
+    need(len(linked)<=8,"BOUNDED_LINKED_LAMBDA_COUNT")
+    return sorted(linked)
+
+def inspect_linked_delegate_classes(dexes,wrapper_rows):
+    """Only classes actually called by original wrapper; never infer runtime."""
+    wanted=linked_delegate_names(wrapper_rows)
+    found=[]
+    for descriptor in wanted:
+        instances=[(dex_name,cls)
+                   for dex_name,dex in dexes
+                   for cls in dex.get_classes()
+                   if cls.get_name()==descriptor]
+        need(len(instances)==1,"LINKED_LAMBDA_CLASS_UNIQUE")
+        dex_name,cls=instances[0]
+        methods=[m for m in cls.get_methods()
+                 if m.get_name()=="invokeSuspend" and
+                 normalize_descriptor(m.get_descriptor())==
+                    "(Ljava/lang/Object;)Ljava/lang/Object;"]
+        need(len(methods)==1 and methods[0].get_code() is not None,
+             "LINKED_LAMBDA_INVOKESUSPEND_UNIQUE")
+        method=methods[0]
+        try_count=len(method.get_code().get_tries() or [])
+        rets,branches,categories=bounded_method_summary(
+            list(method.get_instructions_idx()),try_count)
+        need(len(rets)>0,"LINKED_LAMBDA_MISSING_RETURN")
+        found.append((descriptor,dex_name,rets,branches,categories,try_count))
+    return wanted,found
+
 def audit(apk):
     from androguard.core.dex import DEX
     source=Path(apk)
@@ -158,6 +196,24 @@ def audit(apk):
                   "ABI_FIELD_READ","OTHER_INVOKE"):
         print("P209_NODE_BOOTSTRAP_STATIC_CALL_CATEGORY_"+label+"="+
               str(counts.get(label,0)))
+    wanted,delegates=inspect_linked_delegate_classes(
+        dexes,list(method.get_instructions_idx()))
+    print("P209_NODE_BOOTSTRAP_DIRECT_LINKED_LAMBDA_COUNT="+str(len(wanted)))
+    for index,(descriptor,dex_file,rets,branches,categories,tries) in enumerate(delegates,1):
+        safe=descriptor.removeprefix("Lcom/dsh/android/termux/").removesuffix(";")
+        print("P209_NODE_LINKED_LAMBDA_"+str(index)+"_CLASS="+safe)
+        print("P209_NODE_LINKED_LAMBDA_"+str(index)+"_DEX="+dex_file)
+        print("P209_NODE_LINKED_LAMBDA_"+str(index)+"_RETURN_COUNT="+str(len(rets)))
+        print("P209_NODE_LINKED_LAMBDA_"+str(index)+"_BRANCH_COUNT="+str(len(branches)))
+        print("P209_NODE_LINKED_LAMBDA_"+str(index)+"_TRY_COUNT="+str(tries))
+        for kind in ("COROUTINE_API","ASSET_API","ARCHIVE_API","FILE_IO_API",
+                     "HASH_OR_CRYPTO_API","PROCESS_EXEC_API",
+                     "ENVIRONMENT_API","ABI_FIELD_READ","OTHER_INVOKE"):
+            print("P209_NODE_LINKED_LAMBDA_"+str(index)+"_CALL_CATEGORY_"+
+                  kind+"="+str(categories.get(kind,0)))
+    print("P209_NODE_BOOTSTRAP_LINKED_LAMBDA_VERIFICATION="+
+          ("READONLY_BOUNDED_PASS" if delegates else "NO_LINKED_LAMBDA_AT_THIS_DEPTH"))
+    print("P209_NODE_LINKED_LAMBDA_TRANSITIVE_CALLEES=NOT_AUDITED")
     print("P209_NODE_BOOTSTRAP_DIRECT_CALLS_NOT_TRANSITIVE=YES")
     print("P209_NODE_BOOTSTRAP_RETURN_VALUE_SEMANTICS=NOT_ATTESTED")
     print("P209_NODE_BOOTSTRAP_RUNTIME_SUSPENSION_OR_EXCEPTION=NOT_ATTESTED")
