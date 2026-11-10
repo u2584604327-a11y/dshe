@@ -1,97 +1,62 @@
-# Q Mobile v0.1.7 — small group context + selectable models
+# Q Mobile v0.1.8 — Android safe-mode rollback
 
-Independent, unofficial mobile adaptation of Tencent Connect's unchanged
-`@tencent-connect/dsh-qqbot@0.5.5` (MIT). Based on original
-[initial2024/q](https://github.com/initial2024/q) Q Mobile v0.1.3.
+Unofficial adapter for unchanged Tencent QQ SDK @tencent-connect/dsh-qqbot@0.5.5 (MIT).
+This is a DSH installable TGZ, not an Android APK.
 
-## Install URL — only after CI publishes the TGZ
+## Verified package URL
 
-```text
-https://raw.githubusercontent.com/u2584604327-a11y/dshe/refs/heads/release/q-mobile-0.1.5/dist/dsh-qqbot-q-mobile-0.1.7.tgz
-```
+https://raw.githubusercontent.com/u2584604327-a11y/dshe/refs/heads/release/q-mobile-0.1.8/dist/dsh-qqbot-q-mobile-0.1.8.tgz
 
-Paste into the DSH Android plugin install URL. This is a **DSH TGZ plugin,
-not an APK**. It still installs its exact Tencent dependency from npm.
+Install in DSH Plugin Manager. Preserve DSH profile and credentials. Do not enable
+this adapter and the separate official Tencent QQ plugin in the same profile.
 
-**Version 0.1.5 improvements**
-- Newly created QQ plugin profiles have `historyLimit:3` (maximum three
-  buffered QQ group background messages, not three private chat turns).
-- Idle Agent memory is evicted after 12 minutes by default, but stored DSH
-  sessions can resume; this does **not** delete historical conversations.
-- Friendly, concise Chinese group/direct prompts encourage natural conversation,
-  without pretending to be a human or fabricating prior memories.
-- **Settings dropdown**: when DSH's optional `webServer` and `llm` services
-  are available, the QQ Bot settings page lists the actual registered
-  provider/model combinations in a select box. Select one and click Save.
-  It never shows credentials. If this route is unavailable, the panel falls
-  back to the original manual fields and the QQ `/model` command.
-- **Choose a model without typing IDs**: in authorized QQ chat, send
-  `/model`. Tencent's official 0.5.5 implementation enumerates the live
-  DSH models and returns clickable model commands. The settings page's
-  provider/model text fields remain as an advanced fallback.
-- Use `/compact` to summarize old context when the selected DSH preset has
-  compaction service; use `/new` for a fresh active session.
+## Why restore the stable settings interface?
 
-**Important:** the 3-message limit is only for short group-message background,
-NOT a hard cap on durable Agent session memory. The official provider and QQ
-session/history implementation is intentionally unchanged. We cannot promise
-strict memory deletion or a permanently bounded number of private chat turns.
+Android 2026-11-10 logs confirmed that v0.1.6 crashed a frontend slot due
+to missing fetchJson. v0.1.7 eliminated that specific error, but a later
+session reported a DSH Web connection retry and the user still had issues.
+That new log does NOT establish a second JavaScript exception or prove
+a Tencent QQ transport failure.
 
-**Existing installations:** upgrade will not overwrite `cordis.patch.yml`,
-whitelists, AppID/AppSecret, or previously customized prompts. Apply the above
-new-install values explicitly in your existing trusted local profile if desired.
-Do not post credentials publicly.
+This version restores the previously working v0.1.4 official client settings
+adapter without the experimental custom model-picker injection, and avoids
+registering the extra runtime model-catalog service. It does not modify
+official QQ login, AppID/AppSecret, WebSocket, messages, or command handling.
+Existing stored settings are preserved.
 
-**Access:** QQ 群聊仅回复 @机器人的消息，保持 `requireMention=true`。
-New installs keep `c2cMode=allowlist` (empty until permitted),
-`groupMode=open` for groups officially authorized by QQ, and
-`requireMention=true`. QQ slash commands are subject to official
-`access.commandMode`; restrict command use to trusted users in groups.
+## Choosing a model
 
-**Troubleshooting:** Real @ bot + `/bot-ping`, then real @ + `/model`.
-Existing installations with `access.groupMode=disabled` must explicitly
-enable an authorized group; this update never silently broadens access.
+In authorized QQ chat, issue the official command /model and choose an
+offered supported model. The official settings panel retains advanced
+Provider and Model manual fields. The experimental dropdown is disabled
+until a separately tested Android version proves safe.
 
-**Rollback:** [Q Mobile v0.1.3 TGZ](https://raw.githubusercontent.com/initial2024/q/main/dist/dsh-qqbot-q-mobile-0.1.3.tgz);
-disable only the plugin if Android DSH startup fails. Do not delete your DSH
-profile or mobile QQ account.
+## Conversation stability
 
-**Verification:** the GitHub workflow installs exact official dependency,
-rebuilds the Tencent-derived client with nonblocking Android DSH slots,
-runs Node tests, and publishes a TGZ. Actual DSH Android binding, background
-survival, QQ private/group responses, and clickable model presentation
-must still be verified on the phone.
+New profiles retain three buffered group background messages, 12-minute idle
+Agent expiry, a queue limit of three, and genuine @mention requirement in
+authorized groups. The empty C2C allowlist in new installs must be configured
+for private replies. Updates do NOT overwrite existing profile values.
+Buffered group history is not the same as durable DSH memory.
 
-This release branch is isolated from the DSH mainline and PR #80.
-Official QQ copyright and terms remain © Tencent Connect, MIT.
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Natural concise prompts remain; no pretending to be human or inventing past
+conversations. Use /new for a new active session; /compact where supported.
 
-## v0.1.7 model selector diagnostics
+No guarantee of exactly-once QQ sends, replay suppression, or durable memory
+deletion. Do not blindly retry messages after an uncertain QQ send timeout.
 
-If the Settings dropdown is empty, the Android host may not expose both `webServer` and `llm` injectable services, or no provider advertises models. The QQ chat `/model` command remains the official supported way to select from the host's model list. Model selection updates the existing official config fields and requires pressing **Save**; it does not bypass provider entitlements, account rate limits, or Tencent Bot permissions. Keep `commandMode` restricted in shared groups if other members should not change the model.
+## Mobile verification
 
-## v0.1.7 stability and acceptance boundary
+1. Confirm v0.1.8 is the version actually installed and active.
+2. Open QQ settings and ensure manual fields and binding panel render.
+3. Confirm real private QQ ping, group @ mention, and /model choices.
+4. Send five linked conversation turns, then test foreground/background,
+   connectivity loss, and duplicate sends.
+5. If blank, compare UI JavaScript errors with DSH Web reconnect messages;
+   those are different signals, not proof of the same failure.
 
-- The model catalog runs only in optional settings services. Slow provider discovery
-  is time-bounded and capped at four concurrent lookups; requests share a short-lived
-  snapshot. A broken model picker does not block QQ's official transport.
-- The picker is available before QQ QR binding; changing a model still requires
-  the official settings **Save** action. Actual model capabilities are decided by
-  the DSH host and selected provider, not this adapter.
-- First-install defaults retain a three-message group-background window,
-  12-minute idle Agent eviction, three queued messages, and required real @
-  mentions in groups. Upgrades **do not overwrite existing settings**.
-- This adapter deliberately does not hook or replay official QQ outbound sends.
-  On ambiguous ACK/timeout, automatic retries could double-send. It also does
-  not intercept private chat persistence or promise complete memory erasure.
-- On-device signoff requires real private chat, group mention, repeated delivery,
-  slow/failed LLM, model switching, Android resume, and a session-compaction test.
-  An npm test pass is **not** evidence of these behaviors on a phone.
+Rollback URL:
+https://raw.githubusercontent.com/u2584604327-a11y/dshe/refs/heads/release/q-mobile-0.1.4/dist/dsh-qqbot-q-mobile-0.1.4.tgz
 
-
-## Android black-screen hotfix (v0.1.7)
-
-- The v0.1.6 model picker attempted to call a `fetchJson` helper that was not in scope, causing `ReferenceError: fetchJson is not defined` and `slot entry crashed in 'main'` on Android.
-- The injected picker now uses the WebView's built-in `fetch` with a 7-second abort, cancellation on unmount, same-origin credentials, an HTTP response check, and a visible manual-selection fallback if the model catalog is unavailable.
-- This change affects only the optional model picker; Tencent's official QQ 0.5.5 transport, current AppID/secret, and existing stored sessions are unchanged.
-- Verify on-device that the plugin settings opens without a black screen, then verify models, private chat and real group @ mention.
+Do not clear app data merely to recover the panel. The release branch is
+isolated from DSH mainline and PR #80; original license and attribution retained.
