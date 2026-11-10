@@ -87,8 +87,10 @@ test('concurrent optional HTTP requests share a bounded, read-only provider snap
   assert.equal(providerCalls, 1);
   assert.equal(modelCalls, 1);
 });
-test('model-picker fetch is not gated on successful QQ authentication', () => {
+test('recovery build rejects custom model picker and never waits for QQ binding', () => {
   const script = readFileSync(new URL('../scripts/prepare_official_client.mjs', import.meta.url), 'utf8');
-  assert.ok(!script.includes('if (bindPhase !== '));
-  assert.match(script, /Model selection works before QQ bind/);
+  assert.doesNotMatch(script, /qm-model-picker|Q_MOBILE_MODEL_HOOK|fetchJson/);
+  assert.match(script, /const inject = \[\];/);
+  const wrapper = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8');
+  assert.match(wrapper, /return official\.apply\(ctx, config\)/);
 });
