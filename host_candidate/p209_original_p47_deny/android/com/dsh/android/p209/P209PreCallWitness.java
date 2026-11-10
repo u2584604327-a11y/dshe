@@ -10,6 +10,7 @@ public final class P209PreCallWitness {
   private static final String TAG="P209_PREP40";
   private P209PreCallWitness(){}
   /** Bounded CI-only original PC38 state-guard approach witness. */
+  /** Test-only observation immediately after original PC26 if-eqz fallthrough. */
   /** Disposable marker after the original PC176 throwOnFailure normal return. */
   public static void markPostThrowOnFailure() {
     try {
@@ -22,15 +23,13 @@ public final class P209PreCallWitness {
       // No logging side effect may modify original coroutine control flow.
     }
   }
-  /** Test-only PC202 non-null fallthrough before original Process.isAlive().
-   * This marker asserts control-flow position only, not that the process lives. */
-  public static void markProcessNonNull() {
+  public static void markFallthrough() {
     try {
       if (Process.isIsolated()) {
-        Log.i("P209_FALL","P209_PC202_NONNULL_ISOLATED=DENY");
+        Log.i("P209_FALL","P209_PC30_FALL_ISOLATED=DENY");
         return;
       }
-      Log.i("P209_FALL","P209_PC202_NONNULL_PROCESS=OBSERVED");
+      Log.i("P209_FALL","P209_PC30_FALLTHROUGH=OBSERVED");
     }catch(Throwable ignored) {
       // Diagnostic failure cannot alter original app logic.
     }
