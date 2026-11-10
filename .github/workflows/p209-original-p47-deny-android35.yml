@@ -80,6 +80,9 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_audit_signed_process_prelaunch.py 2>&1 | tee "$RUNNER_TEMP/p209-static-unit.log"
           grep -Eq '^Ran 5 tests in' "$RUNNER_TEMP/p209-static-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-static-unit.log"
+          python3 -B host_candidate/p209_original_p47_deny/test_audit_signed_pc414.py 2>&1 | tee "$RUNNER_TEMP/p209-pc414-unit.log"
+          grep -Eq '^Ran 10 tests in' "$RUNNER_TEMP/p209-pc414-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p209-pc414-unit.log"
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
           test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
           echo P209_SOURCE_PINNED_AND_30_NEGATIVE_TESTS=PASS
@@ -167,6 +170,12 @@ jobs:
           grep -Fxq 'P209_SIGNED_PROCESS_PRELAUNCH_READONLY_AUDIT=PASS' "$RUNNER_TEMP/p209-process-prelaunch.log"
           grep -Fxq 'P209_SIGNED_START2_PROCESS_SETTER_CALLSITE=PC3924_AFTER_PC3912' "$RUNNER_TEMP/p209-process-prelaunch.log"
           grep -Fxq 'P209_SIGNED_PROCESS_ANDROID_RUNTIME_NULLNESS=NOT_ATTESTED' "$RUNNER_TEMP/p209-process-prelaunch.log"
+          python3 -B host_candidate/p209_original_p47_deny/audit_signed_pc414.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p209-pc414-static.log"
+          grep -Fxq 'P209_SIGNED_PC414_STATIC_BRANCH_AUDIT=PASS' "$RUNNER_TEMP/p209-pc414-static.log"
+          grep -Fxq 'P209_PC414_EXCEPTION_AND_RUNTIME_BRANCH=NOT_ATTESTED' "$RUNNER_TEMP/p209-pc414-static.log"
+          grep -Fxq 'P209_PC414_NO_PRODUCTION_OR_ORIGINAL_DEX_MODIFICATION=YES' "$RUNNER_TEMP/p209-pc414-static.log"
           echo P209_ORIGINAL_P47_GATE_BINARY_AND_SOURCE_PARITY=PASS
           echo P208_EXACT_ORIGINAL_METHOD_WITNESS_SOURCE_PROVENANCE=PASS
       - name: Disposable emulator KVM
