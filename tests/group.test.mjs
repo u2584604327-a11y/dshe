@@ -10,7 +10,7 @@ const wrapper = read('lib/index.js');
 const doctor = read('bin/q-mobile-doctor.mjs');
 
 test('v0.1.3 first-install group chat is enabled but still requires real mention',()=>{
-  assert.equal(pkg.version,'0.1.7');
+  assert.equal(pkg.version,'0.1.8');
   assert.match(patch,/^\s*groupMode: open\s*$/m);
   assert.match(patch,/^\s*requireMention: true\s*$/m);
   assert.match(patch,/^\s*groupAllow: \[\]\s*$/m);
