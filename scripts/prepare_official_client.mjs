@@ -87,23 +87,12 @@ one("useConfigPanelStyles();","useConfigPanelStyles();\nconst [qmModels, setQmMo
 // Anchor on the unique title token rather than whitespace-sensitive generated JSX.
 // Matches npm-packaged official 0.5.5 and rejects unexpected upstream changes.
 const mobileModelPicker="(0, react.createElement)(\"div\", { className: \"imqb2-field\", style: { padding: \"12px\", border: \"1px solid var(--border, #424242)\", borderRadius: \"12px\", maxWidth: \"100%\", boxSizing: \"border-box\" } },\n  (0, react.createElement)(\"label\", { className: \"imqb2-label\", htmlFor: \"qm-model-picker\" }, \"选择模型（自动读取 DSH）\"),\n  (0, react.createElement)(\"select\", {\n    id: \"qm-model-picker\",\n    style: { width: \"100%\", maxWidth: \"100%\", minHeight: 44, padding: \"8px\", borderRadius: 8, color: \"inherit\", background: \"var(--bg, #272727)\" },\n    value: form.provider && form.model ? JSON.stringify([form.provider, form.model]) : \"\",\n    onChange: (event) => {\n      if (!event.target.value) { patch(\"provider\", \"\"); patch(\"model\", \"\"); return; }\n      const selected=JSON.parse(event.target.value);\n      if (!Array.isArray(selected) || selected.length!==2) return;\n      patch(\"provider\", selected[0]);\n      patch(\"model\", selected[1]);\n    }\n  },\n    (0, react.createElement)(\"option\", { value: \"\" }, \"跟随 DSH 默认模型\"),\n    ...qmModels.map(entry => (0, react.createElement)(\"option\",\n      { key: entry.provider+\"/\"+entry.id, value: JSON.stringify([entry.provider,entry.id]) },\n      (entry.name || entry.id) + \" · \" + entry.provider+\"/\"+entry.id)),\n    ...(form.provider && form.model && !qmModels.some(entry =>\n      entry.provider===form.provider && entry.id===form.model) ? [\n      (0, react.createElement)(\"option\",\n        { key: \"custom\", value: JSON.stringify([form.provider,form.model]) },\n        \"当前自定义：\" + form.provider+\"/\"+form.model)\n      ] : [])),\n  (0, react.createElement)(\"p\", { className: \"imqb2-hint\" }, qmCatalogStatus),\n  (0, react.createElement)(\"p\", { className: \"imqb2-hint\" }, \"选择后点击保存；下方 Provider/Model 可手动输入。\")\n)";
-const qqTitleIndex=code.indexOf("模型与提示词");
-const qqModelIndex=code.indexOf('"model"');
-console.log("Q_MOBILE_DIAG_TITLE_INDEX="+qqTitleIndex);
-console.log("Q_MOBILE_DIAG_MODEL_INDEX="+qqModelIndex);
-// Only print a short snippet of the public compiled client around its model
-// settings heading, never config values, session content or QQ credentials.
-if(qqTitleIndex>=0) {
-  console.log("Q_MOBILE_DIAG_PUBLIC_UI_SNIPPET="+JSON.stringify(
-    code.slice(Math.max(0,qqTitleIndex-140),qqTitleIndex+280)));
-}
-for(const token of ['"手动填写"','"模型"','"provider"','"Model"','"imqq-model"']) {
-  const i=code.lastIndexOf(token);
-  console.log("Q_MOBILE_DIAG_TOKEN="+JSON.stringify(token)+" INDEX="+i);
-  if(i>=0)console.log("Q_MOBILE_DIAG_SOURCE="+JSON.stringify(
-    code.slice(Math.max(0,i-420),i+900)));
-}
-one('"模型与提示词"),','"模型与提示词"),\\n'+mobileModelPicker+',','Q_MOBILE_MODEL_PICKER');
+// The pinned Tencent npm 0.5.5 renders "模型" + FieldRow (NOT the
+// newer GitHub main's "模型与提示词" + spread mapper).
+// Match exactly one actual npm label before the manual Provider field.
+one('"模型"), (0, react.createElement)(FieldRow, {',
+    '"模型"),\\n'+mobileModelPicker+', (0, react.createElement)(FieldRow, {',
+    'Q_MOBILE_MODEL_PICKER');
 code=code.replace(/\n\/\/# sourceMappingURL=client\.js\.map\s*$/,'\n');
 const markers=[
   'const inject = [];',
