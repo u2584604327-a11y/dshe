@@ -37,7 +37,8 @@ whitelists, AppID/AppSecret, or previously customized prompts. Apply the above
 new-install values explicitly in your existing trusted local profile if desired.
 Do not post credentials publicly.
 
-**Access:** new installs keep `c2cMode=allowlist` (empty until permitted),
+**Access:** QQ 群聊仅回复 @机器人的消息，保持 `requireMention=true`。
+New installs keep `c2cMode=allowlist` (empty until permitted),
 `groupMode=open` for groups officially authorized by QQ, and
 `requireMention=true`. QQ slash commands are subject to official
 `access.commandMode`; restrict command use to trusted users in groups.
