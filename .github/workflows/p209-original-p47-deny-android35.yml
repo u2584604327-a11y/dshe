@@ -84,7 +84,7 @@ jobs:
           grep -Eq '^Ran 10 tests in' "$RUNNER_TEMP/p209-pc414-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-pc414-unit.log"
           python3 -B host_candidate/p209_original_p47_deny/test_audit_signed_node_bootstrap.py 2>&1 | tee "$RUNNER_TEMP/p209-node-unit.log"
-          grep -Eq '^Ran 10 tests in' "$RUNNER_TEMP/p209-node-unit.log"
+          grep -Eq '^Ran 14 tests in' "$RUNNER_TEMP/p209-node-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-node-unit.log"
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
           test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
@@ -187,6 +187,7 @@ jobs:
           grep -Fxq 'P209_NODE_BOOTSTRAP_PC412_RESULT_PC414_GUARD_PC418_RETURN=PASS' "$RUNNER_TEMP/p209-node-bootstrap.log"
           grep -Fxq 'P209_NODE_BOOTSTRAP_RUNTIME_SUSPENSION_OR_EXCEPTION=NOT_ATTESTED' "$RUNNER_TEMP/p209-node-bootstrap.log"
           grep -Fxq 'P209_NODE_BOOTSTRAP_V139_RELEASE=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p209-node-bootstrap.log"
+          grep -Fxq 'P209_NODE_LINKED_LAMBDA_TRANSITIVE_CALLEES=NOT_AUDITED' "$RUNNER_TEMP/p209-node-bootstrap.log"
           echo P209_ORIGINAL_P47_GATE_BINARY_AND_SOURCE_PARITY=PASS
           echo P208_EXACT_ORIGINAL_METHOD_WITNESS_SOURCE_PROVENANCE=PASS
       - name: Disposable emulator KVM
