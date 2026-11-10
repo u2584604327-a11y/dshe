@@ -60,3 +60,7 @@ https://raw.githubusercontent.com/u2584604327-a11y/dshe/refs/heads/release/q-mob
 
 Do not clear app data merely to recover the panel. The release branch is
 isolated from DSH mainline and PR #80; original license and attribution retained.
+
+**群聊仅回复 @机器人的消息**；保留 requireMention=true。现有配置不会自动覆盖。
+
+The buffered history limit and persistent DSH memory are separate.
