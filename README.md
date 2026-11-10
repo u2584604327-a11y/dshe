@@ -1,4 +1,4 @@
-# Q Mobile v0.1.4 — QQ bot with lighter context
+# Q Mobile v0.1.5 — small group context + selectable models
 
 Independent, unofficial mobile adaptation of Tencent Connect's unchanged
 `@tencent-connect/dsh-qqbot@0.5.5` (MIT). Based on original
@@ -7,19 +7,24 @@ Independent, unofficial mobile adaptation of Tencent Connect's unchanged
 ## Install URL — only after CI publishes the TGZ
 
 ```text
-https://raw.githubusercontent.com/u2584604327-a11y/dshe/refs/heads/release/q-mobile-0.1.4/dist/dsh-qqbot-q-mobile-0.1.4.tgz
+https://raw.githubusercontent.com/u2584604327-a11y/dshe/refs/heads/release/q-mobile-0.1.5/dist/dsh-qqbot-q-mobile-0.1.5.tgz
 ```
 
 Paste into the DSH Android plugin install URL. This is a **DSH TGZ plugin,
 not an APK**. It still installs its exact Tencent dependency from npm.
 
-**Version 0.1.4 improvements**
+**Version 0.1.5 improvements**
 - Newly created QQ plugin profiles have `historyLimit:3` (maximum three
   buffered QQ group background messages, not three private chat turns).
 - Idle Agent memory is evicted after 12 minutes by default, but stored DSH
   sessions can resume; this does **not** delete historical conversations.
 - Friendly, concise Chinese group/direct prompts encourage natural conversation,
   without pretending to be a human or fabricating prior memories.
+- **Settings dropdown**: when DSH's optional `webServer` and `llm` services
+  are available, the QQ Bot settings page lists the actual registered
+  provider/model combinations in a select box. Select one and click Save.
+  It never shows credentials. If this route is unavailable, the panel falls
+  back to the original manual fields and the QQ `/model` command.
 - **Choose a model without typing IDs**: in authorized QQ chat, send
   `/model`. Tencent's official 0.5.5 implementation enumerates the live
   DSH models and returns clickable model commands. The settings page's
@@ -60,3 +65,7 @@ must still be verified on the phone.
 This release branch is isolated from the DSH mainline and PR #80.
 Official QQ copyright and terms remain © Tencent Connect, MIT.
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## v0.1.5 model selector diagnostics
+
+If the Settings dropdown is empty, the Android host may not expose both `webServer` and `llm` injectable services, or no provider advertises models. The QQ chat `/model` command remains the official supported way to select from the host's model list. Model selection updates the existing official config fields and requires pressing **Save**; it does not bypass provider entitlements, account rate limits, or Tencent Bot permissions. Keep `commandMode` restricted in shared groups if other members should not change the model.

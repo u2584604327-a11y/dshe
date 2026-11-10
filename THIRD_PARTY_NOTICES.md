@@ -77,3 +77,7 @@ Tencent Connect 版权所有者与 MIT 全文仍随压缩包保留。
 
 ## Q Mobile v0.1.4
 Shorter first-install QQ group history defaults and conversational prompts; model selection uses the unmodified official /model command. Original QQ auth/SDK/transport unchanged. This is an independent release branch, not an official Tencent distribution.
+
+## Q Mobile v0.1.5
+
+The browser UI selector is a bounded, deterministic downstream patch of Tencent Connect's MIT browser client. It reads a separate, optional, same-origin catalog of registered DSH model IDs and aliases. It neither modifies QQ login or SDK nor stores credentials. The full upstream MIT license remains bundled.
