@@ -27,8 +27,9 @@ function actualPickerEffect() {
 
 test('Android model-picker uses browser fetch, does not crash on successful catalog', async () => {
   const run = actualPickerEffect();
+  let cleanup;
   const loaded = new Promise(resolve => {
-    const cleanup = run({
+    cleanup = run({
       fetch: async (url, opts) => {
         assert.equal(url, '/qqbot/q-mobile/models');
         assert.equal(opts.method, 'GET');
@@ -39,11 +40,10 @@ test('Android model-picker uses browser fetch, does not crash on successful cata
       resolve(models);
     }, () => {});
     assert.equal(typeof cleanup, 'function');
-    // Cleanup after the result is received, not before fetch settles.
-    void loaded;
   });
   const models = await loaded;
   assert.deepEqual(models, [{provider:'a',id:'b'}]);
+  cleanup();
 });
 
 test('Android model-picker recovers from unavailable catalog without throwing', async () => {
