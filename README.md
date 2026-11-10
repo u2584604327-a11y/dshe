@@ -37,7 +37,7 @@ New profiles retain three buffered group background messages, 12-minute idle
 Agent expiry, a queue limit of three, and genuine @mention requirement in
 authorized groups. The empty C2C allowlist in new installs must be configured
 for private replies. Updates do NOT overwrite existing profile values.
-Buffered group history is not the same as durable DSH memory.
+Buffered group history is NOT a hard cap on durable DSH memory. Existing saved sessions remain separate.
 
 Natural concise prompts remain; no pretending to be human or inventing past
 conversations. Use /new for a new active session; /compact where supported.
