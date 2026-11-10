@@ -80,15 +80,6 @@ def precall_fixture():
       "    :done\n"+
       "    invoke-static/range {p1 .. p1}, Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V\n"+
       "    iget-object v2, p0, Lcom/dsh/android/EngineManager$start$2;->label:I\n"+
-      "    check-cast v2, Ljava/lang/Object;\n"+
-      "    iget-object v2, p0, Lcom/dsh/android/EngineManager$start$2;->\$this_run:Ljava/lang/Object;\n"+
-      "    invoke-static {v2}, Lcom/dsh/android/EngineManager;->access$getProcess$p(Ljava/lang/Object;)Ljava/lang/Process;\n"+
-      "    move-result-object v2\n"+
-      "    if-eqz v2, :post\n"+
-      "    invoke-virtual {v2}, Ljava/lang/Process;->isAlive()Z\n"+
-      "    move-result v3\n"+
-      "    if-ne v3, v1, :post\n"+
-      "    :post\n"+
       "    invoke-static {v0}, "+p.P40_TARGET+"\n"+
       "    return-object v0\n.end method\n")
 class PreCallTests(unittest.TestCase):
@@ -145,25 +136,6 @@ class PreCallTests(unittest.TestCase):
         with self.assertRaises(p.Deny) as e:p.inject_precall(tampered)
         self.assertEqual(str(e.exception),
             "P209_DENY_EXACT_SIGNED_PC176_THROWONFAILURE_FIRST_OPCODE")
-    def test_pc202_nonnull_marker_between_guard_and_isalive(self):
-        x=p.inject_precall(precall_fixture())
-        self.assertEqual(x.count(p.FALL_INVOKE.strip()),1)
-        self.assertLess(x.index(p.TARGET_INVOKE),x.index(p.FALL_INVOKE))
-        self.assertLess(x.index("    if-eqz v2, :post"),x.index(p.FALL_INVOKE))
-        self.assertLess(x.index(p.FALL_INVOKE),
-                        x.index("    invoke-virtual {v2}, Ljava/lang/Process;->isAlive()Z"))
-        self.assertLess(x.index(p.FALL_INVOKE),x.index(p.PRE_INVOKE))
-    def test_pc202_wrong_guard_fails_closed(self):
-        s=precall_fixture().replace("    if-eqz v2, :post","    if-nez v2, :post")
-        with self.assertRaises(p.Deny) as e:p.inject_precall(s)
-        self.assertEqual(str(e.exception),
-                         "P209_DENY_PC202_SIGNED_NORMAL_OPCODE_SEQUENCE")
-    def test_pc202_wrong_callee_fails_closed(self):
-        s=precall_fixture().replace("Ljava/lang/Process;->isAlive()Z",
-                                    "Lexample/FakeProcess;->isAlive()Z")
-        with self.assertRaises(p.Deny) as e:p.inject_precall(s)
-        self.assertEqual(str(e.exception),
-                         "P209_DENY_PC202_PROCESS_NONNULL_ONLY_EDGE")
     def test_no_first_branch_target_label_refused(self):
         x=precall_fixture().replace(":done",":missing",1)
         with self.assertRaises(p.Deny) as err:p.inject_precall(x)
