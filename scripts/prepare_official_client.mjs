@@ -86,8 +86,8 @@ one('}, "im-qqbot-client.binding");\n\t\t}\n\t\t/**',
 // Optional settings UI remains isolated in its own React component: no hook
 // is injected into the existing Tencent ConfigPanel. Failed catalog discovery
 // cannot stop rendering the official config editor and QR bind panel.
-one('function ConfigPanel({ bindPhase } = {}) {',
-  PICKER_SOURCE + '\nfunction ConfigPanel({ bindPhase } = {}) {',
+one('const STYLE_ID = "im-qqbot-config-panel-styles";',
+  PICKER_SOURCE + '\nconst STYLE_ID = "im-qqbot-config-panel-styles";',
   'Q_MOBILE_ISOLATED_PICKER');
 one('"模型"), (0, react.createElement)(FieldRow, {',
   '"模型"), (0, react.createElement)(QMobilePicker, { form, patch }), (0, react.createElement)(FieldRow, {',
