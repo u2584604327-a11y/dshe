@@ -1,7 +1,7 @@
 {
   "name": "dsh-qqbot-q-mobile",
-  "version": "0.1.5",
-  "description": "Q Mobile QQ Bot: small recent group context, natural tone and real DSH model-picker dropdown in settings.",
+  "version": "0.1.6",
+  "description": "Q Mobile QQ Bot: small recent group context, natural tone and resilient DSH model-picker dropdown in settings.",
   "type": "module",
   "main": "./lib/index.js",
   "exports": {
