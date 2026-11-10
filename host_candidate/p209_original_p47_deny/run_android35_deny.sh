@@ -151,9 +151,9 @@ p209_gate_diagnostic() {
   echo "P209_PC176_POSTRETURN_TAG_COUNT=$(p209_count 'P209_PC176_POST_THROWONFAILURE=OBSERVED')"
   echo "P209_PC176_POSTRETURN_HOST_PID_COUNT=$(p209_count_pid 'P209_PC176_POST_THROWONFAILURE=OBSERVED')"
   echo "P209_PC176_POSTRETURN_ISOLATED_COUNT=$(p209_count 'P209_PC176_POSTCALL_ISOLATED=DENY')"
-  echo "P209_PC30_FALL_TAG_COUNT=$(p209_count 'P209_PC30_FALLTHROUGH=OBSERVED')"
-  echo "P209_PC30_FALL_HOST_PID_COUNT=$(p209_count_pid 'P209_PC30_FALLTHROUGH=OBSERVED')"
-  echo "P209_PC30_FALL_ISOLATED_COUNT=$(p209_count 'P209_PC30_FALL_ISOLATED=DENY')"
+  echo "P209_PC202_NONNULL_TAG_COUNT=$(p209_count 'P209_PC202_NONNULL_PROCESS=OBSERVED')"
+  echo "P209_PC202_NONNULL_HOST_PID_COUNT=$(p209_count_pid 'P209_PC202_NONNULL_PROCESS=OBSERVED')"
+  echo "P209_PC202_NONNULL_ISOLATED_COUNT=$(p209_count 'P209_PC202_NONNULL_ISOLATED=DENY')"
   echo "P209_FIRST_GUARD_TAG_COUNT=$(p209_count 'P209_FIRST_GUARD=OBSERVED')"
   echo "P209_FIRST_GUARD_HOST_PID_COUNT=$(p209_count_pid 'P209_FIRST_GUARD=OBSERVED')"
   echo "P209_FIRST_GUARD_ISOLATED_COUNT=$(p209_count 'P209_FIRST_GUARD_ISOLATED=DENY')"
@@ -172,8 +172,8 @@ p209_gate_diagnostic() {
 if [[ "$selected" == *P209_PC176_POSTCALL_ISOLATED=DENY* ]];then
   echo P209_PC176_POSTCALL_ISOLATED_HOST=DENY;exit 2
 fi
-if [[ "$selected" == *P209_PC30_FALL_ISOLATED=DENY* ]];then
-  echo P209_PC30_FALL_ISOLATED=DENY;exit 2
+if [[ "$selected" == *P209_PC202_NONNULL_ISOLATED=DENY* ]];then
+  echo P209_PC202_NONNULL_ISOLATED=DENY;exit 2
 fi
 if [[ "$selected" == *P209_FIRST_GUARD_ISOLATED=DENY* ]];then
   echo P209_FIRST_GUARD_ISOLATED_HOST=DENY;exit 2
@@ -188,39 +188,37 @@ if [[ "$guard_host" -gt 0 ]];then
 else
   echo P209_FIRST_GUARD=NOT_OBSERVED
 fi
-fall_total="$(p209_count 'P209_PC30_FALLTHROUGH=OBSERVED')"
-fall_host="$(p209_count_pid 'P209_PC30_FALLTHROUGH=OBSERVED')"
-[[ "$fall_total" == "$fall_host" && "$fall_host" -le "$guard_host" ]] || {
-  echo P209_PC30_FALL_FOREIGN_OR_UNMATCHED_GUARD=DENY;exit 2
-}
-if [[ "$fall_host" -gt 0 ]];then
-  printf '%s\n' "$selected" | awk '
-    /P209_FIRST_GUARD=OBSERVED/{if(!g)g=NR}
-    /P209_PC30_FALLTHROUGH=OBSERVED/{if(!f)f=NR}
-    END{if(!g||!f||f<=g)exit 2}' || {
-    echo P209_PC26_PC30_EVENT_ORDER=DENY;exit 2
-  }
-  echo P209_PC26_FALLTHROUGH_TO_PC30=OBSERVED
-else
-  echo P209_PC26_FALLTHROUGH_TO_PC30=NOT_OBSERVED
-fi
+# This variant reuses the prior PC30 marker at the original PC202
+# non-null fallthrough. It no longer directly attests PC26's selected arm.
 taken_total="$(p209_count 'P209_PC176_POST_THROWONFAILURE=OBSERVED')"
 taken_host="$(p209_count_pid 'P209_PC176_POST_THROWONFAILURE=OBSERVED')"
 [[ "$taken_total" == "$taken_host" && "$taken_host" -le "$guard_host" ]] || {
   echo P209_PC176_POSTRETURN_FOREIGN_OR_UNMATCHED_GUARD=DENY;exit 2
 }
-if [[ "$guard_host" == 1 && $((fall_host+taken_host)) == 1 ]];then
-  echo P209_PC26_BRANCH_EXACT_ONE_ARM=PASS
+nonnull_total="$(p209_count 'P209_PC202_NONNULL_PROCESS=OBSERVED')"
+nonnull_host="$(p209_count_pid 'P209_PC202_NONNULL_PROCESS=OBSERVED')"
+[[ "$nonnull_total" == "$nonnull_host" && "$nonnull_host" -le "$taken_host" ]] || {
+  echo P209_PC202_NONNULL_FOREIGN_OR_UNMATCHED_RETURN=DENY;exit 2
+}
+if [[ "$nonnull_host" -gt 0 ]];then
+  printf '%s\n' "$selected" | awk '
+    /P209_PC176_POST_THROWONFAILURE=OBSERVED/{if(!t)t=NR}
+    /P209_PC202_NONNULL_PROCESS=OBSERVED/{if(!p)p=NR}
+    END{if(!t||!p||p<=t)exit 2}' || {
+    echo P209_PC202_NONNULL_ORDER_OR_POSTRETURN=DENY;exit 2
+  }
+  echo P209_PC202_PROCESS_NONNULL_FALLTHROUGH=OBSERVED
 else
-  echo P209_PC26_BRANCH_EXACT_ONE_ARM=NOT_ATTESTED
+  echo P209_PC202_PROCESS_NONNULL_FALLTHROUGH=NOT_ATTESTED
 fi
+echo P209_PC26_BRANCH_EXACT_ONE_ARM=NOT_ATTESTED_IN_PC202_VARIANT
+echo P209_PC26_TAKEN_TO_PC176_AND_NORMAL_RETURN=NOT_ATTESTED_IN_PC202_VARIANT
 if [[ "$taken_host" -gt 0 ]];then
-  echo P209_PC26_TAKEN_TO_PC176_AND_NORMAL_RETURN=OBSERVED
   echo P209_PC176_THROWONFAILURE_NORMAL_RETURN=OBSERVED
 else
-  echo P209_PC26_TAKEN_TO_PC176_AND_NORMAL_RETURN=NOT_ATTESTED
   echo P209_PC176_THROWONFAILURE_NORMAL_RETURN=NOT_ATTESTED
 fi
+echo P209_PC214_ISALIVE_RESULT_ORIGINAL_RUNTIME=NOT_ATTESTED
 for key in P209_P47_ENTER_UID= P209_P47_FINAL_DENY_UID=;do
   vals="$(printf '%s\n' "$selected" | awk -v pid="$pid" -v key="$key" '
     index($0,key) && $3==pid {n=split($0,a,key);if(n==2){v=a[2];sub(/[[:space:]].*/,"",v);print v}}')"
