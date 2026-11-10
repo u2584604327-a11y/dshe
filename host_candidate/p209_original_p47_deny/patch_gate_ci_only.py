@@ -196,8 +196,8 @@ def inject_precall(s, expected_guard_op="if-ne"):
         "move-result","if-ne"]
     first_ten=instruction_rows[:len(expected_pc202_opcodes)]
     need(len(first_ten)==len(expected_pc202_opcodes) and
-         [re.match(r"^\\s+([a-z0-9/-]+)\\s+",rows[i]).group(1)
-          if re.match(r"^\\s+([a-z0-9/-]+)\\s+",rows[i]) else ""
+         [re.match(r"^\s+([a-z0-9/-]+)\s+",rows[i]).group(1)
+          if re.match(r"^\s+([a-z0-9/-]+)\s+",rows[i]) else ""
           for i in first_ten]==expected_pc202_opcodes,
          "PC202_SIGNED_NORMAL_OPCODE_SEQUENCE")
     process_call=rows[first_ten[7]]
