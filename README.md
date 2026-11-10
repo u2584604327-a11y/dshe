@@ -1,4 +1,4 @@
-# Q Mobile v0.1.5 — small group context + selectable models
+# Q Mobile v0.1.6 — small group context + selectable models
 
 Independent, unofficial mobile adaptation of Tencent Connect's unchanged
 `@tencent-connect/dsh-qqbot@0.5.5` (MIT). Based on original
@@ -7,7 +7,7 @@ Independent, unofficial mobile adaptation of Tencent Connect's unchanged
 ## Install URL — only after CI publishes the TGZ
 
 ```text
-https://raw.githubusercontent.com/u2584604327-a11y/dshe/refs/heads/release/q-mobile-0.1.5/dist/dsh-qqbot-q-mobile-0.1.5.tgz
+https://raw.githubusercontent.com/u2584604327-a11y/dshe/refs/heads/release/q-mobile-0.1.5/dist/dsh-qqbot-q-mobile-0.1.6.tgz
 ```
 
 Paste into the DSH Android plugin install URL. This is a **DSH TGZ plugin,
@@ -66,6 +66,25 @@ This release branch is isolated from the DSH mainline and PR #80.
 Official QQ copyright and terms remain © Tencent Connect, MIT.
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## v0.1.5 model selector diagnostics
+## v0.1.6 model selector diagnostics
 
 If the Settings dropdown is empty, the Android host may not expose both `webServer` and `llm` injectable services, or no provider advertises models. The QQ chat `/model` command remains the official supported way to select from the host's model list. Model selection updates the existing official config fields and requires pressing **Save**; it does not bypass provider entitlements, account rate limits, or Tencent Bot permissions. Keep `commandMode` restricted in shared groups if other members should not change the model.
+
+## v0.1.6 stability and acceptance boundary
+
+- The model catalog runs only in optional settings services. Slow provider discovery
+  is time-bounded and capped at four concurrent lookups; requests share a short-lived
+  snapshot. A broken model picker does not block QQ's official transport.
+- The picker is available before QQ QR binding; changing a model still requires
+  the official settings **Save** action. Actual model capabilities are decided by
+  the DSH host and selected provider, not this adapter.
+- First-install defaults retain a three-message group-background window,
+  12-minute idle Agent eviction, three queued messages, and required real @
+  mentions in groups. Upgrades **do not overwrite existing settings**.
+- This adapter deliberately does not hook or replay official QQ outbound sends.
+  On ambiguous ACK/timeout, automatic retries could double-send. It also does
+  not intercept private chat persistence or promise complete memory erasure.
+- On-device signoff requires real private chat, group mention, repeated delivery,
+  slow/failed LLM, model switching, Android resume, and a session-compaction test.
+  An npm test pass is **not** evidence of these behaviors on a phone.
+
