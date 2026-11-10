@@ -91,7 +91,7 @@ const mobileModelPicker="(0, react.createElement)(\"div\", { className: \"imqb2-
 // newer GitHub main's "模型与提示词" + spread mapper).
 // Match exactly one actual npm label before the manual Provider field.
 one('"模型"), (0, react.createElement)(FieldRow, {',
-    '"模型"),\\n'+mobileModelPicker+', (0, react.createElement)(FieldRow, {',
+    '"模型"),'+String.fromCharCode(10)+mobileModelPicker+', (0, react.createElement)(FieldRow, {',
     'Q_MOBILE_MODEL_PICKER');
 code=code.replace(/\n\/\/# sourceMappingURL=client\.js\.map\s*$/,'\n');
 const markers=[
