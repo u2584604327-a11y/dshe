@@ -1,7 +1,7 @@
-# Q Mobile 0.1.7 — unofficial Android packaging only.
+# Q Mobile 0.1.8 — unofficial Android packaging only.
 # Short group background is 3 QQ messages; official per-session queue remains bounded at 3. DSH durable session history is not erased.
 # The official QQ /model command offers available model options; the settings text fields are a fallback.
-# Do not blindly retry failed sends: host/QQ may have accepted a request before an ACK timeout.
+# Safety rollback: custom dropdown disabled; use Tencent official /model choices.\n# Do not blindly retry failed sends: host/QQ may have accepted a request before an ACK timeout.
 # Official channel implementation: @tencent-connect/dsh-qqbot@0.5.5
 # https://github.com/tencent-connect/dsh-qqbot
 #
