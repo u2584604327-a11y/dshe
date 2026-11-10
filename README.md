@@ -1,42 +1,61 @@
-# DSH Android — private APK baseline audit workspace
+# Q Mobile v0.1.4 — QQ bot with lighter context
 
-This private repository is a controlled APK audit workspace, **not a completed
-Android source tree**. The installed phone remains on signed v138.
+Independent, unofficial mobile adaptation of Tencent Connect's unchanged
+`@tencent-connect/dsh-qqbot@0.5.5` (MIT). Based on original
+[initial2024/q](https://github.com/initial2024/q) Q Mobile v0.1.3.
 
-## What belongs here
+## Install URL — only after CI publishes the TGZ
 
-Use **GitHub Releases** for the original APK baseline (it exceeds the ordinary
-100 MB Git object limit). Do **not** commit the APK to Git history. Release
-assets are accessible to people who have repository access.
+```text
+https://raw.githubusercontent.com/u2584604327-a11y/dshe/refs/heads/release/q-mobile-0.1.4/dist/dsh-qqbot-q-mobile-0.1.4.tgz
+```
 
-| Release tag | Expected filename | Expected SHA-256 |
-| --- | --- | --- |
-| `dsh-baseline-v135` | `DSH0.4.1-v135-browser-native-device-v1.3.5-fixed-signature.apk` | `394adfbe85b81ce46c285b1c531ffa307432d777e17af04fe5418272c5cc2e99` |
-| `dsh-p0-v138` | `DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk` | `3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5` |
+Paste into the DSH Android plugin install URL. This is a **DSH TGZ plugin,
+not an APK**. It still installs its exact Tencent dependency from npm.
 
-The v138 hash originates from the user's P0 build receipt and is **not independently verified here**.
+**Version 0.1.4 improvements**
+- Newly created QQ plugin profiles have `historyLimit:3` (maximum three
+  buffered QQ group background messages, not three private chat turns).
+- Idle Agent memory is evicted after 12 minutes by default, but stored DSH
+  sessions can resume; this does **not** delete historical conversations.
+- Friendly, concise Chinese group/direct prompts encourage natural conversation,
+  without pretending to be a human or fabricating prior memories.
+- **Choose a model without typing IDs**: in authorized QQ chat, send
+  `/model`. Tencent's official 0.5.5 implementation enumerates the live
+  DSH models and returns clickable model commands. The settings page's
+  provider/model text fields remain as an advanced fallback.
+- Use `/compact` to summarize old context when the selected DSH preset has
+  compaction service; use `/new` for a fresh active session.
 
-## Audit workflow
+**Important:** the 3-message limit is only for short group-message background,
+NOT a hard cap on durable Agent session memory. The official provider and QQ
+session/history implementation is intentionally unchanged. We cannot promise
+strict memory deletion or a permanently bounded number of private chat turns.
 
-Run [`APK baseline audit`](../../actions/workflows/apk-baseline-audit.yml)
-manually after adding a matching asset under its Release tag. This verifies
-SHA-256, package identity, APK v2 signature, signing certificate fingerprint
-and versionCode. It **never signs or modifies** the original APK and **never
-uploads the APK as a workflow artifact**.
+**Existing installations:** upgrade will not overwrite `cordis.patch.yml`,
+whitelists, AppID/AppSecret, or previously customized prompts. Apply the above
+new-install values explicitly in your existing trusted local profile if desired.
+Do not post credentials publicly.
 
-Expected certificate SHA-256:
-`90072b7de43e96999be92d99869ce5e5b7639b5f2449417b99a1790831b60ff8`
+**Access:** new installs keep `c2cMode=allowlist` (empty until permitted),
+`groupMode=open` for groups officially authorized by QQ, and
+`requireMention=true`. QQ slash commands are subject to official
+`access.commandMode`; restrict command use to trusted users in groups.
 
-The original APK may contain embedded credentials and proprietary application
-code. Keep it in this private repo only if you are comfortable with GitHub
-hosting it. The original signing P12/JKS and password must stay on a trusted
-local machine; **do not put them in Git history, Releases, Actions Secrets, or
-Artifacts at this stage**.
+**Troubleshooting:** Real @ bot + `/bot-ping`, then real @ + `/model`.
+Existing installations with `access.groupMode=disabled` must explicitly
+enable an authorized group; this update never silently broadens access.
 
-## Release blockers
+**Rollback:** [Q Mobile v0.1.3 TGZ](https://raw.githubusercontent.com/initial2024/q/main/dist/dsh-qqbot-q-mobile-0.1.3.tgz);
+disable only the plugin if Android DSH startup fails. Do not delete your DSH
+profile or mobile QQ account.
 
-A valid certificate does not prove that v139 fixes the original WebView
-or diagnostic-upload issues. Before any new installation, verify the native
-and Node diagnostic-send gate, user review, ART loading, session isolation,
-data preservation and fixed-signature overlay update. **No v139 APK is
-currently approved for release.**
+**Verification:** the GitHub workflow installs exact official dependency,
+rebuilds the Tencent-derived client with nonblocking Android DSH slots,
+runs Node tests, and publishes a TGZ. Actual DSH Android binding, background
+survival, QQ private/group responses, and clickable model presentation
+must still be verified on the phone.
+
+This release branch is isolated from the DSH mainline and PR #80.
+Official QQ copyright and terms remain © Tencent Connect, MIT.
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

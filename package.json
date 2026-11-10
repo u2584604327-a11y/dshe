@@ -1,0 +1,59 @@
+{
+  "name": "dsh-qqbot-q-mobile",
+  "version": "0.1.4",
+  "description": "Q Mobile v0.1.4: smaller recent QQ context and conversational defaults, with official clickable model choices via /model.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json",
+    "./client": "./lib/client.js"
+  },
+  "bin": {
+    "q-mobile-doctor": "./bin/q-mobile-doctor.mjs"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "bin/q-mobile-doctor.mjs",
+    "cordis.patch.yml",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "THIRD_PARTY_LICENSE_TENCENT.txt",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.3.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "doctor": "node bin/q-mobile-doctor.mjs"
+  },
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "android",
+    "qqbot",
+    "tencent-connect",
+    "official-sdk-wrapper",
+    "non-official"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.2.0-rc.2": "compatible"
+      },
+      "note": "Official QQ 0.5.5 SDK unchanged; default group access open on authorized joined groups with requireMention=true. Existing disabled group access persists until explicitly changed by the user. Web boot remains nonblocking and no auth/QQ protocol patched."
+    },
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "dependencies": {
+    "@tencent-connect/dsh-qqbot": "0.5.5"
+  }
+}

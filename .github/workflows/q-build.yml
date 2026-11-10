@@ -1,0 +1,97 @@
+name: Build verified Q Mobile direct TGZ
+on:
+  push:
+    branches: [release/q-mobile-0.1.4]
+    paths:
+      - "lib/**"
+      - "bin/**"
+      - "scripts/**"
+      - "tests/**"
+      - "package.json"
+      - "cordis.patch.yml"
+      - "README.md"
+      - "THIRD_PARTY_NOTICES.md"
+      - "LICENSE"
+      - ".github/workflows/q-build.yml"
+  pull_request:
+    paths:
+      - "lib/**"
+      - "bin/**"
+      - "tests/**"
+      - "package.json"
+      - "cordis.patch.yml"
+      - "README.md"
+      - "THIRD_PARTY_NOTICES.md"
+      - "LICENSE"
+      - ".github/workflows/q-build.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  q-mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Install original official 0.5.5 package, no build scripts
+        run: |
+          set -euo pipefail
+          npm install --ignore-scripts --no-audit --no-fund --package-lock=false
+          node -e "const p=require('@tencent-connect/dsh-qqbot/package.json'); if(p.name!=='@tencent-connect/dsh-qqbot'||p.version!=='0.5.5')process.exit(1);console.log('OFFICIAL_QQ_CORE=0.5.5')"
+          npm ls @tencent-connect/dsh-qqbot --depth=0
+      - name: Rebuild official QR/client UI with exact audited identity patches
+        run: |
+          set -euo pipefail
+          node scripts/prepare_official_client.mjs
+          node --check lib/client.js
+          node -e "const p=require('./package.json');if(p.dsh.client.inject.length!==0)process.exit(1);console.log('WEB_BOOT_REQUIRED_SERVICES=ZERO')"
+      - name: Syntax, official delegation and safe-config tests
+        run: |
+          node --check lib/index.js
+          node --check bin/q-mobile-doctor.mjs
+          npm test
+          node bin/q-mobile-doctor.mjs
+      - name: Pack npm-standard installable TGZ
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          FILE="$(npm pack --ignore-scripts --pack-destination dist --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s)[0].filename))")"
+          test "$FILE" = "dsh-qqbot-q-mobile-0.1.4.tgz"
+          tar -tzf "dist/$FILE" | sort | tee /tmp/q-mobile-files.txt
+          for file in package/package.json package/lib/index.js package/lib/client.js package/THIRD_PARTY_LICENSE_TENCENT.txt package/cordis.patch.yml package/README.md package/THIRD_PARTY_NOTICES.md package/LICENSE package/bin/q-mobile-doctor.mjs; do
+            grep -Fxq "$file" /tmp/q-mobile-files.txt
+          done
+          test "$(wc -l < /tmp/q-mobile-files.txt)" -eq 9
+          test "$(tar -xOzf "dist/$FILE" package/package.json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).dependencies['@tencent-connect/dsh-qqbot']))")" = '0.5.5'
+          sha256sum "dist/$FILE" > "dist/$FILE.sha256"
+          cat "dist/$FILE.sha256"
+      - name: Upload test package only (PR/feature branch)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: q-mobile-0.1.4-ci-test
+          path: |
+            dist/dsh-qqbot-q-mobile-0.1.4.tgz
+            dist/dsh-qqbot-q-mobile-0.1.4.tgz.sha256
+          retention-days: 7
+      - name: Publish verified public .tgz and checksum to main
+        if: github.ref == 'refs/heads/release/q-mobile-0.1.4' && github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f dist/dsh-qqbot-q-mobile-0.1.4.tgz dist/dsh-qqbot-q-mobile-0.1.4.tgz.sha256
+          if git diff --cached --quiet; then
+            echo "Raw TGZ already current"
+          else
+            git commit -m "dist: publish Q Mobile 0.1.4 official-core adapter"
+            git push origin HEAD:release/q-mobile-0.1.4
+          fi
