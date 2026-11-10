@@ -41,7 +41,7 @@ P40_TARGET="Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuil
 GUARD_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markFirstGuard()V\n"
 GUARD_MAX_PC=3912
 TARGET_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markPostThrowOnFailure()V\n"
-FALL_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markProcessNonNull()V\n"
+FALL_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markFallthrough()V\n"
 
 class Deny(Exception):pass
 def need(v,code):
@@ -186,36 +186,13 @@ def inject_precall(s, expected_guard_op="if-ne"):
          rows[instruction_rows[0]]) is not None,
          "EXACT_SIGNED_PC176_THROWONFAILURE_FIRST_OPCODE")
     post_call_at=sum(map(len,rows[:instruction_rows[0]+1]))
-    post_call_at=sum(map(len,rows[:instruction_rows[0]+1]))
-    # Relocate, rather than add, the previously PC30 witness to PC202's
-    # normal non-null successor immediately before the original isAlive call.
-    # Exact opcode sequence is separately pinned to signed-v138 by verifier.
-    expected_pc202_opcodes=[
-        "invoke-static/range","iget-object","check-cast","iget-object",
-        "invoke-static","move-result-object","if-eqz","invoke-virtual",
-        "move-result","if-ne"]
-    first_ten=instruction_rows[:len(expected_pc202_opcodes)]
-    need(len(first_ten)==len(expected_pc202_opcodes) and
-         [re.match(r"^\s+([a-z0-9/-]+)\s+",rows[i]).group(1)
-          if re.match(r"^\s+([a-z0-9/-]+)\s+",rows[i]) else ""
-          for i in first_ten]==expected_pc202_opcodes,
-         "PC202_SIGNED_NORMAL_OPCODE_SEQUENCE")
-    process_call=rows[first_ten[7]]
-    need("Ljava/lang/Process;->isAlive()Z" in process_call and
-         "Lcom/dsh/android/EngineManager;->access$getProcess$p" in
-            rows[first_ten[4]] and
-         not any(rows[i].lstrip().startswith(":")
-                 for i in range(first_ten[6]+1,first_ten[7])),
-         "PC202_PROCESS_NONNULL_ONLY_EDGE")
-    pc202_nonnull_at=sum(map(len,rows[:first_ten[7]]))
     need(body.index(p208.INSERT)<guard_at<after_cond<=label_end<
-         post_call_at<pc202_nonnull_at<at and
-         cond_idx<label_idx<instruction_rows[0]<first_ten[7]<call_idx,
-         "PC202_PROCESS_NONNULL_RELOCATED_MARKER_STRICT_ORDER")
+         post_call_at<at and cond_idx<label_idx<instruction_rows[0]<call_idx,
+         "PC176_POSTCALL_MARKER_STRICT_ORDER")
     newbody=(body[:guard_at]+GUARD_INVOKE+
-             body[guard_at:post_call_at]+TARGET_INVOKE+
-             body[post_call_at:pc202_nonnull_at]+FALL_INVOKE+
-             body[pc202_nonnull_at:at]+PRE_INVOKE+body[at:])
+             body[guard_at:after_cond]+FALL_INVOKE+
+             body[after_cond:post_call_at]+TARGET_INVOKE+
+             body[post_call_at:at]+PRE_INVOKE+body[at:])
     new=s[:a]+newbody+s[b:]
     for mark in (GUARD_INVOKE,FALL_INVOKE,TARGET_INVOKE,PRE_INVOKE):
         need(new.count(mark.strip())==1,"ONLY_ONE_TEST_MARKER_EACH")
@@ -268,7 +245,7 @@ def inject_p40():
     need(PRE_SRC.read_text().replace(GUARD_INVOKE,"",1).replace(FALL_INVOKE,"",1).replace(TARGET_INVOKE,"",1).replace(PRE_INVOKE,"",1)==original,
          "PRECALL_SOURCE_EXACT_INVERSE")
     print("P209_ONLY_TEST_ORIGINAL_FIRST_GUARD_MARKER=PASS")
-    print("P209_PC202_NONNULL_ONLY_RELOCATED_MARKER=PASS")
+    print("P209_PC26_FALLTHROUGH_PC30_ONLY_REVERSIBLE_MARKER=PASS")
     print("P209_PC176_POST_THROWONFAILURE_ONLY_REVERSIBLE_MARKER=PASS")
     print("P209_ONLY_TEST_PRE_PC3912_MARKER=PASS")
     print("P209_ONLY_TEMP_P40_ONE_LOG_AND_NO_HOST_SPAWN=PASS")
