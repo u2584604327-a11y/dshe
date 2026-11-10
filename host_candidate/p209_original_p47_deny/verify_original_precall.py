@@ -11,7 +11,7 @@ from androguard.core.dex import DEX
 import zipfile
 PRE="Lcom/dsh/android/p209/P209PreCallWitness;->mark()V"
 GUARD="Lcom/dsh/android/p209/P209PreCallWitness;->markFirstGuard()V"
-FALL="Lcom/dsh/android/p209/P209PreCallWitness;->markProcessNonNull()V"
+FALL="Lcom/dsh/android/p209/P209PreCallWitness;->markFallthrough()V"
 TARGET="Lcom/dsh/android/p209/P209PreCallWitness;->markPostThrowOnFailure()V"
 P208="Lcom/dsh/android/p208/P208StartCoroutineWitness;->mark()V"
 OLD="Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;"
@@ -67,19 +67,16 @@ def compare(original,derived):
     require(markers[0]==[0] and all(len(v)==1 for v in markers[1:]),
             "EXACT_FIVE_DISPOSABLE_MARKERS")
     gi,fi,ti,pi=(v[0] for v in markers[1:])
-    require(0<gi<ti<fi<pi and
+    require(0<gi<fi<ti<pi and gi+2==fi and
             after[gi+1][1].get_name()=="if-eqz" and
+            after[fi+1][1].get_name()=="if-eq" and
             after[ti-1][1].get_name()=="invoke-static/range" and
             "Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V" in
                 after[ti-1][1].get_output().replace(" ","") and
             after[ti+1][1].get_name()=="iget-object" and
-            after[fi-1][1].get_name()=="if-eqz" and
-            after[fi+1][1].get_name()=="invoke-virtual" and
-            "Ljava/lang/Process;->isAlive()Z" in
-                after[fi+1][1].get_output().replace(" ","") and
             after[pi+1][1].get_name()=="invoke-static" and
             NEW in after[pi+1][1].get_output(),
-            "ORIGINAL_PC26_PC176_PC202_PC3912_ORDER")
+            "ORIGINAL_PC26_PC30_PC176_PC3912_ORDER")
     original_first=[(pc,ins) for pc,ins in before if ins.get_name().startswith("if-")]
     require(original_first and original_first[0][0]==26 and
             original_first[0][1].get_name()=="if-eqz" and
@@ -106,16 +103,6 @@ def compare(original,derived):
             post_marker_pc==mapping[176]+orig_map[176].get_length() and
             after[ti+1][0]==mapping[182],
             "EXACT_REUSED_MARKER_BETWEEN_PC176_NORMAL_RETURN_AND_PC182")
-    # Prior PC30 witness was MOVED to PC202's fallthrough. A fixed
-    # synthetic marker can run only when the original process is non-null.
-    require(202 in orig_map and 206 in orig_map and
-            orig_map[202].get_name()=="if-eqz" and
-            orig_map[206].get_name()=="invoke-virtual" and
-            "Ljava/lang/Process;->isAlive()Z" in orig_map[206].get_output() and
-            after[fi-1][0]==mapping[202] and
-            after[fi][0]==mapping[202]+orig_map[202].get_length() and
-            after[fi+1][0]==mapping[206],
-            "EXACT_REUSED_MARKER_PC202_NONNULL_BEFORE_PROCESS_ISALIVE")
     transformed=[]
     branch_count=0
     for k,((pc,orig),(dpc,der)) in enumerate(zip(before,aligned)):
@@ -178,12 +165,12 @@ def main():
         require("Lcom/dsh/android/p208/P208StartCoroutineWitness;" in owners and
                 "Lcom/dsh/android/p209/P209PreCallWitness;" in owners,
                 "BOTH_TEST_ONLY_CLASSES3_WITNESSES")
-        print("P209_START2_ENTRY_PC26_PC202_PC176_PC3912_FIVE_TEST_MARKERS=PASS")
+        print("P209_START2_ENTRY_PC26_PC30_PC176_PC3912_FIVE_TEST_MARKERS=PASS")
         print("P209_START2_ORIGINAL_ALL_OTHER_OPCODES_OPERANDS=PARITY")
         print("P209_ORIGINAL_UPSTREAM_ENGINE_BOOT_ONCREATE=PARITY")
         print("P209_FIRST_GUARD_MATCHES_SIGNED_ORIGINAL=PASS")
         print("P209_ALL_ORIGINAL_BRANCH_TARGETS_RELOCATED_EXACTLY=PASS")
-        print("P209_PC202_NONNULL_FALLTHROUGH_MARKER_ONLY_TEST_DEX=PASS")
+        print("P209_PC26_FALLTHROUGH_PC30_MARKER_ONLY_TEST_DEX=PASS")
         print("P209_PC176_POST_THROWONFAILURE_REUSED_MARKER_ONLY_TEST_DEX=PASS")
         print("P209_FIRST_GUARD_SIGNED_PC="+str([(pc,op) for pc,op,out in ins(prev.find(o,prev.START2,"invokeSuspend","(Ljava/lang/Object;)Ljava/lang/Object;")) if op.startswith("if-")][0][0]))
         print("P209_PRE_PC3912_MARKER_ONLY_IN_DISPOSABLE_CLASSES3=PASS")
