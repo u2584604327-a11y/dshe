@@ -36,14 +36,17 @@ test('unavailable runtime services must not block official QQ boot',()=>{
   assert.equal(installModelCatalog({inject(){throw Error('not yet available')}}),false);
   const requests=[];
   assert.equal(installModelCatalog({inject(deps,callback){requests.push(deps);}}),true);
-  assert.deepEqual(requests,[['webServer','llm']]);
+  assert.deepEqual(requests,[['webServer']]);
 });
-test('safe mode does not insert an unverified model-picker component', () => {
+test('model picker is isolated from official React hook order and QQ transport', () => {
   const script = readFileSync(new URL('../scripts/prepare_official_client.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(script, /qm-model-picker|Q_MOBILE_MODEL_PICKER|fetchJson/);
-  assert.match(script, /SCOPED_LAYOUT|LAZY_SETTINGS_START/);
+  const picker = readFileSync(new URL('../scripts/optional-model-picker.mjs', import.meta.url), 'utf8');
+  assert.match(script, /Q_MOBILE_ISOLATED_PICKER|Q_MOBILE_PICKER_MOUNT/);
+  assert.doesNotMatch(script, /Q_MOBILE_MODEL_HOOK|fetchJson\(/);
+  assert.match(picker, /qm-safe-model-select|读取可用模型|globalThis\.fetch/);
   const wrapper = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(wrapper, /installModelCatalog|\.\/model-catalog\.js/);
+  assert.match(wrapper, /return official\.apply\(ctx, config\)/);
+  assert.match(wrapper, /installModelCatalog\(ctx\)/);
 });
 test('hung provider never stalls model catalog indefinitely or hides healthy models', async () => {
   const started = Date.now();
@@ -87,10 +90,9 @@ test('concurrent optional HTTP requests share a bounded, read-only provider snap
   assert.equal(providerCalls, 1);
   assert.equal(modelCalls, 1);
 });
-test('recovery build rejects custom model picker and never waits for QQ binding', () => {
-  const script = readFileSync(new URL('../scripts/prepare_official_client.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(script, /qm-model-picker|Q_MOBILE_MODEL_HOOK|fetchJson/);
-  assert.match(script, /const inject = \[\];/);
-  const wrapper = readFileSync(new URL('../lib/index.js', import.meta.url), 'utf8');
-  assert.match(wrapper, /return official\.apply\(ctx, config\)/);
+test('model catalog uses the official optional webServer lifecycle', () => {
+  const source = readFileSync(new URL('../lib/model-catalog.js', import.meta.url), 'utf8');
+  assert.match(source, /ctx\.inject\(\['webServer'\]/);
+  assert.doesNotMatch(source, /ctx\.inject\(\['webServer', 'llm'\]/);
+  assert.match(source, /scope\.effect\(\(\) => server\.register/);
 });
