@@ -3,7 +3,8 @@
 import unittest
 from audit_signed_node_bootstrap import (
     Denied,normalize_descriptor,is_suspend_candidate,node_call_classes,
-    bounded_method_summary,callsite_shape)
+    bounded_method_summary,callsite_shape,linked_delegate_names,
+    inspect_linked_delegate_classes)
 
 class Fake:
     def __init__(self,op,output="",length=2):
@@ -58,5 +59,28 @@ class NodeBootstrapTests(unittest.TestCase):
         with self.assertRaises(Denied):bounded_method_summary([(0,Fake("return-object","v0"))],257)
         with self.assertRaises(Denied):
             bounded_method_summary([(0,Fake("nop")),(0,Fake("return-object","v0"))],0)
+
+    def test_linked_lambda_requires_actual_original_invoke(self):
+        cls="Lcom/dsh/android/termux/TermuxBootstrap$installNodeRuntime$2;"
+        rows=[(0,Fake("const-string",cls)),
+              (2,Fake("invoke-direct","v0, "+cls+"-><init>()V"))]
+        self.assertEqual(linked_delegate_names(rows),[cls])
+        self.assertEqual(linked_delegate_names(rows[:1]),[])
+    def test_nonmatching_lambda_names_not_trusted(self):
+        output="v0, Lcom/dsh/android/termux/Unrelated$2;-><init>()V"
+        self.assertEqual(linked_delegate_names([(0,Fake("invoke-direct",output))]),[])
+    def test_linked_lambda_missing_method_fails_closed(self):
+        class EmptyDex:
+            def get_classes(self):return []
+        cls="Lcom/dsh/android/termux/TermuxBootstrap$installNodeRuntime$2;"
+        with self.assertRaises(Denied):
+            inspect_linked_delegate_classes(
+                [("classes.dex",EmptyDex())],
+                [(0,Fake("invoke-direct","v0, "+cls+"-><init>()V"))])
+    def test_bounded_lambda_reference_count(self):
+        rows=[(i*2,Fake("invoke-direct",
+                "v0, Lcom/dsh/android/termux/TermuxBootstrap$installNodeRuntime$"+
+                str(i)+";-><init>()V")) for i in range(9)]
+        with self.assertRaises(Denied):linked_delegate_names(rows)
 
 if __name__=="__main__":unittest.main(verbosity=2)
