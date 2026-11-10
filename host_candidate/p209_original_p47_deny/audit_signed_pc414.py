@@ -113,7 +113,7 @@ def inspect_signed(apk):
     need(producer_pc+producer.get_length()==412 and
          producer.get_name().startswith("invoke-"),
          "GUARD_V10_NOT_ADJACENT_INVOKE_RESULT")
-    callee=re.search(r"L[^;,\\s]{1,130};->[A-Za-z0-9_$<>]{1,70}\\(",
+    callee=re.search(r"L[^;,\s]{1,130};->[A-Za-z0-9_$<>]{1,70}\(",
                      producer.get_output())
     callee_text=callee.group(0)[:-1] if callee else "NOT_UNIQUELY_DECODED"
     need(len(callee_text)<=220,"GUARD_V10_CALLEE_BOUND")
