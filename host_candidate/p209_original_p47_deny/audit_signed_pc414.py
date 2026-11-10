@@ -101,12 +101,42 @@ def inspect_signed(apk):
     edges,unknown,by_pc=cfg.graph(nodes)
     need(not unknown,"UNMODELED_SWITCH_OR_PAYLOAD")
     fall,taken,fr,tr,bypass=classify_guard(edges,by_pc)
+    # Signed-DEX source metadata, not runtime result values. DEX move-result
+    # must immediately follow the producing invoke, or fail closed.
+    need(412 in code and code[412].get_name()=="move-result-object",
+         "GUARD_V10_RESULT_SITE_DRIFT")
+    sequence=[pc for pc,_ in rows]
+    idx=sequence.index(412)
+    need(idx>0,"MOVE_RESULT_NO_PREDECESSOR")
+    producer_pc=sequence[idx-1]
+    producer=code[producer_pc]
+    need(producer_pc+producer.get_length()==412 and
+         producer.get_name().startswith("invoke-"),
+         "GUARD_V10_NOT_ADJACENT_INVOKE_RESULT")
+    callee=re.search(r"L[^;,\\s]{1,130};->[A-Za-z0-9_$<>]{1,70}\\(",
+                     producer.get_output())
+    callee_text=callee.group(0)[:-1] if callee else "NOT_UNIQUELY_DECODED"
+    need(len(callee_text)<=220,"GUARD_V10_CALLEE_BOUND")
+    need(fall in code and taken in code,"BRANCH_DESTINATIONS_MISSING")
+    previous_v2=lexical_writes(rows,regs[1],start=0,end=GUARD_PC)
+    # This inventory does not prove the live register contents. Control-flow
+    # merges, unmodeled wide/alias writes and exception handlers still apply.
     # Only the conditional's exact two graph edges are claimed. Do not
     # assert that Android reached PC414, or that the other edge is terminal.
     print("P209_PC414_SIGNED_V138_EXACT_OPCODE=if-ne")
     print("P209_PC414_BRANCH_OPERAND_COUNT=2")
     print("P209_PC414_FALL_PC="+str(fall))
     print("P209_PC414_TAKEN_PC="+str(taken))
+    print("P209_PC414_FALL_OPCODE="+code[fall].get_name())
+    print("P209_PC414_TAKEN_OPCODE="+code[taken].get_name())
+    print("P209_PC414_OPERAND_1_PRODUCER_PC="+str(producer_pc))
+    print("P209_PC414_OPERAND_1_PRODUCER_OP="+producer.get_name())
+    print("P209_PC414_OPERAND_1_PRODUCER_STATIC_CALLEE="+callee_text)
+    print("P209_PC414_OPERAND_2_PRE_PC414_LEXICAL_LAST3_COUNT="+
+          str(len(previous_v2)))
+    for at,op in previous_v2:
+        print("P209_PC414_OPERAND_2_PRE_PC414_LEXICAL_WRITE_PC="+
+              str(at)+",OP="+op)
     print("P209_PC414_FALL_PC3912="+
           ("REACHABLE_IN_NORMAL_CFG" if fr else "NOT_REACHABLE_IN_MODELED_CFG"))
     print("P209_PC414_TAKEN_PC3912="+
