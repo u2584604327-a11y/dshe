@@ -1,4 +1,4 @@
-# Q Mobile v0.1.6 — small group context + selectable models
+# Q Mobile v0.1.7 — small group context + selectable models
 
 Independent, unofficial mobile adaptation of Tencent Connect's unchanged
 `@tencent-connect/dsh-qqbot@0.5.5` (MIT). Based on original
@@ -7,7 +7,7 @@ Independent, unofficial mobile adaptation of Tencent Connect's unchanged
 ## Install URL — only after CI publishes the TGZ
 
 ```text
-https://raw.githubusercontent.com/u2584604327-a11y/dshe/refs/heads/release/q-mobile-0.1.5/dist/dsh-qqbot-q-mobile-0.1.6.tgz
+https://raw.githubusercontent.com/u2584604327-a11y/dshe/refs/heads/release/q-mobile-0.1.5/dist/dsh-qqbot-q-mobile-0.1.7.tgz
 ```
 
 Paste into the DSH Android plugin install URL. This is a **DSH TGZ plugin,
@@ -66,11 +66,11 @@ This release branch is isolated from the DSH mainline and PR #80.
 Official QQ copyright and terms remain © Tencent Connect, MIT.
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## v0.1.6 model selector diagnostics
+## v0.1.7 model selector diagnostics
 
 If the Settings dropdown is empty, the Android host may not expose both `webServer` and `llm` injectable services, or no provider advertises models. The QQ chat `/model` command remains the official supported way to select from the host's model list. Model selection updates the existing official config fields and requires pressing **Save**; it does not bypass provider entitlements, account rate limits, or Tencent Bot permissions. Keep `commandMode` restricted in shared groups if other members should not change the model.
 
-## v0.1.6 stability and acceptance boundary
+## v0.1.7 stability and acceptance boundary
 
 - The model catalog runs only in optional settings services. Slow provider discovery
   is time-bounded and capped at four concurrent lookups; requests share a short-lived
@@ -88,3 +88,10 @@ If the Settings dropdown is empty, the Android host may not expose both `webServ
   slow/failed LLM, model switching, Android resume, and a session-compaction test.
   An npm test pass is **not** evidence of these behaviors on a phone.
 
+
+## Android black-screen hotfix (v0.1.7)
+
+- The v0.1.6 model picker attempted to call a `fetchJson` helper that was not in scope, causing `ReferenceError: fetchJson is not defined` and `slot entry crashed in 'main'` on Android.
+- The injected picker now uses the WebView's built-in `fetch` with a 7-second abort, cancellation on unmount, same-origin credentials, an HTTP response check, and a visible manual-selection fallback if the model catalog is unavailable.
+- This change affects only the optional model picker; Tencent's official QQ 0.5.5 transport, current AppID/secret, and existing stored sessions are unchanged.
+- Verify on-device that the plugin settings opens without a black screen, then verify models, private chat and real group @ mention.
