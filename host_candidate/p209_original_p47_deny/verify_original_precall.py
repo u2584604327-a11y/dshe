@@ -178,7 +178,7 @@ def main():
         require("Lcom/dsh/android/p208/P208StartCoroutineWitness;" in owners and
                 "Lcom/dsh/android/p209/P209PreCallWitness;" in owners,
                 "BOTH_TEST_ONLY_CLASSES3_WITNESSES")
-        print("P209_START2_ENTRY_PC26_PC30_PC176_PC3912_FIVE_TEST_MARKERS=PASS")
+        print("P209_START2_ENTRY_PC26_PC202_PC176_PC3912_FIVE_TEST_MARKERS=PASS")
         print("P209_START2_ORIGINAL_ALL_OTHER_OPCODES_OPERANDS=PARITY")
         print("P209_ORIGINAL_UPSTREAM_ENGINE_BOOT_ONCREATE=PARITY")
         print("P209_FIRST_GUARD_MATCHES_SIGNED_ORIGINAL=PASS")
