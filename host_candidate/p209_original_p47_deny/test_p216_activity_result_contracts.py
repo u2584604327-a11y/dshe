@@ -72,6 +72,14 @@ class ContractsTests(unittest.TestCase):
     def test_launcher_field_set(self):
         self.assertEqual(event_for(I("iput-object",SET),{FIELD_NAME:1}),
                          ("LAUNCHER_FIELD_SET",1))
+    def test_android_dex_whitespace_field_type_get(self):
+        value=GET.replace(":"+LAUNCHER," "+LAUNCHER)
+        self.assertEqual(event_for(I("iget-object",value),{FIELD_NAME:1}),
+                         ("LAUNCHER_FIELD_GET",1))
+    def test_android_dex_whitespace_field_type_set(self):
+        value=SET.replace(":"+LAUNCHER," "+LAUNCHER)
+        self.assertEqual(event_for(I("iput-object",value),{FIELD_NAME:1}),
+                         ("LAUNCHER_FIELD_SET",1))
     def test_wrong_field_name_not_assumed(self):
         self.assertIsNone(event_for(I("iget-object",GET),
                                      {"anotherLauncher":2}))
