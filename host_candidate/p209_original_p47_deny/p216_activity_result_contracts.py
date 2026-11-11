@@ -102,8 +102,10 @@ def extract_events(dexes):
                     ev=event_for(ins,fields)
                     if ev is None:continue
                     label,detail=ev
-                    events.append((dex_name,owner_class(caller),caller,
-                                   method.get_name(),pc,label,detail))
+                    # Method object identity keeps overloaded methods separate.
+                # This transient key is never printed or persisted.
+                events.append((dex_name,owner_class(caller),caller,
+                               method.get_name(),id(method),pc,label,detail))
                     need(len(events)<=CALL_BOUND,"BOUNDED_EVENT_COUNT")
                     local.append((pc,label,detail))
                     if caller==MAIN and label=="GENERIC_LAUNCH":
@@ -120,9 +122,9 @@ def field_hints(events,launch_windows):
     # Two independent hints: a MainActivity method containing registration and
     # a permission contract new; a field-set in THAT SAME method. Not dataflow.
     grouped={}
-    for dex,category,cls,meth,pc,label,detail in events:
+    for dex,category,cls,meth,method_key,pc,label,detail in events:
         if category!="MAIN_ACTIVITY":continue
-        grouped.setdefault((cls,meth),[]).append((pc,label,detail))
+        grouped.setdefault((cls,method_key),[]).append((pc,label,detail))
     candidates=set()
     for rows in grouped.values():
         if (any(kind=="PERMISSION_CONTRACT_NEW" for _,kind,_ in rows)
@@ -148,7 +150,7 @@ def audit(path):
     fields,events,launches,scanned=extract_events(dexes)
     need(len(launches)==4,"MAIN_FOUR_ORIGINAL_LAUNCHES")
     counts=Counter((kind,label,detail)
-                   for _,kind,_,_,_,label,detail in events)
+                   for _,kind,_,_,_,_,label,detail in events)
     perm_fields,near_matches=field_hints(events,launches)
     print("P216_SIGNED_V138_ORIGINAL_SHA_PINNED=PASS")
     print("P216_MAIN_ACTIVITY_LAUNCHER_TYPED_FIELD_COUNT="+str(len(fields)))
