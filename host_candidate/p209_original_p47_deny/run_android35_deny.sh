@@ -19,7 +19,7 @@ uid=
 cleanup(){
   # P211 disposable diagnostic snapshots may contain Android dumpsys details.
   # Never upload; remove before the ephemeral emulator exits.
-  rm -rf .p211tmp
+  rm -rf .p211tmp .p212tmp
   adb -s "$serial" shell am force-stop com.dsh.android >/dev/null 2>&1 || true
   if [[ -n "$uid" ]];then
     adb -s "$serial" shell iptables -w -D OUTPUT -m owner --uid-owner "$uid" -j REJECT >/dev/null 2>&1 || true
@@ -58,6 +58,14 @@ pid="$(adb -s "$serial" shell pidof com.dsh.android | tr -d '\r\n')"
 }
 echo P208_REAL_ANDROID_ORIGINAL_MANIFEST_MAINACTIVITY_LAUNCHED=PASS
 echo P208_NO_SYNTHETIC_P43_BOOT_CALL=PASS
+# P212 early snapshot after the one existing, original MainActivity am start -W.
+# This is observation only: no activity launch, tap, permission or restart.
+mkdir -p .p212tmp
+chmod 700 .p212tmp
+adb -s "$serial" shell pidof com.dsh.android > .p212tmp/early.pidof 2>/dev/null || true
+adb -s "$serial" shell dumpsys activity activities > .p212tmp/early.activities 2>/dev/null || true
+adb -s "$serial" shell dumpsys window windows > .p212tmp/early.windows 2>/dev/null || true
+echo P212_EARLY_ORIGINAL_ACTIVITY_SNAPSHOT_CAPTURED=YES
 selected=
 valid=NO
 for _ in $(seq 1 18);do
@@ -97,7 +105,19 @@ if python3 -B host_candidate/p209_original_p47_deny/p211_runtime_lifecycle.py \
 else
   echo P211_LIFECYCLE_SANITIZED_SNAPSHOT=NOT_ATTESTED
 fi
-rm -rf .p211tmp
+# Reuse the exact P211 late snapshot; avoid a second late adb query that
+# could change the observation instant. Never print the raw dumpsys records.
+cp .p211tmp/pidof.txt .p212tmp/late.pidof
+cp .p211tmp/activity.txt .p212tmp/late.activities
+cp .p211tmp/window.txt .p212tmp/late.windows
+if python3 -B host_candidate/p209_original_p47_deny/p212_activity_transition.py \
+    --host-pid "$pid" --early-prefix .p212tmp/early \
+    --late-prefix .p212tmp/late; then
+  echo P212_TWO_SNAPSHOT_REDACTED_LIFECYCLE=PASS
+else
+  echo P212_TWO_SNAPSHOT_REDACTED_LIFECYCLE=NOT_ATTESTED
+fi
+rm -rf .p211tmp .p212tmp
 if [[ "$selected" == *P208_ORIGINAL_START2_INVOKESUSPEND_ISOLATED_PROCESS=DENY* ]];then
   echo P208_REAL_METHOD_MARKER_ISOLATED_PROCESS=DENY;exit 2
 fi
