@@ -56,7 +56,7 @@ def scope():
          "SIGNED_SOURCE_SHA")
     gate_bytes=GATE_SOURCE.read_bytes() if GATE_SOURCE.is_file() else b""
     # Repository seal is Git's blob SHA1 (header + content), not raw SHA1.
-    gate_blob=(b"blob "+str(len(gate_bytes)).encode()+b"\\x00"+gate_bytes)
+    gate_blob=(b"blob "+str(len(gate_bytes)).encode()+b"\x00"+gate_bytes)
     need(bool(gate_bytes) and hashlib.sha1(gate_blob).hexdigest()==GATE_SHA,
          "UNCHANGED_P47_GATE_SOURCE")
     need(SOURCE.is_file() and not SOURCE.is_symlink() and
