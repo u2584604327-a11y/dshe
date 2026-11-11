@@ -44,8 +44,10 @@ class TraceTests(unittest.TestCase):
             resolve_method([("classes.dex",Dex([Cls(methods=[])]))],
                            OWNER,"installNodeRuntimeLocked")
     def test_method_without_code_refused(self):
+        no_code=Method(code=False)
+        original=Dex(classes=[Cls(methods=[no_code])])
         with self.assertRaises(Denied):
-            resolve_method([("classes.dex",Dex([Cls(methods=[Method(code=False)])])],
+            resolve_method([("classes.dex",original)],
                            OWNER,"installNodeRuntimeLocked")
     def test_unique_original_invoke_target(self):
         rows=[(130,I("invoke-static",
