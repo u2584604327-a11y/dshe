@@ -87,7 +87,7 @@ jobs:
           grep -Eq '^Ran 14 tests in' "$RUNNER_TEMP/p209-node-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-node-unit.log"
           python3 -B host_candidate/p209_original_p47_deny/test_audit_signed_node_delegate.py 2>&1 | tee "$RUNNER_TEMP/p209-delegate-unit.log"
-          grep -Eq '^Ran 13 tests in' "$RUNNER_TEMP/p209-delegate-unit.log"
+          grep -Eq '^Ran 14 tests in' "$RUNNER_TEMP/p209-delegate-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-delegate-unit.log"
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
           test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
@@ -195,6 +195,7 @@ jobs:
             .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
             | tee "$RUNNER_TEMP/p209-delegate-static.log"
           grep -Fxq 'P209_NODE_DELEGATE_SIGNED_STATIC_AUDIT=PASS' "$RUNNER_TEMP/p209-delegate-static.log"
+          grep -Fxq 'P209_NODE_DELEGATE_BROAD_IO_SIGNATURE_MENTION_COUNT=8' "$RUNNER_TEMP/p209-delegate-static.log"
           grep -Fxq 'P209_NODE_DELEGATE_ORIGINAL_WRAPPER_INVOKE_LINK=PASS' "$RUNNER_TEMP/p209-delegate-static.log"
           grep -Fxq 'P209_NODE_DELEGATE_ORIGINAL_ANDROID_ENTRY=NOT_ATTESTED' "$RUNNER_TEMP/p209-delegate-static.log"
           grep -Fxq 'P209_NODE_DELEGATE_ORIGINAL_DEX_MUTATED=NO' "$RUNNER_TEMP/p209-delegate-static.log"
