@@ -98,6 +98,9 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_audit_signed_node_usability_start.py 2>&1 | tee "$RUNNER_TEMP/p209-node-usability-unit.log"
           grep -Eq '^Ran 10 tests in' "$RUNNER_TEMP/p209-node-usability-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-node-usability-unit.log"
+          python3 -B host_candidate/p209_original_p47_deny/test_p210_optional_node_usability.py 2>&1 | tee "$RUNNER_TEMP/p210-node-unit.log"
+          grep -Eq '^Ran 15 tests in' "$RUNNER_TEMP/p210-node-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p210-node-unit.log"
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
           test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
           echo P209_SOURCE_PINNED_AND_30_NEGATIVE_TESTS=PASS
@@ -236,6 +239,40 @@ jobs:
           grep -Fxq 'P209_NODE_USABILITY_FORMAL_V139_RELEASE=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p209-node-usability-static.log"
           echo P209_ORIGINAL_P47_GATE_BINARY_AND_SOURCE_PARITY=PASS
           echo P208_EXACT_ORIGINAL_METHOD_WITNESS_SOURCE_PROVENANCE=PASS
+      - name: P210 STATIC-ONLY equal-width Node usability deny candidate, NEVER install
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P181_THREE_ORIGINAL_START_DENY" = 1
+          test "$P49_NODE_STAGE" = 0
+          test "$P51_SIDE_BY_SIDE" = 0
+          test "$P208_CI_METHOD_ENTRY_ONLY" = 1
+          test "$P209_FINAL_DENY_ONLY" = 1
+          mkdir -p .p210tmp
+          patched=0
+          p210_cleanup() {
+            if test "$patched" = 1; then
+              python3 -B host_candidate/p209_original_p47_deny/p210_optional_node_usability.py --restore || true
+            fi
+            rm -rf .p210tmp
+          }
+          trap p210_cleanup EXIT
+          python3 -B host_candidate/p209_original_p47_deny/p210_optional_node_usability.py --patch
+          patched=1
+          apktool b .p43tmp/decoded -o .p210tmp/P210-STATIC-ONLY-UNSIGNED-DO-NOT-INSTALL.apk
+          python3 -B host_candidate/p209_original_p47_deny/p210_optional_node_usability.py --restore
+          patched=0
+          python3 -B host_candidate/p209_original_p47_deny/p210_optional_node_usability.py \
+            --verify .p210tmp/P210-STATIC-ONLY-UNSIGNED-DO-NOT-INSTALL.apk \
+            | tee "$RUNNER_TEMP/p210-node-static.log"
+          grep -Fxq 'P210_CANDIDATE_STATIC_PARITY_AUDIT=PASS' "$RUNNER_TEMP/p210-node-static.log"
+          grep -Fxq 'P210_CANDIDATE_ALL_OTHER_METHOD_INSTRUCTIONS_UNCHANGED=PASS' "$RUNNER_TEMP/p210-node-static.log"
+          grep -Fxq 'P210_CANDIDATE_TRY_HANDLERS_ALL_PRIMARY_METHODS_EXACT=PASS' "$RUNNER_TEMP/p210-node-static.log"
+          grep -Fxq 'P210_CANDIDATE_ANDROID_EMULATOR_EXECUTED=NO' "$RUNNER_TEMP/p210-node-static.log"
+          grep -Fxq 'P210_CANDIDATE_PRODUCTION_RELEASE=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p210-node-static.log"
+          rm -rf .p210tmp
+          trap - EXIT
       - name: Disposable emulator KVM
         shell: bash
         run: if test -c /dev/kvm;then sudo chmod 666 /dev/kvm;fi
