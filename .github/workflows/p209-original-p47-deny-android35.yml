@@ -101,6 +101,9 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_p210_optional_node_usability.py 2>&1 | tee "$RUNNER_TEMP/p210-node-unit.log"
           grep -Eq '^Ran 15 tests in' "$RUNNER_TEMP/p210-node-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p210-node-unit.log"
+          python3 -B host_candidate/p209_original_p47_deny/test_p211_runtime_lifecycle.py 2>&1 | tee "$RUNNER_TEMP/p211-lifecycle-unit.log"
+          grep -Eq '^Ran 12 tests in' "$RUNNER_TEMP/p211-lifecycle-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p211-lifecycle-unit.log"
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
           test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
           echo P209_SOURCE_PINNED_AND_30_NEGATIVE_TESTS=PASS
