@@ -127,7 +127,7 @@ jobs:
           print("P216_SIGNED_PERMISSION_AND_CONTRACT_PYTHON_SYNTAX=PASS")
           PY
           python3 -B host_candidate/p209_original_p47_deny/test_p216_activity_result_contracts.py 2>&1 | tee "$RUNNER_TEMP/p216-contract-unit.log"
-          grep -Eq '^Ran 20 tests in' "$RUNNER_TEMP/p216-contract-unit.log"
+          grep -Eq '^Ran 22 tests in' "$RUNNER_TEMP/p216-contract-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p216-contract-unit.log"
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
           test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
