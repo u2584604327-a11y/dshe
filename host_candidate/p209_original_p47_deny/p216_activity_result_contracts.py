@@ -31,7 +31,7 @@ CONTRACTS={
 }
 CALL_BOUND=256
 FIELD_REF=re.compile(
-    r"Lcom/dsh/android/MainActivity;->([A-Za-z0-9_$]{1,100})(?::|[ \\t]+)"
+    r"Lcom/dsh/android/MainActivity;->([A-Za-z0-9_$]{1,100})(?::|\s+)"
     r"Landroidx/activity/result/ActivityResultLauncher;")
 CATEGORIES=("PERMISSION_CONTRACT_NEW","OTHER_CONTRACT_NEW",
             "CONTRACT_CONSTRUCTOR_INVOKE","ACTIVITY_RESULT_REGISTER",
