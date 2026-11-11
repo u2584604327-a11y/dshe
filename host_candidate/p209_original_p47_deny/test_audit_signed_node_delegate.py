@@ -2,7 +2,8 @@
 """Synthetic fail-closed checks for linked original Node installer DEX audit."""
 import unittest
 from audit_signed_node_delegate import (
-    Denied,io_class,safe_invoke_symbol,static_call_inventory,inspect_tries)
+    Denied,io_class,safe_invoke_symbol,static_call_inventory,inspect_tries,
+    legacy_io_signature_mentions)
 
 class I:
     def __init__(self,op="nop",output="",length=2):
@@ -61,6 +62,16 @@ class AuditTests(unittest.TestCase):
             "v0, v1, Ljava/io/File;->exists()Z "+path))])
         self.assertEqual(entries,[(10,"IO","FILE_METADATA","exists")])
         self.assertNotIn(path,str(entries))
+    def test_signature_mention_is_not_a_direct_io_callee(self):
+        rows=[(0,I("invoke-virtual",
+                  "v0, Lcom/example/Installer;->install(Ljava/io/File;)V")),
+              (6,I("invoke-virtual",
+                  "v0, Ljava/io/File;->exists()Z"))]
+        self.assertEqual(legacy_io_signature_mentions(rows),2)
+        calls=static_call_inventory(rows)
+        self.assertEqual(len([x for x in calls if x[1]=="IO"]),1)
+        self.assertEqual(calls[0][1],"OTHER")
+        self.assertEqual(calls[1][1],"IO")
     def test_raw_string_operand_not_a_callsite(self):
         self.assertEqual(static_call_inventory([(0,I("const-string",
              "v0, Ljava/io/File;->delete()Z"))]),[])
