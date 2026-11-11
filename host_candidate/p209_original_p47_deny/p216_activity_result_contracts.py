@@ -15,7 +15,6 @@ import re
 import sys
 import zipfile
 
-from androguard.core.dex import DEX
 from audit_signed_node_bootstrap import SIGNED_SHA,need,Denied
 from p215_signed_runtime_permissions import class_call,APP
 
@@ -135,6 +134,7 @@ def field_hints(events,launch_windows):
     return sorted(candidates),matches
 
 def audit(path):
+    from androguard.core.dex import DEX
     src=Path(path)
     need(src.is_file() and not src.is_symlink(),"ORIGINAL_FILE")
     need(hashlib.sha256(src.read_bytes()).hexdigest()==SIGNED_SHA,
