@@ -116,6 +116,16 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_p215_signed_runtime_permissions.py 2>&1 | tee "$RUNNER_TEMP/p215-permission-unit.log"
           grep -Eq '^Ran 20 tests in' "$RUNNER_TEMP/p215-permission-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p215-permission-unit.log"
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ("p215_signed_runtime_permissions.py",
+                       "test_p215_signed_runtime_permissions.py",
+                       "p216_activity_result_contracts.py",
+                       "test_p216_activity_result_contracts.py"):
+              p=Path("host_candidate/p209_original_p47_deny")/name
+              compile(p.read_text(encoding="utf-8"),str(p),"exec")
+          print("P216_SIGNED_PERMISSION_AND_CONTRACT_PYTHON_SYNTAX=PASS")
+          PY
           python3 -B host_candidate/p209_original_p47_deny/test_p216_activity_result_contracts.py 2>&1 | tee "$RUNNER_TEMP/p216-contract-unit.log"
           grep -Eq '^Ran 20 tests in' "$RUNNER_TEMP/p216-contract-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p216-contract-unit.log"
