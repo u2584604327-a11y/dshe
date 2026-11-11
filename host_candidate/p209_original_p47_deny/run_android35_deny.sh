@@ -125,6 +125,15 @@ if python3 -B host_candidate/p209_original_p47_deny/p213_external_component_fami
 else
   echo P213_EXTERNAL_FAMILY_REDACTED_AUDIT=NOT_ATTESTED
 fi
+# P214 only classifies the whitelisted PermissionController UI class suffix
+# from the SAME disposable P212 snapshots. Never print raw class/permissions.
+if python3 -B host_candidate/p209_original_p47_deny/p214_permission_activity_type.py \
+    --early-activities .p212tmp/early.activities \
+    --late-activities .p212tmp/late.activities; then
+  echo P214_PERMISSION_UI_REDACTED_AUDIT=PASS
+else
+  echo P214_PERMISSION_UI_REDACTED_AUDIT=NOT_ATTESTED
+fi
 rm -rf .p211tmp .p212tmp
 if [[ "$selected" == *P208_ORIGINAL_START2_INVOKESUSPEND_ISOLATED_PROCESS=DENY* ]];then
   echo P208_REAL_METHOD_MARKER_ISOLATED_PROCESS=DENY;exit 2
