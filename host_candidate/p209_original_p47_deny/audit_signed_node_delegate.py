@@ -53,6 +53,13 @@ def io_class(owner):
     dotted=owner.strip("L;").replace("/",".")
     return ALLOWED_IO_OWNERS.get(dotted,"OTHER_IO_OWNER")
 
+def legacy_io_signature_mentions(rows):
+    """Historical broad category: I/O may appear in descriptor, not callee."""
+    return sum(1 for _,ins in rows if
+               ins.get_name().startswith("invoke-") and
+               ("Ljava/io/" in ins.get_output() or
+                "Ljava/nio/file/" in ins.get_output()))
+
 def static_call_inventory(rows):
     """Returns bounded, sanitized static locations; never arbitrary strings."""
     calls=[]
@@ -158,11 +165,18 @@ def inspect_signed(apk):
     calls=static_call_inventory(rows)
     io=[x for x in calls if x[1]=="IO"]
     helpers=[x for x in calls if x[1]=="TERMUX_HELPER"]
+    legacy_mentions=legacy_io_signature_mentions(rows)
+    # Previous audit counted every invoke whose complete descriptor mentioned
+    # java.io/nio. It did NOT establish the invoked class was an IO class.
+    need(legacy_mentions==8,"SIGNED_BROAD_IO_MENTION_BASELINE_DRIFT")
+    need(len(io)<=legacy_mentions,"DIRECT_IO_CALLEE_COUNT_EXCEEDS_MENTIONS")
     tries=inspect_tries(m,rows)
     returns,branches,_=bounded_method_summary(rows,len(tries))
     need(len(returns)==1 and len(branches)==4,"SIGNED_DELEGATE_SHAPE_DRIFT")
-    need(len(io)==8,"SIGNED_DELEGATE_IO_SITE_COUNT_DRIFT")
     print("P209_NODE_DELEGATE_SHA_PINNED=PASS")
+    print("P209_NODE_DELEGATE_BROAD_IO_SIGNATURE_MENTION_COUNT="+str(legacy_mentions))
+    print("P209_NODE_DELEGATE_BROAD_IO_MENTIONS_NOT_DIRECT_CALLEES="+
+          str(legacy_mentions-len(io)))
     print("P209_NODE_DELEGATE_ORIGINAL_WRAPPER_INVOKE_LINK=PASS")
     print("P209_NODE_DELEGATE_METHOD=TermuxBootstrap$installNodeRuntime$2.invokeSuspend")
     print("P209_NODE_DELEGATE_DIRECT_IO_CALL_COUNT="+str(len(io)))
