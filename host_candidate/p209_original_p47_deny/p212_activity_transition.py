@@ -31,7 +31,7 @@ def signal(lines,regex):
             labels.append("NO_TARGET")
         elif COMPONENT_RE.search(line):
             # Disclose only classification, never other package or component.
-            if re.search(r"\b"+re.escape(PACKAGE)+r"/(?:"
+            if re.search(r"\b"+re.escape(PACKAGE)+r"/\.?(?:"
                          +re.escape(PACKAGE)+r"\.)?"+re.escape(MAIN)
                          +r"\b",line):
                 labels.append("MAIN")
