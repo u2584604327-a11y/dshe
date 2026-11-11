@@ -103,9 +103,9 @@ def extract_events(dexes):
                     if ev is None:continue
                     label,detail=ev
                     # Method object identity keeps overloaded methods separate.
-                # This transient key is never printed or persisted.
-                events.append((dex_name,owner_class(caller),caller,
-                               method.get_name(),id(method),pc,label,detail))
+                    # This transient key is never printed or persisted.
+                    events.append((dex_name,owner_class(caller),caller,
+                                   method.get_name(),id(method),pc,label,detail))
                     need(len(events)<=CALL_BOUND,"BOUNDED_EVENT_COUNT")
                     local.append((pc,label,detail))
                     if caller==MAIN and label=="GENERIC_LAUNCH":
