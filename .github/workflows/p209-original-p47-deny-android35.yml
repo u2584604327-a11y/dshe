@@ -116,6 +116,9 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_p215_signed_runtime_permissions.py 2>&1 | tee "$RUNNER_TEMP/p215-permission-unit.log"
           grep -Eq '^Ran 20 tests in' "$RUNNER_TEMP/p215-permission-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p215-permission-unit.log"
+          python3 -B host_candidate/p209_original_p47_deny/test_p216_activity_result_contracts.py 2>&1 | tee "$RUNNER_TEMP/p216-contract-unit.log"
+          grep -Eq '^Ran 20 tests in' "$RUNNER_TEMP/p216-contract-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p216-contract-unit.log"
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
           test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
           echo P209_SOURCE_PINNED_AND_30_NEGATIVE_TESTS=PASS
@@ -261,6 +264,14 @@ jobs:
           grep -Fxq 'P215_ORIGINAL_PERMISSION_REQUEST_RUNTIME_EXECUTED=NOT_ATTESTED' "$RUNNER_TEMP/p215-permissions-static.log"
           grep -Fxq 'P215_PERMISSION_CONTROLLER_CAUSE_OF_PC3912=NOT_ATTESTED' "$RUNNER_TEMP/p215-permissions-static.log"
           grep -Fxq 'P215_V139_RELEASE=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p215-permissions-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/p216_activity_result_contracts.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p216-contract-static.log"
+          grep -Fxq 'P216_SIGNED_ACTIVITY_RESULT_STATIC_AUDIT=PASS' "$RUNNER_TEMP/p216-contract-static.log"
+          grep -Fxq 'P216_SIGNED_V138_ORIGINAL_SHA_PINNED=PASS' "$RUNNER_TEMP/p216-contract-static.log"
+          grep -Fxq 'P216_ACTIVITY_RESULT_LAUNCH_IS_NOT_AUTOMATIC_PERMISSION_PROOF=YES' "$RUNNER_TEMP/p216-contract-static.log"
+          grep -Fxq 'P216_PERMISSION_CONTROLLER_REQUEST_ORIGIN=NOT_ATTESTED' "$RUNNER_TEMP/p216-contract-static.log"
+          grep -Fxq 'P216_FORMAL_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p216-contract-static.log"
           echo P209_ORIGINAL_P47_GATE_BINARY_AND_SOURCE_PARITY=PASS
           echo P208_EXACT_ORIGINAL_METHOD_WITNESS_SOURCE_PROVENANCE=PASS
       - name: P210 STATIC-ONLY equal-width Node usability deny candidate, NEVER install
