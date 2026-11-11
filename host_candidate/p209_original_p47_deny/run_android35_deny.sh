@@ -117,6 +117,14 @@ if python3 -B host_candidate/p209_original_p47_deny/p212_activity_transition.py 
 else
   echo P212_TWO_SNAPSHOT_REDACTED_LIFECYCLE=NOT_ATTESTED
 fi
+# P213 only classifies the same P212 snapshots in a tiny known-category
+# vocabulary. No component/package identifiers or raw dumpsys can escape.
+if python3 -B host_candidate/p209_original_p47_deny/p213_external_component_family.py \
+    --early-prefix .p212tmp/early --late-prefix .p212tmp/late; then
+  echo P213_EXTERNAL_FAMILY_REDACTED_AUDIT=PASS
+else
+  echo P213_EXTERNAL_FAMILY_REDACTED_AUDIT=NOT_ATTESTED
+fi
 rm -rf .p211tmp .p212tmp
 if [[ "$selected" == *P208_ORIGINAL_START2_INVOKESUSPEND_ISOLATED_PROCESS=DENY* ]];then
   echo P208_REAL_METHOD_MARKER_ISOLATED_PROCESS=DENY;exit 2
