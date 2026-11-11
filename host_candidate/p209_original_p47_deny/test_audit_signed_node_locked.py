@@ -41,7 +41,7 @@ class TraceTests(unittest.TestCase):
             resolve_method([("classes.dex",dex)],OWNER,"installNodeRuntimeLocked")
     def test_missing_method_refused(self):
         with self.assertRaises(Denied):
-            resolve_method([("classes.dex",Dex([Cls(methods=[])])],
+            resolve_method([("classes.dex",Dex([Cls(methods=[])]))],
                            OWNER,"installNodeRuntimeLocked")
     def test_method_without_code_refused(self):
         with self.assertRaises(Denied):
