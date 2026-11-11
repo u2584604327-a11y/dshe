@@ -17,6 +17,9 @@ already="$(adb -s "$serial" shell pm list packages -U com.dsh.android | tr -d '\
 }
 uid=
 cleanup(){
+  # P211 disposable diagnostic snapshots may contain Android dumpsys details.
+  # Never upload; remove before the ephemeral emulator exits.
+  rm -rf .p211tmp
   adb -s "$serial" shell am force-stop com.dsh.android >/dev/null 2>&1 || true
   if [[ -n "$uid" ]];then
     adb -s "$serial" shell iptables -w -D OUTPUT -m owner --uid-owner "$uid" -j REJECT >/dev/null 2>&1 || true
@@ -77,6 +80,24 @@ done
 [[ "$valid" == YES ]] || {
   echo P208_LOG_BOUNDARY_ORIGINAL_LAUNCH_NOT_ATTESTED=DENY;exit 2;
 }
+# P211 observability only: no new activity, no tap, no restart or Android
+# permission change. Snapshot exact existing original MainActivity launch.
+# Raw dumpsys is disposable and NEVER printed, uploaded or persisted.
+mkdir -p .p211tmp
+chmod 700 .p211tmp
+adb -s "$serial" shell pidof com.dsh.android > .p211tmp/pidof.txt 2>/dev/null || true
+adb -s "$serial" shell dumpsys activity activities > .p211tmp/activity.txt 2>/dev/null || true
+adb -s "$serial" shell dumpsys window windows > .p211tmp/window.txt 2>/dev/null || true
+if python3 -B host_candidate/p209_original_p47_deny/p211_runtime_lifecycle.py \
+    --host-pid "$pid" \
+    --pidof-snapshot .p211tmp/pidof.txt \
+    --activity-snapshot .p211tmp/activity.txt \
+    --window-snapshot .p211tmp/window.txt; then
+  echo P211_LIFECYCLE_SANITIZED_SNAPSHOT=PASS
+else
+  echo P211_LIFECYCLE_SANITIZED_SNAPSHOT=NOT_ATTESTED
+fi
+rm -rf .p211tmp
 if [[ "$selected" == *P208_ORIGINAL_START2_INVOKESUSPEND_ISOLATED_PROCESS=DENY* ]];then
   echo P208_REAL_METHOD_MARKER_ISOLATED_PROCESS=DENY;exit 2
 fi
