@@ -95,6 +95,9 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_audit_signed_node_resource_abi.py 2>&1 | tee "$RUNNER_TEMP/p209-node-resource-unit.log"
           grep -Eq '^Ran 12 tests in' "$RUNNER_TEMP/p209-node-resource-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-node-resource-unit.log"
+          python3 -B host_candidate/p209_original_p47_deny/test_audit_signed_node_usability_start.py 2>&1 | tee "$RUNNER_TEMP/p209-node-usability-unit.log"
+          grep -Eq '^Ran 10 tests in' "$RUNNER_TEMP/p209-node-usability-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p209-node-usability-unit.log"
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
           test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
           echo P209_SOURCE_PINNED_AND_30_NEGATIVE_TESTS=PASS
@@ -222,6 +225,15 @@ jobs:
           grep -Fxq 'P209_NODE_RESOURCE_FILENAME_HINTS_DO_NOT_PROVE_NODE_ARCH=YES' "$RUNNER_TEMP/p209-node-resource-static.log"
           grep -Fxq 'P209_NODE_RESOURCE_ACTUAL_INSTALL_OR_RUN=NOT_ATTESTED' "$RUNNER_TEMP/p209-node-resource-static.log"
           grep -Fxq 'P209_NODE_RESOURCE_FORMAL_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p209-node-resource-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/audit_signed_node_usability_start.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            | tee "$RUNNER_TEMP/p209-node-usability-static.log"
+          grep -Fxq 'P209_NODE_USABILITY_SIGNED_ORIGINAL_READONLY_AUDIT=PASS' "$RUNNER_TEMP/p209-node-usability-static.log"
+          grep -Fxq 'P209_NODE_USABILITY_DIRECT_START_NOT_REWRITTEN_BY_P181=YES' "$RUNNER_TEMP/p209-node-usability-static.log"
+          grep -Fxq 'P209_NODE_USABILITY_NO_GLOBAL_SPAWN_MEDIATION=BLOCKED' "$RUNNER_TEMP/p209-node-usability-static.log"
+          grep -Fxq 'P209_NODE_USABILITY_DIRECT_SPAWN_RUNTIME_EXECUTED=NOT_ATTESTED' "$RUNNER_TEMP/p209-node-usability-static.log"
+          grep -Fxq 'P209_NODE_USABILITY_FORMAL_V139_RELEASE=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p209-node-usability-static.log"
           echo P209_ORIGINAL_P47_GATE_BINARY_AND_SOURCE_PARITY=PASS
           echo P208_EXACT_ORIGINAL_METHOD_WITNESS_SOURCE_PROVENANCE=PASS
       - name: Disposable emulator KVM
