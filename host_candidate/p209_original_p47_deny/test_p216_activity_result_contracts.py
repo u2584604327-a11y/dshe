@@ -128,9 +128,9 @@ class ContractsTests(unittest.TestCase):
         self.assertEqual(scanned,2)
     def test_missing_main_class_fail_closed(self):
         with self.assertRaises(Denied):
-            extract_events([("classes.dex",Dex([Cls("Lcom/other/Fake;",[])])])
+            extract_events([("classes.dex",Dex([Cls("Lcom/other/Fake;",[])]))])
     def test_duplicate_main_class_fail_closed(self):
         with self.assertRaises(Denied):
-            extract_events([("classes.dex",Dex([Cls(MAIN,[]),Cls(MAIN,[])])])
+            extract_events([("classes.dex",Dex([Cls(MAIN,[]),Cls(MAIN,[])]))])
 
 if __name__=="__main__":unittest.main(verbosity=2)
