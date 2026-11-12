@@ -50,6 +50,8 @@ class SlotTests(unittest.TestCase):
                          "ALL_MODELED_PREFIX_EDGES")
     def test_wide_move_second_word(self):
         self.assertTrue(may_write_receiver("move-wide","v3,v5",4))
+        self.assertTrue(may_write_receiver("move-result-wide","v3",4))
+        self.assertTrue(may_write_receiver("const-wide","v3, 0",4))
     def test_unknown_opcode_is_not_trusted(self):
         self.assertEqual(receiver_unchanged(
             {0:("unknown-vm-op",""),2:("nop","")},{0:(2,),2:()},0,2),
