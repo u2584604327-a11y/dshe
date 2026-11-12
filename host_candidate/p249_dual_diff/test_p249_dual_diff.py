@@ -7,7 +7,7 @@ from test_p246_exception_semantics import A,Code,Dex,Handler,Method,Pair,Table,T
 from p246_exception_semantics import Deny
 from p249_dual_diff import START,OWNER,HELPER,dual,emit,seal
 D=Dex()
-EARLY=("Lfake/AA;","m","()V")
+EARLY=("Laaa/AA;","m","()V")
 LATE=("Lfake/ZZ;","m","()V")
 def m():return Method()
 def long():return Method(code=Code(total=7),widths=[2,2,2,2,2,4])
