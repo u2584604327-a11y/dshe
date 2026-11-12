@@ -40,6 +40,30 @@ def capture_verdict(descriptors, pc182_output, receiver_register):
                 ENGINE in output)
     return count_band, "CANDIDATE" if observed else "NOT_ATTESTED"
 
+def operand_shape(pc182_output, receiver_register):
+    """P239: fixed categories only. No original raw DEX operands logged."""
+    output = "".join(pc182_output.split())
+    if START+"->" in output:
+        owner = "COROUTINE"
+    elif "->" in output:
+        owner = "OTHER"
+    else:
+        owner = "UNKNOWN"
+    if ENGINE in output:
+        field_type = "ENGINE"
+    elif "->" in output:
+        field_type = "OTHER"
+    else:
+        field_type = "UNKNOWN"
+    m = re.match(r"^v[0-9]+,v([0-9]+),", output)
+    if m is None or type(receiver_register) is not int or receiver_register < 0:
+        source = "UNPARSEABLE"
+    elif int(m.group(1)) == receiver_register:
+        source = "RECEIVER_P0"
+    else:
+        source = "OTHER_VREG"
+    return owner, field_type, source
+
 def signed_audit(apk):
     from androguard.core.dex import DEX
     path = Path(apk)
@@ -84,11 +108,17 @@ def signed_audit(apk):
     receiver_register = code.get_registers_size() - code.get_ins_size()
     require(receiver_register >= 0, "RECEIVER_REGISTER_INDEX")
     kind,provenance = capture_verdict(fields,pc182.get_output(),receiver_register)
+    field_owner,field_type,register_source = operand_shape(
+        pc182.get_output(),receiver_register)
     print("P238_SIGNED_V138_SHA_AND_START2_SIGNATURE=PASS")
     print("P238_PC176_182_194_202_214_PINNED=PASS")
     print("P238_ORIGINAL_COROUTINE_RECEIVER_P0=PASS")
     print("P238_DIRECT_ENGINE_CAPTURE_FIELD="+kind)
     print("P238_PC182_ENGINE_FROM_COROUTINE_P0="+provenance)
+    print("P239_PC182_FIELD_OWNER="+field_owner)
+    print("P239_PC182_FIELD_TYPE="+field_type)
+    print("P239_PC182_SOURCE_REGISTER="+register_source)
+    print("P239_ORIGINAL_RAW_PC182_OPERANDS_PRINTED=NO")
     print("P238_SAME_WIDTH_MARKER_REWRITE=NOT_ATTEMPTED")
     print("P238_BRANCH_OPCODE_WIDTH_TARGET_PARITY=REQUIRED_BEFORE_RUNTIME")
     print("P238_ENGINE_PROCESS_FIELD_RUNTIME_VALUE=NOT_ATTESTED")

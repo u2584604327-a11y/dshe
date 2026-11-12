@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """P238 receiver capture classifier: synthetic positive and strict negatives."""
 import unittest
-from p238_signed_coroutine_capture import capture_verdict, START, ENGINE
+from p238_signed_coroutine_capture import capture_verdict, operand_shape, START, ENGINE
 
 class CaptureTests(unittest.TestCase):
     def verdict(self, descriptors, pc182_output, receiver_register=8):
@@ -45,6 +45,26 @@ class CaptureTests(unittest.TestCase):
     def test_wrong_computed_receiver_register(self):
         self.assertEqual(self.verdict(self.one,self.output,7),
                          ("ONE","NOT_ATTESTED"))
+
+    def test_p239_direct_receiver_shape(self):
+        self.assertEqual(operand_shape(self.output,8),
+                         ("COROUTINE","ENGINE","RECEIVER_P0"))
+
+    def test_p239_wrong_source_classified(self):
+        self.assertEqual(operand_shape(self.output.replace("v8","v9"),8),
+                         ("COROUTINE","ENGINE","OTHER_VREG"))
+
+    def test_p239_wrong_field_owner_classified(self):
+        self.assertEqual(operand_shape(self.output.replace(START,"Lcom/other/Fake;"),8),
+                         ("OTHER","ENGINE","RECEIVER_P0"))
+
+    def test_p239_wrong_field_type_classified(self):
+        self.assertEqual(operand_shape(self.output.replace(ENGINE,"Ljava/lang/Object;"),8),
+                         ("COROUTINE","OTHER","RECEIVER_P0"))
+
+    def test_p239_unparseable_operands_classified(self):
+        self.assertEqual(operand_shape("unrecognized-token",8),
+                         ("UNKNOWN","UNKNOWN","UNPARSEABLE"))
 
     def test_empty_data_cannot_prove_capture(self):
         self.assertEqual(self.verdict([],""),("NONE","NOT_ATTESTED"))
