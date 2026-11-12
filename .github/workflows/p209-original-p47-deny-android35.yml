@@ -159,7 +159,7 @@ jobs:
           print("P220_TRACE_PARSER_PYTHON_SYNTAX=PASS")
           PY
           python3 -B host_candidate/p209_original_p47_deny/test_p220_trace_parser.py 2>&1 | tee "$RUNNER_TEMP/p220-trace-unit.log"
-          grep -Eq '^Ran 25 tests in' "$RUNNER_TEMP/p220-trace-unit.log"
+          grep -Eq '^Ran 37 tests in' "$RUNNER_TEMP/p220-trace-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p220-trace-unit.log"
           python3 - <<'PY'
           from pathlib import Path

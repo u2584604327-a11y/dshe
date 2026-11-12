@@ -28,6 +28,26 @@ def classify(cls,meth):
  if cls.startswith("L"):cls=cls[1:]
  if cls.endswith(";"):cls=cls[:-1]
  return WHITELIST.get((cls.replace("/","."),meth))
+def parse_method_id(token):
+ # Explicit subset of Android VmTraceParser's Long.decode key syntax.
+ # Reject unrecognized spellings rather than guessing method identity.
+ if re.fullmatch(r"0[xX][0-9a-fA-F]{1,16}",token):
+  mid=int(token[2:],16)
+ elif re.fullmatch(r"#[0-9a-fA-F]{1,16}",token):
+  mid=int(token[1:],16)
+ elif re.fullmatch(r"[0-9]{1,20}",token):
+  mid=int(token,10)
+ else:
+  if not token: kind="EMPTY"
+  elif len(token)>64:kind="OVERSIZED"
+  elif re.fullmatch(r"[0-9a-fA-F]{1,16}",token):kind="BARE_HEX"
+  elif token.startswith(("0x","0X","#")):kind="MALFORMED_PREFIXED_HEX"
+  elif token.startswith(("+","-")):kind="SIGNED_NUMBER"
+  else:kind="OTHER"
+  raise InvalidTrace("METHOD_KEY_FORMAT_"+kind)
+ need(mid<=0xffffffffffffffff,"METHOD_KEY_RANGE")
+ need(mid%4==0,"METHOD_KEY_ALIGN")
+ return mid
 def parse(data):
  need(type(data) is bytes and 32<=len(data)<=MAX_BYTES,"BOUNDED_FILE")
  # ART header uses *end as delimiter. Allow CRLF, but never dump raw bytes.
@@ -44,12 +64,12 @@ def parse(data):
    if reading:reading=False
    continue
   if not reading:continue
+  if not line.strip():continue
   rows+=1
   need(rows<=100000,"METHOD_ROW_BOUND")
   cols=line.split("\t")
-  need(3<=len(cols)<=12 and re.fullmatch(r"0x[0-9a-fA-F]{1,16}",cols[0]) is not None,"METHOD_KEY_FORMAT")
-  mid=int(cols[0],16)
-  need(mid%4==0,"METHOD_KEY_ALIGN")
+  need(3<=len(cols)<=12,"METHOD_COLUMNS_UNSUPPORTED")
+  mid=parse_method_id(cols[0])
   name=classify(cols[1],cols[2])
   if name is not None and mid<=0xffffffff:
    need(mid not in keys,"DUPLICATE_TARGET_METHOD_KEY");keys[mid]=name
@@ -84,13 +104,21 @@ def main():
   stage=error.args[0] if isinstance(error,InvalidTrace) and error.args else "UNEXPECTED"
   allow={"TRACE_LOCAL_FILE","TRACE_FILE_SIZE","BOUNDED_FILE","KEY_TERMINATOR",
          "KEY_SECTIONS","DUPLICATE_METHOD_SECTION","METHOD_ROW_BOUND",
-         "METHOD_KEY_FORMAT","METHOD_KEY_ALIGN","DUPLICATE_TARGET_METHOD_KEY",
+         "METHOD_KEY_ALIGN","METHOD_KEY_RANGE",
+         "METHOD_COLUMNS_UNSUPPORTED",
+         "METHOD_KEY_FORMAT_EMPTY","METHOD_KEY_FORMAT_OVERSIZED",
+         "METHOD_KEY_FORMAT_BARE_HEX","METHOD_KEY_FORMAT_MALFORMED_PREFIXED_HEX",
+         "METHOD_KEY_FORMAT_SIGNED_NUMBER","METHOD_KEY_FORMAT_OTHER",
+         "DUPLICATE_TARGET_METHOD_KEY",
          "METHOD_SECTION_EMPTY","BINARY_MAGIC_OR_EMPTY","BINARY_VERSION_OR_OFFSET",
          "BINARY_RECORD_SIZE","BINARY_RECORD_ALIGNMENT","UNEXPECTED"}
+  if stage in allow and stage.startswith("METHOD_KEY_FORMAT_"):
+   print("P225_INVALID_METHOD_ID_SHAPE="+stage[len("METHOD_KEY_FORMAT_"):])
   print("P220_TRACE_FAILURE_STAGE="+(stage if stage in allow else "UNEXPECTED"))
   print("P220_METHOD_TRACE=NOT_ATTESTED")
   print("P220_SAMPLING_ABSENCE_IS_NOT_NONEXECUTION=YES")
   return 2
+ print("P225_METHOD_KEY_DECIMAL_AND_HEX_SUPPORT=PASS")
  print("P220_METHOD_TRACE_BINARY_VALIDATION=PASS")
  print("P220_ART_TRACE_VERSION="+str(version))
  print("P220_RECORD_COUNT="+str(n))

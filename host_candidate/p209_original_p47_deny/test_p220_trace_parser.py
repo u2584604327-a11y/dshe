@@ -55,4 +55,43 @@ class Tests(unittest.TestCase):
  def test_size_band_over(self):self.assertEqual(trace_size_band(MAX_BYTES+1),"ABOVE_CAP")
  def test_dex_class_name(self):
   self.assertEqual(classify("Lcom/dsh/android/EngineManager$start$2;","invokeSuspend"),"START2")
+ def test_p225_decimal_key_256(self):
+  self.assertEqual(parse(sample().replace(b"0x100\t",b"256\t",1))[2]["START2"],1)
+ def test_p225_upper_hex_prefix(self):
+  self.assertEqual(parse(sample().replace(b"0x100\t",b"0X100\t",1))[2]["START2"],1)
+ def test_p225_hash_hex(self):
+  self.assertEqual(parse(sample().replace(b"0x100\t",b"#100\t",1))[2]["START2"],1)
+ def test_p225_blank_method_separator(self):
+  self.assertEqual(parse(sample().replace(b"*methods\n",b"*methods\n \n",1))[2]["START2"],1)
+ def test_p225_unprefixed_letter_hex_refused(self):
+  with self.assertRaises(InvalidTrace) as e:
+   parse(sample().replace(b"0x100\t",b"aa00\t",1))
+  self.assertEqual(str(e.exception),"METHOD_KEY_FORMAT_BARE_HEX")
+ def test_p225_decimal_u64_overflow_refused(self):
+  with self.assertRaises(InvalidTrace) as e:
+   parse(sample().replace(b"0x100\t",b"18446744073709551616\t",1))
+  self.assertEqual(str(e.exception),"METHOD_KEY_RANGE")
+ def test_p225_unaligned_decimal_refused(self):
+  with self.assertRaises(InvalidTrace) as e:
+   parse(sample().replace(b"0x100\t",b"257\t",1))
+  self.assertEqual(str(e.exception),"METHOD_KEY_ALIGN")
+ def test_p225_signed_decimal_refused(self):
+  with self.assertRaises(InvalidTrace) as e:
+   parse(sample().replace(b"0x100\t",b"-256\t",1))
+  self.assertEqual(str(e.exception),"METHOD_KEY_FORMAT_SIGNED_NUMBER")
+ def test_p225_space_delimited_refused(self):
+  with self.assertRaises(InvalidTrace) as e:
+   parse(sample().replace(b"0x100\t",b"0x100 com.dsh\t",1))
+  self.assertEqual(str(e.exception),"METHOD_KEY_FORMAT_OTHER")
+ def test_p225_decimal_alias_duplicate_refused(self):
+  raw=sample();i=raw.index(b"0x100\t");line=raw[i:raw.index(b"\n",i)+1]
+  with self.assertRaises(InvalidTrace) as e:
+   parse(raw.replace(line,line+line.replace(b"0x100\t",b"256\t"),1))
+  self.assertEqual(str(e.exception),"DUPLICATE_TARGET_METHOD_KEY")
+ def test_p225_bad_hash_refused(self):
+  with self.assertRaises(InvalidTrace) as e:
+   parse(sample().replace(b"0x100\t",b"#GG\t",1))
+  self.assertEqual(str(e.exception),"METHOD_KEY_FORMAT_MALFORMED_PREFIXED_HEX")
+ def test_p225_64bit_method_no_id_alias(self):
+  self.assertEqual(parse(sample().replace(b"0x100\t",b"4294967552\t",1))[2]["START2"],0)
 if __name__=="__main__":unittest.main(verbosity=2)
