@@ -74,6 +74,12 @@ uid="$(adb -s "$serial" shell pm list packages -U com.dsh.android | tr -d '\r' |
 adb -s "$serial" shell iptables -w -I OUTPUT 1 -m owner --uid-owner "$uid" -j REJECT
 adb -s "$serial" shell ip6tables -w -I OUTPUT 1 -m owner --uid-owner "$uid" -j REJECT
 echo P220_OFFLINE_IPV4_IPV6_OWNER_REJECT=PASS
+# Only on disposable root QEMU: isolate event-buffer hints from the earlier
+# fully completed P209 baseline (already copied to its own final raw log).
+adb -s "$serial" logcat -b events -c >/dev/null 2>&1 || {
+ echo P224_DISPOSABLE_EVENT_BUFFER_BOUNDARY=NOT_ATTESTED
+}
+echo P224_NO_USER_DEVICE_OR_ACCOUNT_EVENT_COLLECTION=YES
 # AOSP am startup profiler uses method trace; no signed DEX instructions changed.
 if ! status="$(adb -s "$serial" shell am start -W --start-profiler "$remote" --sampling 1000 -n "com.dsh.android/$launch" 2>/dev/null)";then
  echo P220_STARTUP_PROFILER=NOT_ATTESTED;exit 0
@@ -89,6 +95,19 @@ else
  echo P223_INITIAL_CLONE_HOST_PROCESS=NOT_ATTESTED
 fi
 sleep 12
+# Capture immutable observation BEFORE the profiler stop; this distinguishes
+# an in-session exit from a later stop-triggered PID change.
+before_stop_pid="$(adb -s "$serial" shell pidof com.dsh.android | tr -d '\r\n' || true)"
+if [[ "$startpid" =~ ^[1-9][0-9]{1,7}$ &&
+      "$before_stop_pid" =~ ^[1-9][0-9]{1,7}$ ]];then
+ if [[ "$startpid" == "$before_stop_pid" ]];then
+  echo P224_PROCESS_PRE_STOP=STABLE
+ else
+  echo P224_PROCESS_PRE_STOP=CHANGED
+ fi
+else
+ echo P224_PROCESS_PRE_STOP=NOT_ATTESTED
+fi
 if ! adb -s "$serial" shell am profile stop com.dsh.android >/dev/null 2>&1;then
  echo P220_PROFILE_STOP=NOT_ATTESTED;exit 0
 fi
@@ -100,11 +119,33 @@ if python3 -B host_candidate/p209_original_p47_deny/p220_trace_parser.py "$tmp/t
 else
  echo P220_OFFLINE_ALLOWLIST_TRACE=NOT_ATTESTED
 fi
+# Reuse the post-stop PID snapshot below for P224. No names or PIDs printed.
 # P223: strictly supplemental method-profiling diagnostic. Never launch
 # another Activity, invoke the Node engine or change original DEX/permissions.
 # Check that a single host process survives; a changed PID cannot be treated
 # as one continuous profiler session.
 latepid="$(adb -s "$serial" shell pidof com.dsh.android | tr -d '\r\n' || true)"
+if [[ "$before_stop_pid" =~ ^[1-9][0-9]{1,7}$ &&
+      "$latepid" =~ ^[1-9][0-9]{1,7}$ ]];then
+ if [[ "$before_stop_pid" == "$latepid" ]];then
+  echo P224_PROCESS_AFTER_STOP=STABLE
+ else
+  echo P224_PROCESS_AFTER_STOP=CHANGED
+ fi
+else
+ echo P224_PROCESS_AFTER_STOP=NOT_ATTESTED
+fi
+if [[ "$startpid" =~ ^[1-9][0-9]{1,7}$ &&
+      "$latepid" =~ ^[1-9][0-9]{1,7}$ &&
+      "$startpid" != "$latepid" ]];then
+ if adb -s "$serial" logcat -b events -d -t 500 -v threadtime \
+        -s am_proc_start:I am_proc_died:I am_crash:I am_anr:I am_kill:I '*:S' 2>/dev/null \
+        | python3 -B host_candidate/p209_original_p47_deny/p224_event_hint_sanitize.py "$startpid" "$latepid";then
+  echo P224_EVENT_HINT_COLLECTION=PASS
+ else
+  echo P224_EVENT_HINT_COLLECTION=NOT_ATTESTED
+ fi
+fi
 if [[ ! "$startpid" =~ ^[1-9][0-9]{1,7}$ ||
       ! "$latepid" =~ ^[1-9][0-9]{1,7}$ ]];then
  echo P223_CLONE_PROCESS_CONTINUITY=NOT_ATTESTED

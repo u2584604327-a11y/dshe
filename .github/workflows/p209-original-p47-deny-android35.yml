@@ -173,6 +173,16 @@ jobs:
           grep -Eq '^Ran 15 tests in' "$RUNNER_TEMP/p221-profile-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p221-profile-unit.log"
           bash -n host_candidate/p209_original_p47_deny/p222_build_profileable_clone.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ("p224_event_hint_sanitize.py","test_p224_event_hint_sanitize.py"):
+              f=Path("host_candidate/p209_original_p47_deny")/name
+              compile(f.read_text(encoding="utf-8"),str(f),"exec")
+          print("P224_PROCESS_EVENT_SANITIZER_SYNTAX=PASS")
+          PY
+          python3 -B host_candidate/p209_original_p47_deny/test_p224_event_hint_sanitize.py 2>&1 | tee "$RUNNER_TEMP/p224-event-unit.log"
+          grep -Eq '^Ran 11 tests in' "$RUNNER_TEMP/p224-event-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p224-event-unit.log"
           bash -n host_candidate/p209_original_p47_deny/p220_profile_disposable.sh
           bash -n host_candidate/p209_original_p47_deny/p220_baseline_then_profile.sh
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
