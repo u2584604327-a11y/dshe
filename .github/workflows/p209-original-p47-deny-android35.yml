@@ -108,6 +108,17 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_p243_signed_exception_handler_cfg.py 2>&1 | tee "$RUNNER_TEMP/p243-unit.log"
           grep -Eq '^Ran 12 tests in' "$RUNNER_TEMP/p243-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p243-unit.log"
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ("p244_signed_postreturn_slot_feasibility.py",
+                       "test_p244_signed_postreturn_slot_feasibility.py"):
+              p=Path("host_candidate/p209_original_p47_deny")/name
+              compile(p.read_text(encoding="utf-8"),str(p),"exec")
+          print("P244_READONLY_FEASIBILITY_SOURCE_SYNTAX=PASS")
+          PY
+          python3 -B host_candidate/p209_original_p47_deny/test_p244_signed_postreturn_slot_feasibility.py 2>&1 | tee "$RUNNER_TEMP/p244-unit.log"
+          grep -Eq '^Ran 15 tests in' "$RUNNER_TEMP/p244-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p244-unit.log"
           python3 -B host_candidate/p209_original_p47_deny/test_p241_signed_pc190_receiver_alias.py 2>&1 | tee "$RUNNER_TEMP/p241-unit.log"
           grep -Eq '^Ran 21 tests in' "$RUNNER_TEMP/p241-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p241-unit.log"
@@ -359,6 +370,183 @@ jobs:
           grep -Fxq 'P243_SIGNED_EXCEPTION_ENTRY_CFG_AUDIT=PASS' "$RUNNER_TEMP/p243-signed-handlers.log"
           grep -Fxq 'P243_PC202_PC214_DYNAMIC_BRANCH=NOT_ATTESTED' "$RUNNER_TEMP/p243-signed-handlers.log"
           grep -Fxq 'P243_FORMAL_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p243-signed-handlers.log"
+          python3 -B host_candidate/p209_original_p47_deny/p244_signed_postreturn_slot_feasibility.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            | tee "$RUNNER_TEMP/p244-feasibility.log"
+          grep -Fxq 'P244_READONLY_SLOT_FEASIBILITY_AUDIT=PASS' "$RUNNER_TEMP/p244-feasibility.log"
+          grep -Fxq 'P244_ORIGINAL_SHA_AND_EXISTING_DERIVED_SLOT=PASS' "$RUNNER_TEMP/p244-feasibility.log"
+          grep -Fxq 'P244_P209_ORIGINAL_BRANCH_TARGET_PARITY=PASS' "$RUNNER_TEMP/p244-feasibility.log"
+          grep -Eq '^P244_35C_TO_3RC_SAME_WIDTH_ENCODING_CANDIDATE=(YES|NO)          grep -Fxq 'P241_ORIGINAL_PC202_PC214_DYNAMIC_BRANCH=NOT_ATTESTED' "$RUNNER_TEMP/p241-signed-pc190.log"
+          grep -Fxq 'P241_REG_ALIAS_EXCEPTION_SUSPENSION_AND_RUNTIME=NOT_ATTESTED' "$RUNNER_TEMP/p241-signed-pc190.log"
+          python3 -B host_candidate/p209_original_p47_deny/audit_signed_process_prelaunch.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p209-process-prelaunch.log"
+          grep -Fxq 'P209_SIGNED_PROCESS_PRELAUNCH_READONLY_AUDIT=PASS' "$RUNNER_TEMP/p209-process-prelaunch.log"
+          grep -Fxq 'P209_SIGNED_START2_PROCESS_SETTER_CALLSITE=PC3924_AFTER_PC3912' "$RUNNER_TEMP/p209-process-prelaunch.log"
+          grep -Fxq 'P209_SIGNED_PROCESS_ANDROID_RUNTIME_NULLNESS=NOT_ATTESTED' "$RUNNER_TEMP/p209-process-prelaunch.log"
+          python3 -B host_candidate/p209_original_p47_deny/audit_signed_pc414.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p209-pc414-static.log"
+          grep -Fxq 'P209_SIGNED_PC414_STATIC_BRANCH_AUDIT=PASS' "$RUNNER_TEMP/p209-pc414-static.log"
+          grep -Fxq 'P209_PC414_EXCEPTION_AND_RUNTIME_BRANCH=NOT_ATTESTED' "$RUNNER_TEMP/p209-pc414-static.log"
+          grep -Fxq 'P209_PC414_NO_PRODUCTION_OR_ORIGINAL_DEX_MODIFICATION=YES' "$RUNNER_TEMP/p209-pc414-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/audit_signed_node_bootstrap.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p209-node-bootstrap.log"
+          grep -Fxq 'P209_NODE_BOOTSTRAP_ORIGINAL_DEX_READONLY_AUDIT=PASS' "$RUNNER_TEMP/p209-node-bootstrap.log"
+          grep -Fxq 'P209_NODE_BOOTSTRAP_PC406_CALL_DESCRIPTOR_MATCH=PASS' "$RUNNER_TEMP/p209-node-bootstrap.log"
+          grep -Fxq 'P209_NODE_BOOTSTRAP_PC412_RESULT_PC414_GUARD_PC418_RETURN=PASS' "$RUNNER_TEMP/p209-node-bootstrap.log"
+          grep -Fxq 'P209_NODE_BOOTSTRAP_RUNTIME_SUSPENSION_OR_EXCEPTION=NOT_ATTESTED' "$RUNNER_TEMP/p209-node-bootstrap.log"
+          grep -Fxq 'P209_NODE_BOOTSTRAP_V139_RELEASE=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p209-node-bootstrap.log"
+          grep -Fxq 'P209_NODE_LINKED_LAMBDA_TRANSITIVE_CALLEES=NOT_AUDITED' "$RUNNER_TEMP/p209-node-bootstrap.log"
+          python3 -B host_candidate/p209_original_p47_deny/audit_signed_node_delegate.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p209-delegate-static.log"
+          grep -Fxq 'P209_NODE_DELEGATE_SIGNED_STATIC_AUDIT=PASS' "$RUNNER_TEMP/p209-delegate-static.log"
+          grep -Fxq 'P209_NODE_DELEGATE_BROAD_IO_SIGNATURE_MENTION_COUNT=8' "$RUNNER_TEMP/p209-delegate-static.log"
+          grep -Fxq 'P209_NODE_DELEGATE_ORIGINAL_WRAPPER_INVOKE_LINK=PASS' "$RUNNER_TEMP/p209-delegate-static.log"
+          grep -Fxq 'P209_NODE_DELEGATE_ORIGINAL_ANDROID_ENTRY=NOT_ATTESTED' "$RUNNER_TEMP/p209-delegate-static.log"
+          grep -Fxq 'P209_NODE_DELEGATE_ORIGINAL_DEX_MUTATED=NO' "$RUNNER_TEMP/p209-delegate-static.log"
+          grep -Fxq 'P209_NODE_DELEGATE_RELEASE=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p209-delegate-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/audit_signed_node_locked.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p209-node-locked-static.log"
+          grep -Fxq 'P209_NODE_LOCKED_SIGNED_ORIGINAL_CALL_TRACE=PASS' "$RUNNER_TEMP/p209-node-locked-static.log"
+          grep -Fxq 'P209_NODE_LOCKED_WRAPPER_TO_DELEGATE_EXACT_LINK=PASS' "$RUNNER_TEMP/p209-node-locked-static.log"
+          grep -Fxq 'P209_NODE_LOCKED_DELEGATE_ACCESSOR_PC=130' "$RUNNER_TEMP/p209-node-locked-static.log"
+          grep -Fxq 'P209_NODE_LOCKED_REAL_ANDROID_EXECUTION=NOT_ATTESTED' "$RUNNER_TEMP/p209-node-locked-static.log"
+          grep -Fxq 'P209_NODE_LOCKED_ORIGINAL_DEX_MODIFIED=NO' "$RUNNER_TEMP/p209-node-locked-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/audit_signed_node_resource_abi.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p209-node-resource-static.log"
+          grep -Fxq 'P209_NODE_RESOURCE_ORIGINAL_V138_STATIC_AUDIT=PASS' "$RUNNER_TEMP/p209-node-resource-static.log"
+          grep -Fxq 'P209_NODE_RESOURCE_APK_SHA256_PIN=PASS' "$RUNNER_TEMP/p209-node-resource-static.log"
+          grep -Fxq 'P209_NODE_RESOURCE_FILENAME_HINTS_DO_NOT_PROVE_NODE_ARCH=YES' "$RUNNER_TEMP/p209-node-resource-static.log"
+          grep -Fxq 'P209_NODE_RESOURCE_ACTUAL_INSTALL_OR_RUN=NOT_ATTESTED' "$RUNNER_TEMP/p209-node-resource-static.log"
+          grep -Fxq 'P209_NODE_RESOURCE_FORMAL_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p209-node-resource-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/audit_signed_node_usability_start.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            | tee "$RUNNER_TEMP/p209-node-usability-static.log"
+          grep -Fxq 'P209_NODE_USABILITY_SIGNED_ORIGINAL_READONLY_AUDIT=PASS' "$RUNNER_TEMP/p209-node-usability-static.log"
+          grep -Fxq 'P209_NODE_USABILITY_DIRECT_START_NOT_REWRITTEN_BY_P181=YES' "$RUNNER_TEMP/p209-node-usability-static.log"
+          grep -Fxq 'P209_NODE_USABILITY_NO_GLOBAL_SPAWN_MEDIATION=BLOCKED' "$RUNNER_TEMP/p209-node-usability-static.log"
+          grep -Fxq 'P209_NODE_USABILITY_DIRECT_SPAWN_RUNTIME_EXECUTED=NOT_ATTESTED' "$RUNNER_TEMP/p209-node-usability-static.log"
+          grep -Fxq 'P209_NODE_USABILITY_FORMAL_V139_RELEASE=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p209-node-usability-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/p215_signed_runtime_permissions.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p215-permissions-static.log"
+          grep -Fxq 'P215_SIGNED_ORIGINAL_PERMISSION_STATIC_AUDIT=PASS' "$RUNNER_TEMP/p215-permissions-static.log"
+          grep -Fxq 'P215_MANIFEST_DECLARATION_IS_NOT_RUNTIME_REQUEST=YES' "$RUNNER_TEMP/p215-permissions-static.log"
+          grep -Fxq 'P215_GENERIC_ACTIVITY_RESULT_LAUNCH_IS_NOT_PERMISSION_REQUEST=YES' "$RUNNER_TEMP/p215-permissions-static.log"
+          grep -Fxq 'P215_ORIGINAL_PERMISSION_REQUEST_RUNTIME_EXECUTED=NOT_ATTESTED' "$RUNNER_TEMP/p215-permissions-static.log"
+          grep -Fxq 'P215_PERMISSION_CONTROLLER_CAUSE_OF_PC3912=NOT_ATTESTED' "$RUNNER_TEMP/p215-permissions-static.log"
+          grep -Fxq 'P215_V139_RELEASE=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p215-permissions-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/p216_activity_result_contracts.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p216-contract-static.log"
+          grep -Fxq 'P216_SIGNED_ACTIVITY_RESULT_STATIC_AUDIT=PASS' "$RUNNER_TEMP/p216-contract-static.log"
+          grep -Fxq 'P216_SIGNED_V138_ORIGINAL_SHA_PINNED=PASS' "$RUNNER_TEMP/p216-contract-static.log"
+          grep -Fxq 'P216_ACTIVITY_RESULT_LAUNCH_IS_NOT_AUTOMATIC_PERMISSION_PROOF=YES' "$RUNNER_TEMP/p216-contract-static.log"
+          grep -Fxq 'P216_PERMISSION_CONTROLLER_REQUEST_ORIGIN=NOT_ATTESTED' "$RUNNER_TEMP/p216-contract-static.log"
+          grep -Fxq 'P216_FORMAL_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p216-contract-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/p217_main_launcher_lineage.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p217-lineage-static.log"
+          grep -Fxq 'P217_SIGNED_ORIGINAL_LOCAL_LINEAGE_AUDIT=PASS' "$RUNNER_TEMP/p217-lineage-static.log"
+          grep -Fxq 'P217_SIGNED_ORIGINAL_SHA_AND_ZIP=PASS' "$RUNNER_TEMP/p217-lineage-static.log"
+          grep -Fxq 'P217_LOCAL_LINEAR_REGISTER_LINEAGE_ONLY=YES' "$RUNNER_TEMP/p217-lineage-static.log"
+          grep -Fxq 'P217_NO_CFG_OR_INTERPROCEDURAL_PROOF=YES' "$RUNNER_TEMP/p217-lineage-static.log"
+          grep -Fxq 'P217_PERMISSION_CONTROLLER_CAUSALITY=NOT_ATTESTED' "$RUNNER_TEMP/p217-lineage-static.log"
+          grep -Fxq 'P217_FORMAL_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p217-lineage-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/p219_signed_original_start_cfg.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p219-cfg-static.log"
+          grep -Fxq 'P219_ORIGINAL_SIGNED_V138_SHA_AND_DEX=PASS' "$RUNNER_TEMP/p219-cfg-static.log"
+          grep -Fxq 'P219_SIGNED_ORIGINAL_START_CFG_AUDIT=PASS' "$RUNNER_TEMP/p219-cfg-static.log"
+          grep -Fxq 'P219_PC406_PC414_REAL_ANDROID_EXECUTION=NOT_ATTESTED' "$RUNNER_TEMP/p219-cfg-static.log"
+          grep -Fxq 'P219_V139_RELEASE=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p219-cfg-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/p221_profile_manifest_policy.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            | tee "$RUNNER_TEMP/p221-profile-manifest.log"
+          grep -Fxq 'P221_SIGNED_AND_DISPOSABLE_MANIFEST_POLICY_AUDIT=PASS' "$RUNNER_TEMP/p221-profile-manifest.log"
+          grep -Fxq 'P221_METHOD_TRACE_EMPTY_FILE_CAUSE=NOT_PROVEN' "$RUNNER_TEMP/p221-profile-manifest.log"
+          grep -Fxq 'P221_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p221-profile-manifest.log"
+          echo P209_ORIGINAL_P47_GATE_BINARY_AND_SOURCE_PARITY=PASS
+          echo P208_EXACT_ORIGINAL_METHOD_WITNESS_SOURCE_PROVENANCE=PASS
+      - name: P210 STATIC-ONLY equal-width Node usability deny candidate, NEVER install
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P181_THREE_ORIGINAL_START_DENY" = 1
+          test "$P49_NODE_STAGE" = 0
+          test "$P51_SIDE_BY_SIDE" = 0
+          test "$P208_CI_METHOD_ENTRY_ONLY" = 1
+          test "$P209_FINAL_DENY_ONLY" = 1
+          mkdir -p .p210tmp
+          patched=0
+          p210_cleanup() {
+            if test "$patched" = 1; then
+              python3 -B host_candidate/p209_original_p47_deny/p210_optional_node_usability.py --restore || true
+            fi
+            rm -rf .p210tmp
+          }
+          trap p210_cleanup EXIT
+          python3 -B host_candidate/p209_original_p47_deny/p210_optional_node_usability.py --patch
+          patched=1
+          apktool b .p43tmp/decoded -o .p210tmp/P210-STATIC-ONLY-UNSIGNED-DO-NOT-INSTALL.apk
+          python3 -B host_candidate/p209_original_p47_deny/p210_optional_node_usability.py --restore
+          patched=0
+          python3 -B host_candidate/p209_original_p47_deny/p210_optional_node_usability.py \
+            --verify .p210tmp/P210-STATIC-ONLY-UNSIGNED-DO-NOT-INSTALL.apk \
+            | tee "$RUNNER_TEMP/p210-node-static.log"
+          grep -Fxq 'P210_CANDIDATE_STATIC_PARITY_AUDIT=PASS' "$RUNNER_TEMP/p210-node-static.log"
+          grep -Fxq 'P210_CANDIDATE_ALL_OTHER_METHOD_INSTRUCTIONS_UNCHANGED=PASS' "$RUNNER_TEMP/p210-node-static.log"
+          grep -Fxq 'P210_CANDIDATE_TRY_HANDLERS_ALL_PRIMARY_METHODS_EXACT=PASS' "$RUNNER_TEMP/p210-node-static.log"
+          grep -Fxq 'P210_CANDIDATE_ANDROID_EMULATOR_EXECUTED=NO' "$RUNNER_TEMP/p210-node-static.log"
+          grep -Fxq 'P210_CANDIDATE_PRODUCTION_RELEASE=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p210-node-static.log"
+          rm -rf .p210tmp
+          trap - EXIT
+      - name: Disposable emulator KVM
+        shell: bash
+        run: if test -c /dev/kvm;then sudo chmod 666 /dev/kvm;fi
+      - name: Android35 cold launch of original MainActivity with true original invokeSuspend entry
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p209_original_p47_deny/p220_baseline_then_profile.sh
+      - name: Wipe original APK and test-signature APK; keep runtime and release gates BLOCKED
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp .p208tmp .p209tmp
+          echo P208_ORIGINAL_START2_ENTRY=SEE_ACTUAL_ANDROID35_LOGS >> "$GITHUB_STEP_SUMMARY"
+          echo P208_ORIGINAL_CHILD_PROCESS_OWNER=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P208_P47_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P208_ORIGINAL_P184_RECEIPT_TO_REAL_COROUTINE=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P208_ORIGINAL_NODE_FD_JS_NATIVE_HTTP_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P208_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P208_GS_CAPTURE=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P208_EXTERNAL_FINGERPRINT_SITE_REQUEST=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P208_REAL_PHONE_INSTALL=NOT_PERFORMED >> "$GITHUB_STEP_SUMMARY"
+          echo P208_DIFFERENT_SIGNER_ORIGINAL_DATA_OVERWRITE=FORBIDDEN >> "$GITHUB_STEP_SUMMARY"
+          echo P209_REAL_P47_DENIED_LAUNCH=SEE_ACTUAL_ANDROID35_LOGS >> "$GITHUB_STEP_SUMMARY"
+          echo P209_ORIGINAL_PC3912_PRECALL=SEE_ACTUAL_ANDROID35_LOGS >> "$GITHUB_STEP_SUMMARY"
+          echo P209_CHILD_OS_OWNER=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P209_P184_RECEIPT=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P209_FORMAL_V139=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"
+ "$RUNNER_TEMP/p244-feasibility.log"
+          grep -Fxq 'P244_ASSEMBLED_PROBE_PARITY=NOT_ATTESTED' "$RUNNER_TEMP/p244-feasibility.log"
+          grep -Fxq 'P244_RUNTIME_PROCESS_STATE=NOT_ATTESTED' "$RUNNER_TEMP/p244-feasibility.log"
+          grep -Fxq 'P244_FORMAL_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p244-feasibility.log"
           grep -Fxq 'P241_ORIGINAL_PC202_PC214_DYNAMIC_BRANCH=NOT_ATTESTED' "$RUNNER_TEMP/p241-signed-pc190.log"
           grep -Fxq 'P241_REG_ALIAS_EXCEPTION_SUSPENSION_AND_RUNTIME=NOT_ATTESTED' "$RUNNER_TEMP/p241-signed-pc190.log"
           python3 -B host_candidate/p209_original_p47_deny/audit_signed_process_prelaunch.py \
