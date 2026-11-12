@@ -82,7 +82,7 @@ class Tests(unittest.TestCase):
  def test_p225_space_delimited_refused(self):
   with self.assertRaises(InvalidTrace) as e:
    parse(sample().replace(b"0x100\t",b"0x100 com.dsh\t",1))
-  self.assertEqual(str(e.exception),"METHOD_KEY_FORMAT_OTHER")
+  self.assertEqual(str(e.exception),"METHOD_KEY_FORMAT_MALFORMED_PREFIXED_HEX")
  def test_p225_decimal_alias_duplicate_refused(self):
   raw=sample();i=raw.index(b"0x100\t");line=raw[i:raw.index(b"\n",i)+1]
   with self.assertRaises(InvalidTrace) as e:
