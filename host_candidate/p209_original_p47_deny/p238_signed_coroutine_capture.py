@@ -25,15 +25,18 @@ def require(ok, code):
     if not ok:
         raise Denied("P238_SIGNED_CAPTURE_DENY_"+code)
 
-def capture_verdict(descriptors, pc182_output):
+def capture_verdict(descriptors, pc182_output, receiver_register):
     """Pure conservative classifier. No inference from class name alone."""
     nums = sum(d == ENGINE for d in descriptors)
     count_band = "NONE" if nums == 0 else "ONE" if nums == 1 else "MULTIPLE"
     output = "".join(pc182_output.split())
     # PC182 must load EngineManager from the live coroutine receiver p0.
+    # Androguard emits DEX vN indexes, not smali's p0 alias.
+    # Only the exact code-item receiver register is allowed, no guessed alias.
     observed = (nums == 1 and
-                re.search(r"^v[0-9]+,p0,"+re.escape(START)+
-                          r"->[^,]+", output) is not None and
+                type(receiver_register) is int and receiver_register >= 0 and
+                re.search(r"^v[0-9]+,v"+str(receiver_register)+","+
+                          re.escape(START)+r"->[^,]+", output) is not None and
                 ENGINE in output)
     return count_band, "CANDIDATE" if observed else "NOT_ATTESTED"
 
@@ -78,7 +81,9 @@ def signed_audit(apk):
         ins=instructions[pc]
         require(ins.get_name() == op and pc+2*ins.get_ref_off() == 250,
                 "ORIGINAL_PC202_214_TARGETS")
-    kind,provenance = capture_verdict(fields,pc182.get_output())
+    receiver_register = code.get_registers_size() - code.get_ins_size()
+    require(receiver_register >= 0, "RECEIVER_REGISTER_INDEX")
+    kind,provenance = capture_verdict(fields,pc182.get_output(),receiver_register)
     print("P238_SIGNED_V138_SHA_AND_START2_SIGNATURE=PASS")
     print("P238_PC176_182_194_202_214_PINNED=PASS")
     print("P238_ORIGINAL_COROUTINE_RECEIVER_P0=PASS")
