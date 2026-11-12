@@ -22,11 +22,16 @@ adb -s "$s" shell iptables -w -C OUTPUT -m owner --uid-owner "$uid" -j REJECT
 adb -s "$s" shell ip6tables -w -C OUTPUT -m owner --uid-owner "$uid" -j REJECT
 echo P226_TEMP_UID_IPV4_IPV6_REJECT=PASS
 trace=/data/local/tmp/p226-temp-full-trace.trace
+bounded=/data/local/tmp/p235-disposable-bounded-prefix.trace
+bounded_created=0
 adb -s "$s" shell test ! -e "$trace" || { echo P226_TRACE_PREEXISTS=DENY;exit 2; }
 umask 077
 localdir="$(mktemp -d .p226-full.XXXXXXXX)"
 cleanup(){
  adb -s "$s" shell am profile stop com.dsh.android >/dev/null 2>&1 || true
+ if [[ "$bounded_created" == 1 ]];then
+  adb -s "$s" shell rm -f "$bounded" >/dev/null 2>&1 || true
+ fi
  adb -s "$s" shell rm -f "$trace" /data/local/tmp/p227-disposable-streaming-full.trace >/dev/null 2>&1 || true
  rm -rf -- "$localdir"
 }
@@ -105,45 +110,42 @@ if [[ ! -s "$localdir/data.trace" ]];then
     echo P228_REMOTE_TRACE_UNBOUNDED=DENY
    elif (( remote_bytes > 16777216 ));then
     echo P228_REMOTE_TRACE_BAND=ABOVE_16M_CAP
-    # P230: leave a full MiB headroom below the strict 8MiB prefix cap.
-    # Some ADB transports merge a bounded amount of remote dd diagnostics
-    # into stdout. Never accept corrupted prefix data as ART events.
-    # Report only a local-size band, NEVER raw bytes or remote trace paths.
-    if adb -s "$s" exec-out dd if="$stream" bs=65536 count=112 2>/dev/null > "$localdir/bounded-prefix.trace";then
-     local_size="$(stat -c '%s' "$localdir/bounded-prefix.trace" 2>/dev/null || true)"
-     if [[ ! "$local_size" =~ ^[0-9]+$ ]];then
-      echo P230_PREFIX_TRANSFER_BAND=UNKNOWN
-     elif (( local_size == 0 ));then
-      echo P230_PREFIX_TRANSFER_BAND=EMPTY
-     elif (( local_size < 32 ));then
-      echo P230_PREFIX_TRANSFER_BAND=TINY
-     elif (( local_size > 8388608 ));then
-      echo P230_PREFIX_TRANSFER_BAND=ABOVE_CAP
+    # P235: do not stream binary prefix through adb exec-out.
+    # Create a private EXACT 7MiB bounded remote snapshot of the already
+    # stopped immutable trace, then use ADB's file-transfer protocol twice.
+    # Never pull the >16MiB full stream, accept bytes beyond 7MiB, or log
+    # raw data, hashes, paths, method IDs or user content.
+    if ! adb -s "$s" shell "test ! -e '$bounded' && test ! -L '$bounded'" >/dev/null 2>&1;then
+     echo P235_REMOTE_PREFIX_PREEXISTS=DENY
+    else
+     # Mark ownership before dd so any partially created file is cleaned.
+     bounded_created=1
+     if ! adb -s "$s" shell "umask 077; dd if='$stream' of='$bounded' bs=65536 count=112 status=none" >/dev/null 2>&1;then
+      echo P235_REMOTE_PREFIX_CREATE=NOT_ATTESTED
      else
-      echo P230_PREFIX_TRANSFER_BAND=WITHIN_CAP
-      # P233: a stopped immutable trace must produce two byte-identical
-      # 7MiB bounded prefixes. Do NOT parse until exact-size replay succeeds.
-      # The second trace copy is local to this disposable emulator job and
-      # deleted with $localdir; neither copy is printed or uploaded.
-      if adb -s "$s" exec-out dd if="$stream" bs=65536 count=112 2>/dev/null > "$localdir/bounded-prefix-replay.trace";then
-       if python3 -B host_candidate/p209_original_p47_deny/p233_prefix_replay.py \
+      bsz="$(adb -s "$s" shell stat -c '%s' "$bounded" 2>/dev/null | tr -d '\r\n' || true)"
+      if [[ "$bsz" != 7340032 ]];then
+       echo P235_REMOTE_PREFIX_EXACT_SIZE=DENY
+      else
+       echo P235_REMOTE_PREFIX_EXACT_SIZE=PASS
+       if ! adb -s "$s" pull "$bounded" "$localdir/bounded-prefix.trace" >/dev/null 2>&1;then
+        echo P235_FIRST_PULL=NOT_ATTESTED
+       elif ! adb -s "$s" pull "$bounded" "$localdir/bounded-prefix-replay.trace" >/dev/null 2>&1;then
+        echo P235_SECOND_PULL=NOT_ATTESTED
+       elif python3 -B host_candidate/p209_original_p47_deny/p233_prefix_replay.py \
         "$localdir/bounded-prefix.trace" "$localdir/bounded-prefix-replay.trace";then
-        # P229 still validates SLOW/version/metadata/action and rejects flaws.
+        echo P235_BOUNDED_TRANSFER=PASS
         if python3 -B host_candidate/p209_original_p47_deny/p229_stream_v1_prefix.py "$localdir/bounded-prefix.trace";then
          echo P230_STREAMING_PREFIX_AUDIT=PASS
         else
          echo P230_STREAMING_PREFIX_AUDIT=NOT_ATTESTED
         fi
        else
+        echo P235_BOUNDED_TRANSFER=NOT_ATTESTED
         echo P230_STREAMING_PREFIX_AUDIT=NOT_ATTESTED
        fi
-      else
-       echo P233_PREFIX_SECOND_TRANSFER=NOT_ATTESTED
-       echo P230_STREAMING_PREFIX_AUDIT=NOT_ATTESTED
       fi
      fi
-    else
-     echo P230_BOUND_PREFIX_TRANSFER=NOT_ATTESTED
     fi
    elif (( remote_bytes <= 16777216 ));then
     echo P228_REMOTE_TRACE_BAND=WITHIN_16M_CAP
