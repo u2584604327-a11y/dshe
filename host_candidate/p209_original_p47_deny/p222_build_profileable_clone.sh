@@ -21,7 +21,7 @@ mkdir -m 700 -p "$d/binary"
 sdk="$ANDROID_HOME"
 bt="$sdk/build-tools/35.0.0"
 [[ -x "$bt/aapt" && -x "$bt/apksigner" && -x "$bt/zipalign" ]]
-python3 - "$source_xml" "$d/manifest.xml" <<'PY'
+python3 - "$source_xml" "$d/AndroidManifest.xml" <<'PY'
 from pathlib import Path
 from xml.etree import ElementTree as ET
 import sys
@@ -41,7 +41,7 @@ ET.ElementTree(root).write(dst,encoding="utf-8",xml_declaration=True)
 assert dst.stat().st_size<512*1024
 print("P222_MANIFEST_ONLY_PROFILEABLE_SHELL_PATCH=PASS")
 PY
-"$bt/aapt" package -f -M "$d/manifest.xml" \
+"$bt/aapt" package -f -M "$d/AndroidManifest.xml" \
  -I "$sdk/platforms/android-35/android.jar" -I "$signed" \
  --min-sdk-version 26 --target-sdk-version 28 \
  --version-code 138 --version-name 0.4.1 -F "$d/manifest-only.apk" >/dev/null
