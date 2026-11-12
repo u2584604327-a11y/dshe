@@ -51,6 +51,8 @@ already="$(adb -s "$serial" shell pm list packages -U com.dsh.android | tr -d '\
 umask 077
 tmp="$(mktemp -d .p220-trace.XXXXXXXX)"
 remote=/data/local/tmp/p220-dsh-test-only.trace
+remote2=/data/local/tmp/p223-disposable-explicit-profile.trace
+startpid=
 uid=
 cleanup(){
  adb -s "$serial" shell am profile stop com.dsh.android >/dev/null 2>&1 || true
@@ -60,11 +62,12 @@ cleanup(){
   adb -s "$serial" shell ip6tables -w -D OUTPUT -m owner --uid-owner "$uid" -j REJECT >/dev/null 2>&1 || true
  fi
  adb -s "$serial" shell pm uninstall com.dsh.android >/dev/null 2>&1 || true
- adb -s "$serial" shell rm -f "$remote" >/dev/null 2>&1 || true
+ adb -s "$serial" shell rm -f "$remote" "$remote2" >/dev/null 2>&1 || true
  rm -rf -- "$tmp" .p222tmp
 }
 trap cleanup EXIT
 adb -s "$serial" shell test ! -e "$remote" || { echo P220_TRACE_ALREADY_EXISTS=DENY;exit 2; }
+adb -s "$serial" shell test ! -e "$remote2" || { echo P223_PREEXISTING_SECOND_TRACE=DENY;exit 2; }
 adb -s "$serial" install "$apk" >/dev/null
 uid="$(adb -s "$serial" shell pm list packages -U com.dsh.android | tr -d '\r' | sed -n -E 's/^package:com\.dsh\.android uid:([0-9]+).*/\1/p' | head -n1)"
 [[ "$uid" =~ ^[0-9]+$ && "$uid" -gt 10000 ]] || { echo P220_UID=DENY;exit 2; }
@@ -79,6 +82,12 @@ if [[ ! "$status" =~ Status:\ (ok|warning) ]];then
  echo P220_STARTUP_PROFILER=NOT_ATTESTED;exit 0
 fi
 echo P220_PROFILED_FRESH_MAIN_START=PASS
+startpid="$(adb -s "$serial" shell pidof com.dsh.android | tr -d '\r\n' || true)"
+if [[ "$startpid" =~ ^[1-9][0-9]{1,7}$ ]];then
+ echo P223_INITIAL_CLONE_HOST_PROCESS=OBSERVED
+else
+ echo P223_INITIAL_CLONE_HOST_PROCESS=NOT_ATTESTED
+fi
 sleep 12
 if ! adb -s "$serial" shell am profile stop com.dsh.android >/dev/null 2>&1;then
  echo P220_PROFILE_STOP=NOT_ATTESTED;exit 0
@@ -91,5 +100,44 @@ if python3 -B host_candidate/p209_original_p47_deny/p220_trace_parser.py "$tmp/t
 else
  echo P220_OFFLINE_ALLOWLIST_TRACE=NOT_ATTESTED
 fi
+# P223: strictly supplemental method-profiling diagnostic. Never launch
+# another Activity, invoke the Node engine or change original DEX/permissions.
+# Check that a single host process survives; a changed PID cannot be treated
+# as one continuous profiler session.
+latepid="$(adb -s "$serial" shell pidof com.dsh.android | tr -d '\r\n' || true)"
+if [[ ! "$startpid" =~ ^[1-9][0-9]{1,7}$ ||
+      ! "$latepid" =~ ^[1-9][0-9]{1,7}$ ]];then
+ echo P223_CLONE_PROCESS_CONTINUITY=NOT_ATTESTED
+elif [[ "$latepid" != "$startpid" ]];then
+ echo P223_CLONE_PROCESS_CONTINUITY=PID_CHANGED
+else
+ echo P223_CLONE_PROCESS_CONTINUITY=SAME_HOST_PID
+ if adb -s "$serial" shell am profile start --sampling 1000 "$latepid" "$remote2" >/dev/null 2>&1;then
+  echo P223_EXPLICIT_PROFILE_START=ACCEPTED
+  sleep 6
+  afterpid="$(adb -s "$serial" shell pidof com.dsh.android | tr -d '\r\n' || true)"
+  if [[ "$afterpid" != "$latepid" ]];then
+   echo P223_PROCESS_CHANGED_DURING_PROFILING=DENY
+   adb -s "$serial" shell am profile stop "$latepid" >/dev/null 2>&1 || true
+  elif adb -s "$serial" shell am profile stop "$latepid" >/dev/null 2>&1;then
+   echo P223_EXPLICIT_PROFILE_STOP=ACCEPTED
+   if adb -s "$serial" pull "$remote2" "$tmp/explicit.trace" >/dev/null 2>&1;then
+    if python3 -B host_candidate/p209_original_p47_deny/p220_trace_parser.py "$tmp/explicit.trace";then
+     echo P223_EXPLICIT_PROFILE_ALLOWLIST=PASS
+    else
+     echo P223_EXPLICIT_PROFILE_ALLOWLIST=NOT_ATTESTED
+    fi
+   else
+    echo P223_EXPLICIT_PROFILE_TRACE_TRANSFER=NOT_ATTESTED
+   fi
+  else
+   echo P223_EXPLICIT_PROFILE_STOP=NOT_ATTESTED
+  fi
+ else
+  echo P223_EXPLICIT_PROFILE_START=NOT_ATTESTED
+ fi
+fi
+echo P223_EXPLICIT_PROFILE_NOT_ORIGINAL_STARTUP_WITNESS=YES
+echo P223_SAMPLING_MISS_IS_NOT_METHOD_ABSENCE=YES
 echo P220_PROFILED_RUN_SEPARATE_FROM_P209_BASELINE=YES
 echo P220_SIGNED_ORIGINAL_AND_USER_DATA_MODIFIED=NO
