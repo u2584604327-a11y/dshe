@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthetic ART V1 streaming fixtures, 21 strict positive/negative tests."""
+"""Synthetic ART V1 streaming fixtures, 27 strict positive/negative tests."""
 import struct
 import unittest
 from p229_stream_v1_prefix import inspect,Rejected,MAX_PREFIX
@@ -74,6 +74,35 @@ class Tests(unittest.TestCase):
         self.assertEqual(str(e.exception),"EVENT_ACTION")
         self.assertEqual(e.exception.offset_band,"4K_TO_256K")
         self.assertEqual(e.exception.valid_events_band,"100_TO_9999")
+    def test_p237_start2_meta_covered(self):
+        seen=inspect(trace())[5]
+        self.assertIn("START2",seen)
+        self.assertNotIn("NODE_INSTALL",seen)
+
+    def test_p237_node_meta_covered(self):
+        seen=inspect(trace(cls="com.dsh.android.termux.TermuxBootstrap",
+                           method="installNodeRuntime"))[5]
+        self.assertIn("NODE_INSTALL",seen)
+
+    def test_p237_p40_meta_covered(self):
+        seen=inspect(trace(cls="com.dsh.android.p40.P40ProcessBridge",
+                           method="start"))[5]
+        self.assertIn("P40_BRIDGE",seen)
+
+    def test_p237_p47_meta_covered(self):
+        seen=inspect(trace(cls="com.dsh.android.p47.P47LaunchGate",
+                           method="startOrDeny"))[5]
+        self.assertIn("P47_GATE",seen)
+
+    def test_p237_unrelated_meta_not_attributed(self):
+        seen=inspect(trace(cls="com.example.Unrelated",method="notStart"))[5]
+        self.assertEqual(seen,frozenset())
+
+    def test_p237_meta_without_matching_event(self):
+        parsed=inspect(trace(events=((1,8,0),)))
+        self.assertIn("START2",parsed[5])
+        self.assertEqual(parsed[3]["START2"]["ENTER"],0)
+
     def test_method_info_bad_id_denied(self):
         with self.assertRaises(Exception):inspect(trace().replace(b"0x4\t",b"BAD\t",1))
     def test_no_complete_event_denied(self):

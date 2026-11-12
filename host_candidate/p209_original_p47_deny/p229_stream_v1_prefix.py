@@ -127,7 +127,9 @@ def inspect(data):
             pos+=width
             preceding="EVENT"
     need(events>0,"NO_COMPLETE_EVENTS")
-    return events,method_tokens,thread_tokens,counts,cut_last
+    # P237: fixed allowlist metadata coverage; no raw IDs or names emitted.
+    meta_seen=frozenset(ids.values())
+    return events,method_tokens,thread_tokens,counts,cut_last,meta_seen
 
 def main():
     p=argparse.ArgumentParser()
@@ -137,7 +139,7 @@ def main():
         f=Path(a.bounded_streaming_prefix)
         need(f.is_file() and not f.is_symlink(),"INPUT")
         need(32<=f.stat().st_size<=MAX_PREFIX,"INPUT")
-        events,methods,threads,counts,cut=inspect(f.read_bytes())
+        events,methods,threads,counts,cut,meta_seen=inspect(f.read_bytes())
     except Exception as error:
         stage=str(error) if isinstance(error,Rejected) and str(error) in STAGES else "UNSUPPORTED_FORMAT_OR_INVALID"
         print("P229_STREAM_PREFIX_REJECTION="+stage)
@@ -155,6 +157,8 @@ def main():
     print("P229_STREAM_PREFIX_THREAD_METADATA_COUNT="+str(threads))
     print("P229_PREFIX_BOUNDARY_PARTIAL_RECORD="+("YES" if cut else "NO"))
     for kind in LABELS:
+        print("P237_"+kind+"_METHOD_META="+
+              ("OBSERVED" if kind in meta_seen else "NOT_ATTESTED"))
         for action in ACTIONS:
             number=counts[kind][action]
             print("P229_"+kind+"_"+action+"="+("OBSERVED" if number else "NOT_ATTESTED"))
@@ -162,6 +166,7 @@ def main():
     print("P229_PARTIAL_STREAM_NOT_COMPLETE_TRACE=YES")
     print("P229_EVENT_ORDER_NOT_PROVEN_SAME_CALLSTACK=YES")
     print("P229_MISSING_EVENT_IS_NOT_ABSENCE_PROOF=YES")
+    print("P237_MISSING_METADATA_IS_NOT_METHOD_ABSENCE_PROOF=YES")
     print("P229_NODE_EXIT_NOT_SUCCESS_RETURN_OR_ORIGINAL_PC=YES")
     print("P229_NO_RAW_METHOD_NAME_THREAD_PID_ACCOUNT_OR_TRACE=YES")
     print("P229_FORMAL_V139=STRUCTURAL_BLOCKED")
