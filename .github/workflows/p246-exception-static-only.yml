@@ -32,7 +32,7 @@ jobs:
           test "$(git hash-object host_candidate/p43_original_service/build_embedded_emulator_apk.sh)" = 62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f
           python3 - <<'PY'
           from pathlib import Path
-          for s in ('p246_exception_semantics.py','test_p246_exception_semantics.py'):
+          for s in ('p246_exception_semantics.py','test_p246_exception_semantics.py','test_p247_classifier_contract.py'):
             p=Path('host_candidate/p246_exception_semantics')/s
             compile(p.read_text(encoding='utf-8'),str(p),'exec')
           print('P246_SOURCE_SYNTAX=PASS')
@@ -40,6 +40,10 @@ jobs:
           python3 -B host_candidate/p246_exception_semantics/test_p246_exception_semantics.py 2>&1 | tee "$RUNNER_TEMP/p246-tests.log"
           grep -Eq '^Ran 30 tests in' "$RUNNER_TEMP/p246-tests.log"
           grep -Fxq OK "$RUNNER_TEMP/p246-tests.log"
+          python3 -B host_candidate/p246_exception_semantics/test_p247_classifier_contract.py 2>&1 | tee "$RUNNER_TEMP/p247-contract.log"
+          grep -Eq '^Ran 12 tests in' "$RUNNER_TEMP/p247-contract.log"
+          grep -Fxq OK "$RUNNER_TEMP/p247-contract.log"
+          echo P247_P246_BYTE_CODEUNIT_AND_HANDLER_COMPLETENESS_FIXTURES=PASS
           python3 -B host_candidate/p246_exception_semantics/p246_exception_semantics.py | tee "$RUNNER_TEMP/p246-status.log"
           grep -Fxq 'P246_CANDIDATE_BYTES=NOT_RETAINED' "$RUNNER_TEMP/p246-status.log"
           grep -Fxq 'P246_REAL_EXCEPTION_DIFF=NOT_ATTESTED' "$RUNNER_TEMP/p246-status.log"

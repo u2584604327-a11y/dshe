@@ -10,11 +10,22 @@ def decode(method,dex):
     need(code is not None,"CODE_REQUIRED")
     total=code.get_insns_size()
     need(type(total) is int and 0<total<=1000000,"CODE_UNITS")
-    pcs=[pc for pc,_ in method.get_instructions_idx()]
-    need(bool(pcs) and pcs[0]==0 and len(set(pcs))==len(pcs)
-         and all(type(pc) is int and pc%2==0 for pc in pcs),"INST_BOUNDARY")
-    valid={pc//2 for pc in pcs}
-    need(max(valid)<total,"INST_RANGE")
+    # Androguard instruction indices and lengths are BYTES, whereas
+    # DEX code_item.insns_size and exception targets use 16-bit code units.
+    # Require a gap-free full decode, not merely distinct aligned offsets.
+    rows=list(method.get_instructions_idx())
+    need(0<len(rows)<=1000000,"INST_COUNT")
+    cursor=0
+    valid=set()
+    for pc,inst in rows:
+        need(type(pc) is int and pc==cursor and pc%2==0,"INST_BOUNDARY")
+        width=inst.get_length()
+        need(type(width) is int and 0<width<=65536 and width%2==0,
+             "INST_WIDTH")
+        valid.add(pc//2)
+        cursor+=width
+        need(cursor<=2*total,"INST_RANGE")
+    need(cursor==2*total,"INST_COVERAGE")
     tries=list(code.get_tries() or [])
     need(len(tries)==code.get_tries_size() and len(tries)<=512,"TRY_COUNT")
     table=code.get_handlers()
@@ -47,6 +58,7 @@ def decode(method,dex):
         need(bool(typed) or catchall is not None,"EMPTY_HANDLER")
         handlers[off]=(tuple(typed),catchall)
     out=[];last_end=-1
+    referenced=set()
     for t in tries:
         start=t.get_start_addr();width=t.get_insn_count();off=t.get_handler_off()
         need(type(start) is int and type(width) is int and
@@ -55,7 +67,12 @@ def decode(method,dex):
         need(start>=last_end,"TRY_OVERLAP_OR_ORDER")
         last_end=start+width
         need(type(off) is int and off in handlers,"TRY_BINDING")
+        referenced.add(off)
         out.append((start,width,handlers[off]))
+    # Never silently ignore an encoded_catch_handler that no try_item binds.
+    # Even if it cannot be reached, unaccounted table data precludes a
+    # full original-vs-derived *table* attestation.
+    need(referenced==set(handlers),"UNREFERENCED_HANDLER")
     return (total,tuple(out))
 def first_difference(left,right):
     need(type(left) is tuple and type(right) is tuple and

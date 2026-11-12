@@ -33,12 +33,17 @@ class Code:
  def get_tries(self):return self.tries
  def get_tries_size(self):return len(self.tries)
  def get_handlers(self):return self.table
+class Instruction:
+ def __init__(self,width=2):self.width=width
+ def get_length(self):return self.width
 class Method:
- def __init__(self,code=None,pcs=None):
+ def __init__(self,code=None,pcs=None,widths=None):
     self.code=Code() if code is None else code
     self.pcs=[0,2,4,6,8,10] if pcs is None else pcs
+    self.widths=[2]*len(self.pcs) if widths is None else widths
  def get_code(self):return self.code
- def get_instructions_idx(self):return [(p,object()) for p in self.pcs]
+ def get_instructions_idx(self):
+    return [(p,Instruction(w)) for p,w in zip(self.pcs,self.widths)]
 class Dex:
  def __init__(self,types=None):self.types={3:A,4:B} if types is None else types
  def get_cm_type(self,i):return self.types[i]
