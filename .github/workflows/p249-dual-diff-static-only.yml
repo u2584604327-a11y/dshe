@@ -1,0 +1,57 @@
+name: P249 source-only independent code and exception discrepancy audit
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p249_dual_diff/**'
+      - '.github/workflows/p249-dual-diff-static-only.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p249-static-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p249-source-only:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Source-only dual-channel and pinned original gates
+        run: |
+          set -euo pipefail
+          test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
+          test "$(git hash-object host_candidate/p43_original_service/build_embedded_emulator_apk.sh)" = 62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f
+          test "$(git hash-object host_candidate/p245_build_only_probe/p245_build_only_probe.py)" = 06f62f4d8c8ee141b6b2030ee6556c9a43d9e499
+          test "$(git hash-object host_candidate/p246_exception_semantics/p246_exception_semantics.py)" = 59e64268fe80ceec0169417b83e96772b3e015a0
+          python3 - <<'PY'
+          from pathlib import Path
+          for n in ('p249_dual_diff.py','test_p249_dual_diff.py'):
+            p=Path('host_candidate/p249_dual_diff')/n
+            compile(p.read_text(encoding='utf8'),str(p),'exec')
+          print("P249_SOURCE_SYNTAX=PASS")
+          PY
+          python3 -B host_candidate/p246_exception_semantics/test_p246_exception_semantics.py > "$RUNNER_TEMP/p246-old.log" 2>&1
+          grep -Eq '^Ran 30 tests in' "$RUNNER_TEMP/p246-old.log"
+          grep -Fxq OK "$RUNNER_TEMP/p246-old.log"
+          python3 -B host_candidate/p246_exception_semantics/test_p247_classifier_contract.py > "$RUNNER_TEMP/p247-old.log" 2>&1
+          grep -Eq '^Ran 12 tests in' "$RUNNER_TEMP/p247-old.log"
+          grep -Fxq OK "$RUNNER_TEMP/p247-old.log"
+          python3 -B host_candidate/p249_dual_diff/test_p249_dual_diff.py 2>&1 | tee "$RUNNER_TEMP/p249.log"
+          grep -Eq '^Ran 26 tests in' "$RUNNER_TEMP/p249.log"
+          grep -Fxq OK "$RUNNER_TEMP/p249.log"
+          echo P249_FIXTURES_P246_30_P247_12_P249_26=PASS
+          python3 -B host_candidate/p249_dual_diff/p249_dual_diff.py | tee "$RUNNER_TEMP/p249-no-apk.log"
+          grep -Fxq 'P249_SOURCE_ONLY_NO_APK=PASS' "$RUNNER_TEMP/p249-no-apk.log"
+          grep -Fxq 'P249_REAL_DERIVED_EXCEPTION_DIFF=NOT_ATTESTED' "$RUNNER_TEMP/p249-no-apk.log"
+          grep -Fxq 'P249_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p249-no-apk.log"
+          test -z "$(git status --porcelain)"
+          echo P249_NO_APK_BUILD_ADB_EMULATOR_OR_RELEASE=YES
