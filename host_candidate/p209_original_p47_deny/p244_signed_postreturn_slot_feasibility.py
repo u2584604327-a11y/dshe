@@ -40,7 +40,7 @@ def may_write_receiver(op, output, receiver):
     if match is None:
         return True
     dest = int(match.group(1))
-    return dest == receiver or (op.startswith("move-wide") and dest + 1 == receiver)
+    return dest == receiver or (("wide" in op or "long" in op or "double" in op) and dest + 1 == receiver)
 
 def receiver_unchanged(rows, edges, receiver, target=182):
     """Check all relevant normal-CFG paths, deny any write even benign writes."""
