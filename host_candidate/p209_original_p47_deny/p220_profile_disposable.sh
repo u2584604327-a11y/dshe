@@ -114,7 +114,7 @@ fi
 if ! adb -s "$serial" pull "$remote" "$tmp/trace.bin" >/dev/null 2>&1;then
  echo P220_TRACE_TRANSFER=NOT_ATTESTED;exit 0
 fi
-if python3 -B host_candidate/p209_original_p47_deny/p220_trace_parser.py "$tmp/trace.bin";then
+if python3 -B host_candidate/p209_original_p47_deny/p220_trace_parser.py "$tmp/trace.bin" | tee "$tmp/startup-allowlist.log";then
  echo P220_OFFLINE_ALLOWLIST_TRACE=PASS
 else
  echo P220_OFFLINE_ALLOWLIST_TRACE=NOT_ATTESTED
@@ -177,6 +177,21 @@ else
  else
   echo P223_EXPLICIT_PROFILE_START=NOT_ATTESTED
  fi
+fi
+# P226 is an extra FRESH temporary clone process, gated by genuine sampled
+# NODE_INSTALL entry evidence; never conflated with original P209 baseline.
+if [[ "$P226_OFFLINE_FULL_TRACE" == 1 &&
+      "$P222_OFFLINE_PROFILE" == 1 &&
+      "$apk" == .p222tmp/P222-PROFILEABLE-OFFLINE-NOT-FOR-RELEASE.apk &&
+      -s "$tmp/startup-allowlist.log" ]] &&
+   grep -Fxq "P220_NODE_INSTALL_ENTRY=OBSERVED" "$tmp/startup-allowlist.log";then
+ if bash host_candidate/p209_original_p47_deny/p226_nonsampling_disposable.sh "$apk" "$uid";then
+  echo P226_EXTRA_NON_SAMPLED_DIAGNOSTIC=EXECUTED
+ else
+  echo P226_EXTRA_NON_SAMPLED_DIAGNOSTIC=NOT_ATTESTED
+ fi
+else
+ echo P226_EXTRA_NON_SAMPLED_DIAGNOSTIC=SKIPPED_WITHOUT_NODE_ENTRY_PROOF
 fi
 echo P223_EXPLICIT_PROFILE_NOT_ORIGINAL_STARTUP_WITNESS=YES
 echo P223_SAMPLING_MISS_IS_NOT_METHOD_ABSENCE=YES

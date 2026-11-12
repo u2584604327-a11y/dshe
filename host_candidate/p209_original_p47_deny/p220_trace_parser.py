@@ -48,7 +48,7 @@ def parse_method_id(token):
  need(mid<=0xffffffffffffffff,"METHOD_KEY_RANGE")
  need(mid%4==0,"METHOD_KEY_ALIGN")
  return mid
-def parse(data):
+def parse(data,with_actions=False):
  need(type(data) is bytes and 32<=len(data)<=MAX_BYTES,"BOUNDED_FILE")
  # ART header uses *end as delimiter. Allow CRLF, but never dump raw bytes.
  found=re.search(br"\*end\r?\n",data[:4*1024*1024])
@@ -84,12 +84,17 @@ def parse(data):
  records=blob[offset:]
  need(bool(records) and len(records)%size==0,"BINARY_RECORD_ALIGNMENT")
  hits={v:0 for v in set(WHITELIST.values())}
+ actions={v:{"ENTER":0,"EXIT":0,"UNROLL":0} for v in set(WHITELIST.values())}
  off=1 if version==1 else 2
  for at in range(0,len(records),size):
   word=struct.unpack_from("<I",records,at+off)[0]
-  if word&3:continue
+  action=word&3
+  need(action in (0,1,2),"BINARY_ACTION_UNSUPPORTED")
   kind=keys.get(word&~3)
-  if kind is not None:hits[kind]+=1
+  if kind is not None:
+   actions[kind][("ENTER","EXIT","UNROLL")[action]]+=1
+   if action==0:hits[kind]+=1
+ if with_actions:return version,len(records)//size,hits,actions
  return version,len(records)//size,hits
 def main():
  p=argparse.ArgumentParser();p.add_argument("trace");a=p.parse_args()
@@ -111,7 +116,7 @@ def main():
          "METHOD_KEY_FORMAT_SIGNED_NUMBER","METHOD_KEY_FORMAT_OTHER",
          "DUPLICATE_TARGET_METHOD_KEY",
          "METHOD_SECTION_EMPTY","BINARY_MAGIC_OR_EMPTY","BINARY_VERSION_OR_OFFSET",
-         "BINARY_RECORD_SIZE","BINARY_RECORD_ALIGNMENT","UNEXPECTED"}
+         "BINARY_RECORD_SIZE","BINARY_RECORD_ALIGNMENT","BINARY_ACTION_UNSUPPORTED","UNEXPECTED"}
   if stage in allow and stage.startswith("METHOD_KEY_FORMAT_"):
    print("P225_INVALID_METHOD_ID_SHAPE="+stage[len("METHOD_KEY_FORMAT_"):])
   print("P220_TRACE_FAILURE_STAGE="+(stage if stage in allow else "UNEXPECTED"))

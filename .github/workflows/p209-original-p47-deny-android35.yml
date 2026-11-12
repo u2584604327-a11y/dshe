@@ -28,6 +28,7 @@ jobs:
       P208_CI_METHOD_ENTRY_ONLY: '1'
       P209_FINAL_DENY_ONLY: '1'
       P222_OFFLINE_PROFILE: '1'
+      P226_OFFLINE_FULL_TRACE: '1'
       P74_FIXTURE_ENGINE_BRIDGE: '0'
       P75_RENDEZVOUS_FIXTURE: '0'
     steps:
@@ -161,6 +162,17 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_p220_trace_parser.py 2>&1 | tee "$RUNNER_TEMP/p220-trace-unit.log"
           grep -Eq '^Ran 37 tests in' "$RUNNER_TEMP/p220-trace-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p220-trace-unit.log"
+          python3 - <<'PY'
+          from pathlib import Path
+          for n in ("p226_event_audit.py","test_p226_event_audit.py"):
+              f=Path("host_candidate/p209_original_p47_deny")/n
+              compile(f.read_text(encoding="utf-8"),str(f),"exec")
+          print("P226_NON_SAMPLED_AUDIT_SYNTAX=PASS")
+          PY
+          python3 -B host_candidate/p209_original_p47_deny/test_p226_event_audit.py 2>&1 | tee "$RUNNER_TEMP/p226-unit.log"
+          grep -Eq '^Ran 12 tests in' "$RUNNER_TEMP/p226-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p226-unit.log"
+          bash -n host_candidate/p209_original_p47_deny/p226_nonsampling_disposable.sh
           python3 - <<'PY'
           from pathlib import Path
           for name in ("p221_profile_manifest_policy.py",
