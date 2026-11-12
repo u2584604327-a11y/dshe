@@ -10,12 +10,11 @@ ROWS={0:("nop",""),2:("nop",""),4:("move-exception","v1"),
 
 class Tests(unittest.TestCase):
     def test_handler_directly_reaches_pc190(self):
-        normal={0:(2,),2:(6,),4:(190,),6:(),190:()}
+        normal={0:(2,),2:(6,),4:(6,),6:(),190:()}
         exc,targets=exception_edges(ROWS,[(0,1,1)],{1:(2,)},100)
         self.assertEqual(any_handler_reaches_target(normal,exc,targets),"NO")
-        exc,targets=exception_edges(ROWS,[(0,1,1)],{1:(2,)},100)
         self.assertEqual(any_handler_reaches_target(
-            {0:(2,),2:(190,),4:(),6:(),190:()},exc,targets),"YES")
+            {0:(2,),2:(6,),4:(190,),6:(),190:()},exc,targets),"YES")
 
     def test_handler_no_back_edge(self):
         normal={0:(2,),2:(6,),4:(6,),6:(),190:()}
@@ -53,10 +52,10 @@ class Tests(unittest.TestCase):
 
     def test_noninstruction_try_start_denied(self):
         with self.assertRaises(Denied):
-            exception_edges(ROWS,[(1,1,1)],{1:(2,)},100)
+            exception_edges(ROWS,[(5,1,1)],{1:(2,)},100)
 
     def test_overlapping_protected_ranges_denied(self):
-        rows={**ROWS,10:("nop",""),12:("nop","")}
+        rows={**ROWS,8:("nop",""),10:("nop",""),12:("nop","")}
         with self.assertRaises(Denied):
             exception_edges(rows,[(0,3,1),(2,2,1)],{1:(2,)},100)
 
