@@ -26,7 +26,26 @@ STAGES={
  "NO_COMPLETE_EVENTS","TRUNCATED_HEADER",
 }
 
-class Rejected(Exception):pass
+class Rejected(Exception):
+    def __init__(self, stage, *, offset_band="UNKNOWN", preceding="UNKNOWN",
+                 valid_events_band="UNKNOWN"):
+        super().__init__(stage)
+        # P232: strictly enumerable, no raw bytes, offsets, method IDs or names.
+        self.offset_band=offset_band
+        self.preceding=preceding
+        self.valid_events_band=valid_events_band
+
+def _offset_band(position):
+    if position < 4096: return "FIRST_4K"
+    if position < 262144: return "4K_TO_256K"
+    if position < 1048576: return "256K_TO_1M"
+    return "AFTER_1M"
+
+def _valid_events_band(count):
+    if count == 0: return "ZERO"
+    if count < 100: return "ONE_TO_99"
+    if count < 10000: return "100_TO_9999"
+    return "AT_LEAST_10000"
 def need(x,stage):
     if not x:raise Rejected(stage)
 def inspect(data):
@@ -41,6 +60,7 @@ def inspect(data):
     need(off==32 and width==14 and len(data)>32,"HEADER_LAYOUT")
     pos=off;ids={};counts={k:{a:0 for a in ACTIONS} for k in LABELS}
     events=0;method_tokens=0;thread_tokens=0;cut_last=False
+    preceding="HEADER"
     while pos<len(data):
         remaining=len(data)-pos
         if remaining<2:
@@ -72,6 +92,7 @@ def inspect(data):
                     need(mid not in ids,"METHOD_KEY_DRIFT")
                     ids[mid]=kind
                 pos+=5+n
+                preceding="METHOD_META"
             elif opcode==2:
                 if remaining<7:
                     cut_last=True
@@ -82,6 +103,7 @@ def inspect(data):
                     break
                 thread_tokens+=1
                 pos+=7+n
+                preceding="THREAD_META"
             elif opcode==3:
                 # A summary must be at the end of a full stream. We know the
                 # on-device remote file was >16 MiB, so never in first 8 MiB.
@@ -94,11 +116,16 @@ def inspect(data):
                 break
             word=struct.unpack_from("<I",data,pos+2)[0]
             action=word&3
-            need(action<=2,"EVENT_ACTION")
+            if action>2:
+                # P232: preserve rejection; classify where framing first fails.
+                raise Rejected("EVENT_ACTION", offset_band=_offset_band(pos),
+                               preceding=preceding,
+                               valid_events_band=_valid_events_band(events))
             kind=ids.get(word&~3)
             if kind is not None:counts[kind][ACTIONS[action]]+=1
             events+=1
             pos+=width
+            preceding="EVENT"
     need(events>0,"NO_COMPLETE_EVENTS")
     return events,method_tokens,thread_tokens,counts,cut_last
 
@@ -114,6 +141,11 @@ def main():
     except Exception as error:
         stage=str(error) if isinstance(error,Rejected) and str(error) in STAGES else "UNSUPPORTED_FORMAT_OR_INVALID"
         print("P229_STREAM_PREFIX_REJECTION="+stage)
+        if stage=="EVENT_ACTION" and isinstance(error,Rejected):
+            print("P232_EVENT_ACTION_OFFSET_BAND="+error.offset_band)
+            print("P232_EVENT_ACTION_PRECEDING_PACKET="+error.preceding)
+            print("P232_EVENT_ACTION_VALID_EVENTS_BAND="+error.valid_events_band)
+            print("P232_EVENT_ACTION_REMAINS_REJECTED=YES")
         print("P229_STREAM_PREFIX_EVENTS=NOT_ATTESTED")
         print("P229_ABSENCE_NOT_PROVEN=YES")
         return 2

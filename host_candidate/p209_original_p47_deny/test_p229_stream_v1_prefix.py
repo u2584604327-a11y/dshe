@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthetic ART V1 streaming fixtures, 18 strict positive/negative tests."""
+"""Synthetic ART V1 streaming fixtures, 21 strict positive/negative tests."""
 import struct
 import unittest
 from p229_stream_v1_prefix import inspect,Rejected,MAX_PREFIX
@@ -58,6 +58,22 @@ class Tests(unittest.TestCase):
         self.assertEqual(str(e.exception),"UNKNOWN_META_TOKEN")
     def test_reserved_action_denied(self):
         with self.assertRaises(Rejected):inspect(trace(events=((1,4,3),)))
+    def test_p232_first_event_failure_bounded(self):
+        with self.assertRaises(Rejected) as e:inspect(trace(events=((1,4,3),)))
+        self.assertEqual(str(e.exception),"EVENT_ACTION")
+        self.assertEqual(e.exception.offset_band,"FIRST_4K")
+        self.assertEqual(e.exception.preceding,"METHOD_META")
+        self.assertEqual(e.exception.valid_events_band,"ZERO")
+    def test_p232_failure_after_one_valid_event(self):
+        with self.assertRaises(Rejected) as e:inspect(trace(events=((1,4,0),(1,4,3))))
+        self.assertEqual(e.exception.preceding,"EVENT")
+        self.assertEqual(e.exception.valid_events_band,"ONE_TO_99")
+    def test_p232_later_failure_without_raw_offset(self):
+        events=((1,4,0),)*350+((1,4,3),)
+        with self.assertRaises(Rejected) as e:inspect(trace(events=events))
+        self.assertEqual(str(e.exception),"EVENT_ACTION")
+        self.assertEqual(e.exception.offset_band,"4K_TO_256K")
+        self.assertEqual(e.exception.valid_events_band,"100_TO_9999")
     def test_method_info_bad_id_denied(self):
         with self.assertRaises(Exception):inspect(trace().replace(b"0x4\t",b"BAD\t",1))
     def test_no_complete_event_denied(self):
