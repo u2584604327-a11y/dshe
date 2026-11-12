@@ -158,7 +158,7 @@ jobs:
           print("P220_TRACE_PARSER_PYTHON_SYNTAX=PASS")
           PY
           python3 -B host_candidate/p209_original_p47_deny/test_p220_trace_parser.py 2>&1 | tee "$RUNNER_TEMP/p220-trace-unit.log"
-          grep -Eq '^Ran 17 tests in' "$RUNNER_TEMP/p220-trace-unit.log"
+          grep -Eq '^Ran 20 tests in' "$RUNNER_TEMP/p220-trace-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p220-trace-unit.log"
           bash -n host_candidate/p209_original_p47_deny/p220_profile_disposable.sh
           bash -n host_candidate/p209_original_p47_deny/p220_baseline_then_profile.sh

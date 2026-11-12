@@ -38,6 +38,16 @@ class Tests(unittest.TestCase):
  def test_duplicate_known_key(self):
   raw=sample();start=raw.index(b"0x100\t");line=raw[start:raw.index(b"\n",start)+1]
   with self.assertRaises(InvalidTrace):parse(raw.replace(line,line+line,1))
+ def test_crlf_trace_header(self):
+  raw=sample();prefix,bin=raw.split(b"SLOW",1)
+  self.assertEqual(parse(prefix.replace(b"\n",b"\r\n")+b"SLOW"+bin)[2]["START2"],1)
+ def test_64bit_key_does_not_alias_32bit(self):
+  raw=sample(mid=0x100)
+  self.assertEqual(parse(raw.replace(b"0x100\t",b"0x100000100\t"))[2]["START2"],0)
+ def test_malformed_stage_label(self):
+  with self.assertRaises(InvalidTrace) as e:
+   parse(sample().replace(b"SLOW",b"FAIL",1))
+  self.assertEqual(str(e.exception),"BINARY_MAGIC_OR_EMPTY")
  def test_dex_class_name(self):
   self.assertEqual(classify("Lcom/dsh/android/EngineManager$start$2;","invokeSuspend"),"START2")
 if __name__=="__main__":unittest.main(verbosity=2)
