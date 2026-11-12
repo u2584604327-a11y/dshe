@@ -90,6 +90,16 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_p238_signed_coroutine_capture.py 2>&1 | tee "$RUNNER_TEMP/p238-capture-unit.log"
           grep -Eq '^Ran 17 tests in' "$RUNNER_TEMP/p238-capture-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p238-capture-unit.log"
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ("p241_signed_pc190_receiver_alias.py", "test_p241_signed_pc190_receiver_alias.py"):
+              p=Path("host_candidate/p209_original_p47_deny")/name
+              compile(p.read_text(encoding="utf-8"),str(p),"exec")
+          print("P241_SIGNED_LOCAL_CFG_SOURCE_SYNTAX=PASS")
+          PY
+          python3 -B host_candidate/p209_original_p47_deny/test_p241_signed_pc190_receiver_alias.py 2>&1 | tee "$RUNNER_TEMP/p241-unit.log"
+          grep -Eq '^Ran 12 tests in' "$RUNNER_TEMP/p241-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p241-unit.log"
           python3 -B host_candidate/p209_original_p47_deny/test_audit_signed_process_prelaunch.py 2>&1 | tee "$RUNNER_TEMP/p209-static-unit.log"
           grep -Eq '^Ran 5 tests in' "$RUNNER_TEMP/p209-static-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-static-unit.log"
@@ -328,6 +338,12 @@ jobs:
           grep -Fxq 'P238_READONLY_SIGNED_COROUTINE_CAPTURE_AUDIT=PASS' "$RUNNER_TEMP/p238-capture-static.log"
           grep -Fxq 'P238_PC202_PC214_DYNAMIC_BRANCH=NOT_ATTESTED' "$RUNNER_TEMP/p238-capture-static.log"
           grep -Fxq 'P238_SAME_WIDTH_MARKER_REWRITE=NOT_ATTEMPTED' "$RUNNER_TEMP/p238-capture-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/p241_signed_pc190_receiver_alias.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p241-signed-pc190.log"
+          grep -Fxq 'P241_ORIGINAL_PC190_RECEIVER_LOCAL_CFG_AUDIT=PASS' "$RUNNER_TEMP/p241-signed-pc190.log"
+          grep -Fxq 'P241_ORIGINAL_PC202_PC214_DYNAMIC_BRANCH=NOT_ATTESTED' "$RUNNER_TEMP/p241-signed-pc190.log"
+          grep -Fxq 'P241_REG_ALIAS_EXCEPTION_SUSPENSION_AND_RUNTIME=NOT_ATTESTED' "$RUNNER_TEMP/p241-signed-pc190.log"
           python3 -B host_candidate/p209_original_p47_deny/audit_signed_process_prelaunch.py \
             .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
             | tee "$RUNNER_TEMP/p209-process-prelaunch.log"
