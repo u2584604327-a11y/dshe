@@ -70,7 +70,7 @@ selected=
 valid=NO
 for _ in $(seq 1 18);do
   raw="$(adb -s "$serial" logcat -d -v threadtime \
-    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I P209_PREP40:I P209_GUARD:I P209_FALL:I P209_TAKEN:I AndroidRuntime:E '*:S')"
+    -s P208_BOUNDARY:I P208_ORIGINAL_ENTRY:I P209_GATE:I P209_P40:I P209_PREP40:I P209_GUARD:I P209_FALL:I P209_TAKEN:I P218_NODE:I AndroidRuntime:E '*:S')"
   selected="$(printf '%s\n' "$raw" | awk -v m="$marker" '
     index($0,m){count++;after=1;next}
     after{print}
@@ -227,6 +227,22 @@ p209_gate_diagnostic() {
   echo "P209_GATE_ORIGINAL_STACK_PASS_COUNT=$(p209_count_pid 'P209_ORIGINAL_CALLSTACK=PASS')"
   echo "P209_GATE_ORIGINAL_STACK_OTHER_COUNT=$(p209_count_pid 'P209_ORIGINAL_CALLSTACK=OTHER')"
 }
+# P218: bounded host-PID marker, no original Node subprocess is launched.
+p218_total="$(p209_count 'P218_PC406_PRE_NODE_INSTALL=OBSERVED')"
+p218_host="$(p209_count_pid 'P218_PC406_PRE_NODE_INSTALL=OBSERVED')"
+if [[ "$selected" == *P218_PC406_ISOLATED=DENY* ]];then
+  echo P218_PC406_ISOLATED=DENY;exit 2
+fi
+if [[ "$p218_total" != "$p218_host" ]];then
+  echo P218_PC406_PID_MISMATCH=DENY;exit 2
+fi
+echo "P218_NODE_PC406_PRECALL_HOST_PID_COUNT=$p218_host"
+if [[ "$p218_host" -gt 0 ]];then
+  echo P218_NODE_PC406_PRECALL=OBSERVED
+else
+  echo P218_NODE_PC406_PRECALL=NOT_OBSERVED
+fi
+echo P218_NODE_PC406_PRECALL_IS_NOT_NODE_EXECUTION_PROOF=YES
 if [[ "$selected" == *P209_PC176_POSTCALL_ISOLATED=DENY* ]];then
   echo P209_PC176_POSTCALL_ISOLATED_HOST=DENY;exit 2
 fi

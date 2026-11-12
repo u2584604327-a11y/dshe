@@ -45,6 +45,18 @@ public final class P209PreCallWitness {
       // No diagnostic may change original coroutine execution.
     }
   }
+  /** Observation before the existing original PC406 call, never runs Node. */
+  public static void markBeforeNodeInstall() {
+    try {
+      if (Process.isIsolated()) {
+        Log.i("P218_NODE","P218_PC406_ISOLATED=DENY");
+        return;
+      }
+      Log.i("P218_NODE","P218_PC406_PRE_NODE_INSTALL=OBSERVED");
+    }catch(Throwable ignored) {
+      // Diagnostic failures must not alter original coroutine control flow.
+    }
+  }
   public static void mark() {
     try {
       if (Process.isIsolated()) {

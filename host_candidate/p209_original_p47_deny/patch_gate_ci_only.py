@@ -43,6 +43,9 @@ GUARD_MAX_PC=3912
 TARGET_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markPostThrowOnFailure()V\n"
 FALL_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markFallthrough()V\n"
 
+NODE_INVOKE="    invoke-static {}, Lcom/dsh/android/p209/P209PreCallWitness;->markBeforeNodeInstall()V\n"
+NODE_TARGET="Lcom/dsh/android/termux/TermuxBootstrap;->installNodeRuntime("
+
 class Deny(Exception):pass
 def need(v,code):
     if not v:raise Deny("P209_DENY_"+code)
@@ -143,7 +146,7 @@ def patch_p40(s):
 def inject_precall(s, expected_guard_op="if-ne"):
     import re
     need(all(mark.strip() not in s for mark in
-             (PRE_INVOKE,GUARD_INVOKE,FALL_INVOKE,TARGET_INVOKE)),
+             (PRE_INVOKE,GUARD_INVOKE,FALL_INVOKE,TARGET_INVOKE,NODE_INVOKE)),
          "PRECALL_OR_GUARD_OR_FALL_OR_TARGET_ALREADY_MARKED")
     import sys
     sys.path.insert(0,"host_candidate/p208_original_start_coroutine")
@@ -160,6 +163,11 @@ def inject_precall(s, expected_guard_op="if-ne"):
     need(re.fullmatch(expected,rows[call_idx]) is not None,
          "ORIGINAL_PC3912_P40_CALL_SHAPE")
     at=sum(map(len,rows[:call_idx]))
+    node_calls=[i for i,line in enumerate(rows) if
+                line.lstrip().startswith("invoke-virtual ") and NODE_TARGET in line]
+    need(len(node_calls)==1,"EXACT_ONE_ORIGINAL_NODE_INSTALL_CALL")
+    node_idx=node_calls[0]
+    node_at=sum(map(len,rows[:node_idx]))
     conds=[(i,line) for i,line in enumerate(rows) if
            re.match(r"^[ \t]+if-[a-z0-9/-]+[ \t]+",line)]
     need(conds and re.match(r"^[ \t]+(if-[a-z0-9/-]+)[ \t]+",conds[0][1]).group(1)
@@ -187,18 +195,20 @@ def inject_precall(s, expected_guard_op="if-ne"):
          "EXACT_SIGNED_PC176_THROWONFAILURE_FIRST_OPCODE")
     post_call_at=sum(map(len,rows[:instruction_rows[0]+1]))
     need(body.index(p208.INSERT)<guard_at<after_cond<=label_end<
-         post_call_at<at and cond_idx<label_idx<instruction_rows[0]<call_idx,
+         post_call_at<node_at<at and cond_idx<label_idx<instruction_rows[0]<node_idx<call_idx,
          "PC176_POSTCALL_MARKER_STRICT_ORDER")
     newbody=(body[:guard_at]+GUARD_INVOKE+
              body[guard_at:after_cond]+FALL_INVOKE+
              body[after_cond:post_call_at]+TARGET_INVOKE+
-             body[post_call_at:at]+PRE_INVOKE+body[at:])
+             body[post_call_at:node_at]+NODE_INVOKE+
+             body[node_at:at]+PRE_INVOKE+body[at:])
     new=s[:a]+newbody+s[b:]
-    for mark in (GUARD_INVOKE,FALL_INVOKE,TARGET_INVOKE,PRE_INVOKE):
+    for mark in (GUARD_INVOKE,FALL_INVOKE,TARGET_INVOKE,NODE_INVOKE,PRE_INVOKE):
         need(new.count(mark.strip())==1,"ONLY_ONE_TEST_MARKER_EACH")
     need(new.replace(GUARD_INVOKE,"",1).replace(FALL_INVOKE,"",1).
-         replace(TARGET_INVOKE,"",1).replace(PRE_INVOKE,"",1)==s,
-         "EXACT_FOUR_REVERSIBLE_CI_MARKERS")
+         replace(TARGET_INVOKE,"",1).replace(NODE_INVOKE,"",1).
+         replace(PRE_INVOKE,"",1)==s,
+         "EXACT_FIVE_REVERSIBLE_CI_MARKERS")
     return new
 def inject_p40():
     import hashlib
@@ -242,12 +252,13 @@ def inject_p40():
     need(PRE_SRC.is_file() and not PRE_SRC.is_symlink(),"PINNED_START2_SMALI_ONLY")
     original=PRE_SRC.read_text()
     PRE_SRC.write_text(inject_precall(original,original_first_op))
-    need(PRE_SRC.read_text().replace(GUARD_INVOKE,"",1).replace(FALL_INVOKE,"",1).replace(TARGET_INVOKE,"",1).replace(PRE_INVOKE,"",1)==original,
+    need(PRE_SRC.read_text().replace(GUARD_INVOKE,"",1).replace(FALL_INVOKE,"",1).replace(TARGET_INVOKE,"",1).replace(NODE_INVOKE,"",1).replace(PRE_INVOKE,"",1)==original,
          "PRECALL_SOURCE_EXACT_INVERSE")
     print("P209_ONLY_TEST_ORIGINAL_FIRST_GUARD_MARKER=PASS")
     print("P209_PC26_FALLTHROUGH_PC30_ONLY_REVERSIBLE_MARKER=PASS")
     print("P209_PC176_POST_THROWONFAILURE_ONLY_REVERSIBLE_MARKER=PASS")
     print("P209_ONLY_TEST_PRE_PC3912_MARKER=PASS")
+    print("P218_ONLY_DISPOSABLE_PRE_NODE_PC406_MARKER=PASS")
     print("P209_ONLY_TEMP_P40_ONE_LOG_AND_NO_HOST_SPAWN=PASS")
 def main():
     a=argparse.ArgumentParser()

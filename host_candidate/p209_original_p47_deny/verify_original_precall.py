@@ -13,6 +13,7 @@ PRE="Lcom/dsh/android/p209/P209PreCallWitness;->mark()V"
 GUARD="Lcom/dsh/android/p209/P209PreCallWitness;->markFirstGuard()V"
 FALL="Lcom/dsh/android/p209/P209PreCallWitness;->markFallthrough()V"
 TARGET="Lcom/dsh/android/p209/P209PreCallWitness;->markPostThrowOnFailure()V"
+NODE="Lcom/dsh/android/p209/P209PreCallWitness;->markBeforeNodeInstall()V"
 P208="Lcom/dsh/android/p208/P208StartCoroutineWitness;->mark()V"
 OLD="Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;"
 NEW="Lcom/dsh/android/p40/P40ProcessBridge;->start(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;"
@@ -63,17 +64,19 @@ def compare(original,derived):
     after=list(derived.get_instructions_idx())
     def match(ins,sym):return ins.get_name()=="invoke-static" and sym in ins.get_output()
     markers=[[k for k,(_,ins) in enumerate(after) if match(ins,sym)]
-             for sym in (P208,GUARD,FALL,TARGET,PRE)]
+             for sym in (P208,GUARD,FALL,TARGET,NODE,PRE)]
     require(markers[0]==[0] and all(len(v)==1 for v in markers[1:]),
-            "EXACT_FIVE_DISPOSABLE_MARKERS")
-    gi,fi,ti,pi=(v[0] for v in markers[1:])
-    require(0<gi<fi<ti<pi and gi+2==fi and
+            "EXACT_SIX_DISPOSABLE_MARKERS")
+    gi,fi,ti,ni,pi=(v[0] for v in markers[1:])
+    require(0<gi<fi<ti<ni<pi and gi+2==fi and
             after[gi+1][1].get_name()=="if-eqz" and
             after[fi+1][1].get_name()=="if-eq" and
             after[ti-1][1].get_name()=="invoke-static/range" and
             "Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V" in
                 after[ti-1][1].get_output().replace(" ","") and
             after[ti+1][1].get_name()=="iget-object" and
+            after[ni+1][1].get_name()=="invoke-virtual" and
+            "Lcom/dsh/android/termux/TermuxBootstrap;->installNodeRuntime(" in after[ni+1][1].get_output() and
             after[pi+1][1].get_name()=="invoke-static" and
             NEW in after[pi+1][1].get_output(),
             "ORIGINAL_PC26_PC30_PC176_PC3912_ORDER")
@@ -91,11 +94,11 @@ def compare(original,derived):
             176+orig_map[176].get_length()==182 and
             orig_map[182].get_name()=="iget-object",
             "SIGNED_PC176_THROWONFAILURE_PC182_EXACT_FALLTHROUGH")
-    omit={0,gi,fi,ti,pi}
+    omit={0,gi,fi,ti,ni,pi}
     aligned=[item for k,item in enumerate(after) if k not in omit]
     require(len(before)==len(aligned),"ORIGINAL_INSTRUCTION_COUNT_EXCEPT_FIVE")
     mapping={opc:dpc for (opc,_),(dpc,_) in zip(before,aligned)}
-    require(len(mapping)==len(before) and 176 in mapping and 182 in mapping and
+    require(len(mapping)==len(before) and all(x in mapping for x in (176,182,406,3912)) and
             aligned[[pc for pc,_ in before].index(176)][1].get_name()=="invoke-static/range",
             "ORIGINAL_PC176_OP_MATCH")
     post_marker_pc=after[ti][0]
@@ -103,6 +106,14 @@ def compare(original,derived):
             post_marker_pc==mapping[176]+orig_map[176].get_length() and
             after[ti+1][0]==mapping[182],
             "EXACT_REUSED_MARKER_BETWEEN_PC176_NORMAL_RETURN_AND_PC182")
+    # A direct jump to PC406 could bypass the adjacent marker: fail closed.
+    targets=[pc+2*op.get_ref_off() for pc,op in before
+             if op.get_name().startswith("if-") or
+             op.get_name() in ("goto","goto/16","goto/32")]
+    require(406 not in targets,"P218_PC406_DIRECT_BRANCH_TARGET_WOULD_SKIP_MARKER")
+    require(after[ni+1][0]==mapping[406] and
+            after[ni][0]+after[ni][1].get_length()==mapping[406],
+            "P218_PC406_WITNESS_IMMEDIATELY_PRECEDES_SIGNED_CALL")
     transformed=[]
     branch_count=0
     for k,((pc,orig),(dpc,der)) in enumerate(zip(before,aligned)):
@@ -148,7 +159,7 @@ def main():
                 if c.get_name()==prev.START2 and method.get_name()=="invokeSuspend":continue
                 for _,instr in method.get_instructions_idx():
                     out=instr.get_output()
-                    require(PRE not in out and P208 not in out and GUARD not in out and FALL not in out and TARGET not in out,
+                    require(PRE not in out and P208 not in out and GUARD not in out and FALL not in out and TARGET not in out and NODE not in out,
                             "EXTRA_MARKER_OUTSIDE_ORIGINAL_COROUTINE")
         for owner,name,desc in [
              (prev.ENGINE,"start","(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"),
@@ -172,6 +183,7 @@ def main():
         print("P209_ALL_ORIGINAL_BRANCH_TARGETS_RELOCATED_EXACTLY=PASS")
         print("P209_PC26_FALLTHROUGH_PC30_MARKER_ONLY_TEST_DEX=PASS")
         print("P209_PC176_POST_THROWONFAILURE_REUSED_MARKER_ONLY_TEST_DEX=PASS")
+        print("P218_PRE_PC406_DISPOSABLE_MARKER_ONLY_TEST_DEX=PASS")
         print("P209_FIRST_GUARD_SIGNED_PC="+str([(pc,op) for pc,op,out in ins(prev.find(o,prev.START2,"invokeSuspend","(Ljava/lang/Object;)Ljava/lang/Object;")) if op.startswith("if-")][0][0]))
         print("P209_PRE_PC3912_MARKER_ONLY_IN_DISPOSABLE_CLASSES3=PASS")
         print("P209_REAL_PC3912_RUNTIME_EXECUTION=NOT_ATTESTED")

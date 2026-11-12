@@ -75,7 +75,7 @@ jobs:
           print("P209_SOURCE_PYTHON_SYNTAX=PASS")
           PY
           python3 -B host_candidate/p209_original_p47_deny/test_patch_gate_ci_only.py 2>&1 | tee "$RUNNER_TEMP/p209-unit.log"
-          grep -Eq '^Ran 30 tests in' "$RUNNER_TEMP/p209-unit.log"
+          grep -Eq '^Ran 33 tests in' "$RUNNER_TEMP/p209-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-unit.log"
           python3 -B host_candidate/p209_original_p47_deny/test_audit_signed_process_prelaunch.py 2>&1 | tee "$RUNNER_TEMP/p209-static-unit.log"
           grep -Eq '^Ran 5 tests in' "$RUNNER_TEMP/p209-static-unit.log"
@@ -212,6 +212,7 @@ jobs:
           grep -Fxq 'P209_ALL_ORIGINAL_BRANCH_TARGETS_RELOCATED_EXACTLY=PASS' "$RUNNER_TEMP/p208-parity.log"
           grep -Fxq 'P209_PC26_FALLTHROUGH_PC30_MARKER_ONLY_TEST_DEX=PASS' "$RUNNER_TEMP/p208-parity.log"
           grep -Fxq 'P209_PC176_POST_THROWONFAILURE_REUSED_MARKER_ONLY_TEST_DEX=PASS' "$RUNNER_TEMP/p208-parity.log"
+          grep -Fxq 'P218_PRE_PC406_DISPOSABLE_MARKER_ONLY_TEST_DEX=PASS' "$RUNNER_TEMP/p208-parity.log"
           grep -Fxq 'P209_PRE_PC3912_MARKER_ONLY_IN_DISPOSABLE_CLASSES3=PASS' "$RUNNER_TEMP/p208-parity.log"
           python3 host_candidate/p209_original_p47_deny/verify_gate_dex.py \
             .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
