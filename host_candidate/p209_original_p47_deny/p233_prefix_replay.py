@@ -24,6 +24,35 @@ def audit(first, second):
     except OSError:
         return "IO_ERROR"
 
+def length_band(size):
+    """Fixed enum only; do not print byte counts or any trace bytes."""
+    if not isinstance(size,int) or size < 0:
+        return "UNKNOWN"
+    if size == 0:
+        return "EMPTY"
+    delta = size - EXPECTED
+    if delta == 0:
+        return "EXACT_7M"
+    if delta < 0:
+        difference = -delta
+        if difference <= 64: return "SHORT_1_TO_64"
+        if difference <= 4096: return "SHORT_65_TO_4096"
+        if difference <= 65536: return "SHORT_4097_TO_65536"
+        return "SHORT_OVER_65536"
+    if delta <= 64: return "OVER_1_TO_64"
+    if delta <= 4096: return "OVER_65_TO_4096"
+    if delta <= 65536: return "OVER_4097_TO_65536"
+    return "OVER_OVER_65536"
+
+def file_length_band(path):
+    try:
+        file = Path(path)
+        if file.is_symlink() or not file.is_file():
+            return "UNSAFE_OR_MISSING"
+        return length_band(file.stat().st_size)
+    except OSError:
+        return "UNKNOWN"
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("first")
@@ -32,6 +61,10 @@ def main():
     result = audit(args.first, args.second)
     if result not in STATES:
         result = "IO_ERROR"
+    # P234: always emit independent sizes as enums, including on DENY.
+    # No exact lengths, bytes, hashes, pathnames or trace metadata.
+    print("P234_FIRST_PREFIX_LENGTH_BAND=" + file_length_band(args.first))
+    print("P234_REPLAY_PREFIX_LENGTH_BAND=" + file_length_band(args.second))
     print("P233_PREFIX_EXACT_STABLE_REPLAY=" + result)
     print("P233_NO_PREFIX_BYTES_OR_HASHES_EXPOSED=YES")
     return 0 if result == "PASS" else 2
