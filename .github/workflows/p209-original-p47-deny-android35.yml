@@ -172,6 +172,17 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_p226_event_audit.py 2>&1 | tee "$RUNNER_TEMP/p226-unit.log"
           grep -Eq '^Ran 12 tests in' "$RUNNER_TEMP/p226-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p226-unit.log"
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ("p228_bounded_prefix_positive.py",
+                       "test_p228_bounded_prefix_positive.py"):
+              p=Path("host_candidate/p209_original_p47_deny")/name
+              compile(p.read_text(encoding="utf-8"),str(p),"exec")
+          print("P228_PREFIX_PYTHON_SYNTAX=PASS")
+          PY
+          python3 -B host_candidate/p209_original_p47_deny/test_p228_bounded_prefix_positive.py 2>&1 | tee "$RUNNER_TEMP/p228-prefix-unit.log"
+          grep -Eq '^Ran 15 tests in' "$RUNNER_TEMP/p228-prefix-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p228-prefix-unit.log"
           bash -n host_candidate/p209_original_p47_deny/p226_nonsampling_disposable.sh
           python3 - <<'PY'
           from pathlib import Path

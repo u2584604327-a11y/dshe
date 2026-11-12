@@ -96,14 +96,35 @@ if [[ ! -s "$localdir/data.trace" ]];then
    adb -s "$s" shell am profile stop "$pid" >/dev/null 2>&1 || true
   elif adb -s "$s" shell am profile stop "$pid" >/dev/null 2>&1;then
    echo P227_EXPLICIT_NON_SAMPLED_STREAMING_STOP=ACCEPTED
-   if adb -s "$s" pull "$stream" "$localdir/stream.trace" >/dev/null 2>&1;then
-    if python3 -B host_candidate/p209_original_p47_deny/p226_event_audit.py "$localdir/stream.trace";then
-     echo P227_STRICT_NON_SAMPLED_STREAMING_AUDIT=PASS
+   # No full-pull for oversized trace. Validate remote size first,
+   # then transfer at most 8 MiB for POSITIVE-ONLY prefix observation.
+   remote_bytes="$(adb -s "$s" shell stat -c '%s' "$stream" 2>/dev/null | tr -d '\r\n' || true)"
+   if [[ ! "$remote_bytes" =~ ^[1-9][0-9]*$ ]];then
+    echo P228_REMOTE_STREAM_FILE_SIZE=NOT_ATTESTED
+   elif [[ "${#remote_bytes}" -gt 12 ]];then
+    echo P228_REMOTE_TRACE_UNBOUNDED=DENY
+   elif (( remote_bytes > 16777216 ));then
+    echo P228_REMOTE_TRACE_BAND=ABOVE_16M_CAP
+    if adb -s "$s" exec-out dd if="$stream" bs=65536 count=128 2>/dev/null > "$localdir/bounded-prefix.trace";then
+     if python3 -B host_candidate/p209_original_p47_deny/p228_bounded_prefix_positive.py "$localdir/bounded-prefix.trace";then
+      echo P228_POSITIVE_ONLY_PREFIX_AUDIT=PASS
+     else
+      echo P228_POSITIVE_ONLY_PREFIX_AUDIT=NOT_ATTESTED
+     fi
     else
-     echo P227_STRICT_NON_SAMPLED_STREAMING_AUDIT=NOT_ATTESTED
+     echo P228_BOUND_PREFIX_TRANSFER=NOT_ATTESTED
     fi
-   else
-    echo P227_STREAM_TRACE_TRANSFER=NOT_ATTESTED
+   elif (( remote_bytes <= 16777216 ));then
+    echo P228_REMOTE_TRACE_BAND=WITHIN_16M_CAP
+    if adb -s "$s" pull "$stream" "$localdir/stream.trace" >/dev/null 2>&1;then
+     if python3 -B host_candidate/p209_original_p47_deny/p226_event_audit.py "$localdir/stream.trace";then
+      echo P227_STRICT_NON_SAMPLED_STREAMING_AUDIT=PASS
+     else
+      echo P227_STRICT_NON_SAMPLED_STREAMING_AUDIT=NOT_ATTESTED
+     fi
+    else
+     echo P227_STREAM_TRACE_TRANSFER=NOT_ATTESTED
+    fi
    fi
   else
    echo P227_EXPLICIT_NON_SAMPLED_STREAMING_STOP=NOT_ATTESTED
