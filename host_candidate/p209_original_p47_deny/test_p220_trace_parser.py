@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """P220 synthetic binary traces, not an original app or user-data sample."""
 import struct,unittest
-from p220_trace_parser import InvalidTrace,parse,classify
+from p220_trace_parser import InvalidTrace,parse,classify,trace_size_band,MAX_BYTES
 def sample(version=3,mid=0x100,cls="com.dsh.android.EngineManager$start$2",method="invokeSuspend",actions=(0,)):
  size={1:9,2:10,3:14}.get(version,14)
  head=(f"*version\n3\nclock=dual\n*threads\n1\tmain\n*methods\n"
@@ -48,6 +48,11 @@ class Tests(unittest.TestCase):
   with self.assertRaises(InvalidTrace) as e:
    parse(sample().replace(b"SLOW",b"FAIL",1))
   self.assertEqual(str(e.exception),"BINARY_MAGIC_OR_EMPTY")
+ def test_size_band_empty(self):self.assertEqual(trace_size_band(0),"EMPTY")
+ def test_size_band_tiny(self):self.assertEqual(trace_size_band(31),"TINY")
+ def test_size_band_min(self):self.assertEqual(trace_size_band(32),"WITHIN_CAP")
+ def test_size_band_max(self):self.assertEqual(trace_size_band(MAX_BYTES),"WITHIN_CAP")
+ def test_size_band_over(self):self.assertEqual(trace_size_band(MAX_BYTES+1),"ABOVE_CAP")
  def test_dex_class_name(self):
   self.assertEqual(classify("Lcom/dsh/android/EngineManager$start$2;","invokeSuspend"),"START2")
 if __name__=="__main__":unittest.main(verbosity=2)

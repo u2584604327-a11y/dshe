@@ -15,6 +15,12 @@ WHITELIST={
  ("com.dsh.android.p47.P47LaunchGate","startOrDeny"):"P47_GATE",
 }
 class InvalidTrace(Exception):pass
+def trace_size_band(value):
+ if type(value) is not int or value<0:return "INVALID"
+ if value==0:return "EMPTY"
+ if value<32:return "TINY"
+ if value>MAX_BYTES:return "ABOVE_CAP"
+ return "WITHIN_CAP"
 def need(ok,stage="UNEXPECTED"):
  if not ok:raise InvalidTrace(stage)
 def classify(cls,meth):
@@ -71,6 +77,7 @@ def main():
   f=Path(a.trace)
   need(f.is_file() and not f.is_symlink(),"TRACE_LOCAL_FILE")
   size=f.stat().st_size
+  print("P220_TRACE_SIZE_BAND="+trace_size_band(size))
   need(32<=size<=MAX_BYTES,"TRACE_FILE_SIZE")
   version,n,hits=parse(f.read_bytes())
  except Exception as error:
