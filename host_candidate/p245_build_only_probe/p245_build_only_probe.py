@@ -160,8 +160,11 @@ def main():
         if a.patch:patch()
         elif a.restore:restore()
         else:verify(Path(a.verify))
-    except Exception:
-        print("P245_BUILD_ONLY_FAIL_CLOSED_DENY",file=sys.stderr)
+    except Exception as exc:
+        code=str(exc)
+        if not re.fullmatch(r"[A-Z0-9_]{3,120}",code):
+            code="UNEXPECTED"
+        print("P245_BUILD_ONLY_DENY_CODE="+code,file=sys.stderr)
         return 2
     return 0
 if __name__=="__main__":raise SystemExit(main())
