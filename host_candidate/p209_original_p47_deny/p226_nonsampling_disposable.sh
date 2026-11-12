@@ -121,10 +121,24 @@ if [[ ! -s "$localdir/data.trace" ]];then
       echo P230_PREFIX_TRANSFER_BAND=ABOVE_CAP
      else
       echo P230_PREFIX_TRANSFER_BAND=WITHIN_CAP
-      # P229 validates SLOW/header/metadata, so any transport text is rejected.
-      if python3 -B host_candidate/p209_original_p47_deny/p229_stream_v1_prefix.py "$localdir/bounded-prefix.trace";then
-       echo P230_STREAMING_PREFIX_AUDIT=PASS
+      # P233: a stopped immutable trace must produce two byte-identical
+      # 7MiB bounded prefixes. Do NOT parse until exact-size replay succeeds.
+      # The second trace copy is local to this disposable emulator job and
+      # deleted with $localdir; neither copy is printed or uploaded.
+      if adb -s "$s" exec-out dd if="$stream" bs=65536 count=112 2>/dev/null > "$localdir/bounded-prefix-replay.trace";then
+       if python3 -B host_candidate/p209_original_p47_deny/p233_prefix_replay.py \
+        "$localdir/bounded-prefix.trace" "$localdir/bounded-prefix-replay.trace";then
+        # P229 still validates SLOW/version/metadata/action and rejects flaws.
+        if python3 -B host_candidate/p209_original_p47_deny/p229_stream_v1_prefix.py "$localdir/bounded-prefix.trace";then
+         echo P230_STREAMING_PREFIX_AUDIT=PASS
+        else
+         echo P230_STREAMING_PREFIX_AUDIT=NOT_ATTESTED
+        fi
+       else
+        echo P230_STREAMING_PREFIX_AUDIT=NOT_ATTESTED
+       fi
       else
+       echo P233_PREFIX_SECOND_TRANSFER=NOT_ATTESTED
        echo P230_STREAMING_PREFIX_AUDIT=NOT_ATTESTED
       fi
      fi
