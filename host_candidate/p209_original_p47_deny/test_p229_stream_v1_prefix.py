@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Synthetic ART V1 streaming fixtures, 15 strict positive/negative tests."""
+"""Synthetic ART V1 streaming fixtures, 18 strict positive/negative tests."""
 import struct
 import unittest
 from p229_stream_v1_prefix import inspect,Rejected,MAX_PREFIX
 
 def trace(events=((1,4,0),),method="invokeSuspend",
-          cls="com.dsh.android.EngineManager$start$2",ver=3):
+          cls="com.dsh.android.EngineManager$start$2",ver=0xF3):
     head=(b"SLOW"+struct.pack("<HHQH",ver,32,1234,14)).ljust(32,b"\0")
     thread=b"\0\0\x02"+struct.pack("<HH",1,4)+b"main"
     info=(f"0x4\t{cls}\t{method}\t()V\tExample.kt\t1\n").encode()
@@ -39,6 +39,15 @@ class Tests(unittest.TestCase):
         with self.assertRaises(Rejected):inspect(trace().replace(b"SLOW",b"FAIL",1))
     def test_stream_version_not_v3(self):
         with self.assertRaises(Rejected) as e:inspect(trace(ver=5))
+        self.assertEqual(str(e.exception),"FORMAT_VERSION")
+    def test_plain_nonstreaming_v3_rejected(self):
+        with self.assertRaises(Rejected) as e:inspect(trace(ver=3))
+        self.assertEqual(str(e.exception),"FORMAT_VERSION")
+    def test_other_streaming_v2_rejected(self):
+        with self.assertRaises(Rejected) as e:inspect(trace(ver=0xF2))
+        self.assertEqual(str(e.exception),"FORMAT_VERSION")
+    def test_newer_streaming_format_rejected(self):
+        with self.assertRaises(Rejected) as e:inspect(trace(ver=0xF5))
         self.assertEqual(str(e.exception),"FORMAT_VERSION")
     def test_wrong_width_denied(self):
         raw=bytearray(trace());raw[16:18]=b"\x10\0"

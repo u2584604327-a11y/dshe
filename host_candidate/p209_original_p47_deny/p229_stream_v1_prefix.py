@@ -33,7 +33,9 @@ def inspect(data):
     need(type(data) is bytes and 32<=len(data)<=MAX_PREFIX,"INPUT")
     need(data[:4]==b"SLOW","HEADER_MAGIC")
     ver=int.from_bytes(data[4:6],"little")
-    need(ver==3,"FORMAT_VERSION")
+    # AOSP ART streaming format V1 sets 0xF0 on the dual-clock v3 version.
+    # Only raw 0xF3 is supported here; do not accept plain v3 or newer V2.
+    need(ver==0xF3,"FORMAT_VERSION")
     off=int.from_bytes(data[6:8],"little")
     width=int.from_bytes(data[16:18],"little")
     need(off==32 and width==14 and len(data)>32,"HEADER_LAYOUT")
