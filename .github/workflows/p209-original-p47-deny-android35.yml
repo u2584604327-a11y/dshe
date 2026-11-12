@@ -79,6 +79,17 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_patch_gate_ci_only.py 2>&1 | tee "$RUNNER_TEMP/p209-unit.log"
           grep -Eq '^Ran 30 tests in' "$RUNNER_TEMP/p209-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-unit.log"
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ("p238_signed_coroutine_capture.py",
+                       "test_p238_signed_coroutine_capture.py"):
+              p=Path("host_candidate/p209_original_p47_deny")/name
+              compile(p.read_text(encoding="utf-8"),str(p),"exec")
+          print("P238_CAPTURE_SOURCE_SYNTAX=PASS")
+          PY
+          python3 -B host_candidate/p209_original_p47_deny/test_p238_signed_coroutine_capture.py 2>&1 | tee "$RUNNER_TEMP/p238-capture-unit.log"
+          grep -Eq '^Ran 8 tests in' "$RUNNER_TEMP/p238-capture-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p238-capture-unit.log"
           python3 -B host_candidate/p209_original_p47_deny/test_audit_signed_process_prelaunch.py 2>&1 | tee "$RUNNER_TEMP/p209-static-unit.log"
           grep -Eq '^Ran 5 tests in' "$RUNNER_TEMP/p209-static-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p209-static-unit.log"
@@ -311,6 +322,12 @@ jobs:
           grep -Fxq 'P209_FIRST_SIGNED_CONDITION_PC=26' "$RUNNER_TEMP/p209-gate-parity.log"
           grep -Fxq 'P209_FIRST_GUARD_RUNTIME_SELECTED_ARM=NOT_ATTESTED' "$RUNNER_TEMP/p209-gate-parity.log"
           grep -Fxq 'P209_DISPOSABLE_P47_MAIN_GATE_BINARY_LOGS=PASS' "$RUNNER_TEMP/p209-gate-parity.log"
+          python3 -B host_candidate/p209_original_p47_deny/p238_signed_coroutine_capture.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            | tee "$RUNNER_TEMP/p238-capture-static.log"
+          grep -Fxq 'P238_READONLY_SIGNED_COROUTINE_CAPTURE_AUDIT=PASS' "$RUNNER_TEMP/p238-capture-static.log"
+          grep -Fxq 'P238_PC202_PC214_DYNAMIC_BRANCH=NOT_ATTESTED' "$RUNNER_TEMP/p238-capture-static.log"
+          grep -Fxq 'P238_SAME_WIDTH_MARKER_REWRITE=NOT_ATTEMPTED' "$RUNNER_TEMP/p238-capture-static.log"
           python3 -B host_candidate/p209_original_p47_deny/audit_signed_process_prelaunch.py \
             .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
             | tee "$RUNNER_TEMP/p209-process-prelaunch.log"
