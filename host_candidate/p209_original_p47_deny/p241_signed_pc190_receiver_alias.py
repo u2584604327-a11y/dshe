@@ -71,7 +71,7 @@ def transfer(op,output,state):
         incomplete=True
     return tuple(s),incomplete
 
-def normal_alias(rows,edges,receiver,source,target=190):
+def normal_alias(rows,edges,receiver,source,target=190,register_count=None):
     """Finite monotone abstract interpretation on target-reaching normal edges."""
     require(0 in rows and target in rows,"P241_PC_SET")
     require(0<=receiver<MAX_REGS and 0<=source<MAX_REGS,"P241_REG_BOUND")
@@ -91,8 +91,18 @@ def normal_alias(rows,edges,receiver,source,target=190):
                 relevant.add(p);todo.append(p)
     if 0 not in relevant:
         return "NOT_ATTESTED",False,0
-    count=max(receiver,source)+1
-    require(count<=MAX_REGS,"P241_REG_COUNT")
+    # A valid alias can pass through a third v-register. A state vector
+    # sized only for the endpoint silently drops such intermediate copies.
+    # For signed DEX, enforce the exact code-item register count.
+    inferred=max(receiver,source)+1
+    for op,output in rows.values():
+        if op.startswith("move-object"):
+            pair=parse_two(output)
+            if pair is not None:
+                inferred=max(inferred,pair[0]+1,pair[1]+1)
+    count=inferred if register_count is None else register_count
+    require(type(count) is int and inferred<=count<=MAX_REGS,
+            "P241_REG_COUNT")
     initial=tuple(frozenset({ALIAS}) if i==receiver else
                   frozenset({UNKNOWN}) for i in range(count))
     incoming={0:initial}
@@ -169,7 +179,12 @@ def audit(original):
            for pc,ins in rows]
     edges,unknown,by=cfg.graph(nodes)
     safe_rows={pc:(ins.get_name(),ins.get_output()) for pc,ins in rows}
-    answer,incomplete,visited=normal_alias(safe_rows,edges,receiver,source)
+    answer,incomplete,visited=normal_alias(
+        safe_rows,edges,receiver,source,register_count=code.get_registers_size())
+    if unknown:
+        # An unexpanded switch/payload can hide a predecessor to PC190;
+        # normal-path ALL is not a complete normal CFG proof in that case.
+        answer="NOT_ATTESTED"
     handlers=code.get_tries_size()
     require(type(handlers) is int and 0<=handlers<=4096,"P241_TRY_TABLE")
     print("P241_SIGNED_SHA_AND_ORIGINAL_PC190_OPERAND=PASS")

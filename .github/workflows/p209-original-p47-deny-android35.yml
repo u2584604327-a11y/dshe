@@ -98,7 +98,7 @@ jobs:
           print("P241_SIGNED_LOCAL_CFG_SOURCE_SYNTAX=PASS")
           PY
           python3 -B host_candidate/p209_original_p47_deny/test_p241_signed_pc190_receiver_alias.py 2>&1 | tee "$RUNNER_TEMP/p241-unit.log"
-          grep -Eq '^Ran 12 tests in' "$RUNNER_TEMP/p241-unit.log"
+          grep -Eq '^Ran 13 tests in' "$RUNNER_TEMP/p241-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p241-unit.log"
           python3 -B host_candidate/p209_original_p47_deny/test_audit_signed_process_prelaunch.py 2>&1 | tee "$RUNNER_TEMP/p209-static-unit.log"
           grep -Eq '^Ran 5 tests in' "$RUNNER_TEMP/p209-static-unit.log"

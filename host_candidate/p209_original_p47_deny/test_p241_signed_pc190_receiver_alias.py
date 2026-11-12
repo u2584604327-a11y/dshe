@@ -45,6 +45,12 @@ class Tests(unittest.TestCase):
     def test_invalid_edge_is_denied(self):
         with self.assertRaises(Denied):
             fake({0:("move-object","v1,v0"),6:("iget-object","v3,v1,Lx;->p Ly;")},{0:(8,),6:()})
+    def test_underallocated_explicit_register_file_denied(self):
+        rows={0:("move-object","v2,v0"),
+              2:("move-object","v1,v2"),
+              6:("iget-object","v3,v1,Lx;->p Ly;")}
+        with self.assertRaises(Denied):
+            normal_alias(rows,{0:(2,),2:(6,),6:()},0,1,6,register_count=2)
     def test_reg_bound_denied(self):
         with self.assertRaises(Denied):
             fake({0:("nop",""),6:("nop","")},{0:(6,),6:()},source=1000)
