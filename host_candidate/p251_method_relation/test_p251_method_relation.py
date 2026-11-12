@@ -17,6 +17,20 @@ def moved():
     return Method(code=Code(total=7,tries=[Try(start=0,width=4)],
                        table=Table([Handler(pairs=[Pair(3,4)])])),
                   pcs=[0,2,6,8,10,12],widths=[2,4,2,2,2,2])
+def before_target_shift():
+    # Try protection ends at code unit 2; handler starts later at unit 4.
+    return Method(code=Code(tries=[Try(start=0,width=2)],
+                       table=Table([Handler(pairs=[Pair(3,4)])])))
+def after_target_shift():
+    # Only an instruction *after* the try boundary grows by one code unit.
+    # Typed handler target moves 4 -> 5, but retains ordinal index 4.
+    return Method(code=Code(total=7,tries=[Try(start=0,width=2)],
+                       table=Table([Handler(pairs=[Pair(3,5)])])),
+                  pcs=[0,2,4,8,10,12],widths=[2,2,4,2,2,2])
+def wrong_shifted_target():
+    return Method(code=Code(total=7,tries=[Try(start=0,width=2)],
+                       table=Table([Handler(pairs=[Pair(3,6)])])),
+                  pcs=[0,2,4,8,10,12],widths=[2,2,4,2,2,2])
 def wrong_ordinal():
     return Method(code=Code(total=7,tries=[Try(start=0,width=4)],
                        table=Table([Handler(pairs=[Pair(3,5)])])),
@@ -52,9 +66,9 @@ class Tests(unittest.TestCase):
  def test_09_sorted_first_method_is_consistent(self):
     self.assertEqual(check({EARLY:base(),LATE:base()},{EARLY:moved(),LATE:target()})["relation"],"SAME_METHOD")
  def test_10_true_ordinal_alignment_only(self):
-    self.assertEqual(check({START:base()},{START:moved()})["alignment"],"ORDINALS_MATCH_ONLY")
+    self.assertEqual(check({START:before_target_shift()},{START:after_target_shift()})["alignment"],"ORDINALS_MATCH_ONLY")
  def test_11_wrong_target_ordinal_denied(self):
-    self.assertEqual(check({START:base()},{START:wrong_ordinal()})["alignment"],"ORDINALS_DIFFER")
+    self.assertEqual(check({START:before_target_shift()},{START:wrong_shifted_target()})["alignment"],"ORDINALS_DIFFER")
  def test_12_target_shift_without_size_rebase(self):
     self.assertEqual(check({START:base()},{START:target()})["alignment"],"ORDINALS_DIFFER")
  def test_13_changed_try_scope_must_not_pass(self):
@@ -92,7 +106,7 @@ class Tests(unittest.TestCase):
                              table=Table([Handler(off=204)],base=200),total=6))
     self.assertEqual(check({START:base()},{START:changed})["relation"],"NOT_APPLICABLE")
  def test_25_exception_ordinal_map_preserved(self):
-    self.assertEqual(ordinal_edges(base(),decode(base(),D)),ordinal_edges(moved(),decode(moved(),D)))
+    self.assertEqual(ordinal_edges(before_target_shift(),decode(before_target_shift(),D)),ordinal_edges(after_target_shift(),decode(after_target_shift(),D)))
  def test_26_exception_ordinal_map_changed_on_scope_shift(self):
     self.assertNotEqual(ordinal_edges(base(),decode(base(),D)),ordinal_edges(changed_scope(),decode(changed_scope(),D)))
  def test_27_ordinal_target_bounds_denied(self):
