@@ -66,6 +66,19 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(operand_shape("unrecognized-token",8),
                          ("UNKNOWN","UNKNOWN","UNPARSEABLE"))
 
+    def test_p240_pc190_engine_capture_vs_other_pc182(self):
+        first = "v1, v4, "+START+"->L$0 Ljava/lang/Object;"
+        second = self.output
+        self.assertEqual(operand_shape(first,8),
+                         ("COROUTINE","OTHER","OTHER_VREG"))
+        self.assertEqual(capture_verdict(self.one,second,8),
+                         ("ONE","CANDIDATE"))
+
+    def test_p240_pc190_wrong_source_is_not_positive(self):
+        second = self.output.replace("v8","v2")
+        self.assertEqual(capture_verdict(self.one,second,8),
+                         ("ONE","NOT_ATTESTED"))
+
     def test_empty_data_cannot_prove_capture(self):
         self.assertEqual(self.verdict([],""),("NONE","NOT_ATTESTED"))
 

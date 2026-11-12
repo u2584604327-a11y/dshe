@@ -90,14 +90,16 @@ def signed_audit(apk):
     require(not (m.get_access_flags() & 0x8) and code.get_ins_size() == 2,
             "COROUTINE_THIS_AND_RESUME_ARG")
     instructions = dict(m.get_instructions_idx())
-    require(all(i in instructions for i in (176,182,194,202,214,250,3912)),
+    require(all(i in instructions for i in (176,182,190,194,202,214,250,3912)),
             "REQUIRED_ORIGINAL_PC")
-    pc176,pc182,pc194 = (instructions[i] for i in (176,182,194))
+    pc176,pc182,pc190,pc194 = (instructions[i] for i in (176,182,190,194))
     require(pc176.get_name() == "invoke-static/range" and
             "Lkotlin/ResultKt;->throwOnFailure(" in
                 "".join(pc176.get_output().split()) and
             176+pc176.get_length() == 182 and
             pc182.get_name() == "iget-object" and
+            pc190.get_name() == "iget-object" and
+            190+pc190.get_length() == 194 and
             pc194.get_name().startswith("invoke-") and
             GETTER in "".join(pc194.get_output().split()),
             "PC176_182_194_SHAPE")
@@ -110,6 +112,10 @@ def signed_audit(apk):
     kind,provenance = capture_verdict(fields,pc182.get_output(),receiver_register)
     field_owner,field_type,register_source = operand_shape(
         pc182.get_output(),receiver_register)
+    pc190_owner,pc190_type,pc190_source = operand_shape(
+        pc190.get_output(),receiver_register)
+    _,pc190_provenance = capture_verdict(
+        fields,pc190.get_output(),receiver_register)
     print("P238_SIGNED_V138_SHA_AND_START2_SIGNATURE=PASS")
     print("P238_PC176_182_194_202_214_PINNED=PASS")
     print("P238_ORIGINAL_COROUTINE_RECEIVER_P0=PASS")
@@ -119,6 +125,12 @@ def signed_audit(apk):
     print("P239_PC182_FIELD_TYPE="+field_type)
     print("P239_PC182_SOURCE_REGISTER="+register_source)
     print("P239_ORIGINAL_RAW_PC182_OPERANDS_PRINTED=NO")
+    print("P240_PC190_FIELD_OWNER="+pc190_owner)
+    print("P240_PC190_FIELD_TYPE="+pc190_type)
+    print("P240_PC190_SOURCE_REGISTER="+pc190_source)
+    print("P240_PC190_ENGINE_FROM_RECEIVER_P0="+pc190_provenance)
+    print("P240_PC190_PC194_SIGNED_ADJACENCY=PASS")
+    print("P240_SIGNED_RAW_PC190_OPERANDS_PRINTED=NO")
     print("P238_SAME_WIDTH_MARKER_REWRITE=NOT_ATTEMPTED")
     print("P238_BRANCH_OPCODE_WIDTH_TARGET_PARITY=REQUIRED_BEFORE_RUNTIME")
     print("P238_ENGINE_PROCESS_FIELD_RUNTIME_VALUE=NOT_ATTESTED")
