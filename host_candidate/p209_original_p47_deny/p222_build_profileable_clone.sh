@@ -67,7 +67,7 @@ keytool -genkeypair -alias diagnostic -keyalg RSA -keysize 3072 -validity 1 \
  --ks-pass "pass:$pw" --key-pass "pass:$pw" --out "$out" "$d/aligned.apk"
 unset pw
 "$bt/apksigner" verify "$out"
-python3 - "$signed" "$base" "$out" <<'PY'
+PYTHONPATH=host_candidate/p209_original_p47_deny python3 - "$signed" "$base" "$out" <<'PY'
 import sys,zipfile,hashlib,copy
 from pathlib import Path
 from androguard.core.apk import APK
