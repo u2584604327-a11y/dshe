@@ -80,13 +80,12 @@ def precall_fixture():
       "    :done\n"+
       "    invoke-static/range {p1 .. p1}, Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V\n"+
       "    iget-object v2, p0, Lcom/dsh/android/EngineManager$start$2;->label:I\n"+
-      "    invoke-virtual {v2}, Lcom/dsh/android/termux/TermuxBootstrap;->installNodeRuntime()Ljava/lang/Object;\n"+
-       "    invoke-static {v0}, "+p.P40_TARGET+"\n"+
+      "    invoke-static {v0}, "+p.P40_TARGET+"\n"+
       "    return-object v0\n.end method\n")
 class PreCallTests(unittest.TestCase):
     def test_pre_call_exact_inverse(self):
         s=precall_fixture()
-        self.assertEqual(p.inject_precall(s).replace(p.GUARD_INVOKE,"",1).replace(p.FALL_INVOKE,"",1).replace(p.TARGET_INVOKE,"",1).replace(p.NODE_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),s)
+        self.assertEqual(p.inject_precall(s).replace(p.GUARD_INVOKE,"",1).replace(p.FALL_INVOKE,"",1).replace(p.TARGET_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),s)
     def test_missing_p40_fails_closed(self):
         s=precall_fixture().replace(p.P40_TARGET,"Lcom/example/Other;->start()V")
         with self.assertRaises(p.Deny):p.inject_precall(s)
@@ -112,7 +111,7 @@ class PreCallTests(unittest.TestCase):
     def test_dynamic_first_if_op_matches_exact_runtime_pin(self):
         value=precall_fixture().replace("if-ne v0, v1", "if-nez v0")
         result=p.inject_precall(value,expected_guard_op="if-nez")
-        self.assertEqual(result.replace(p.GUARD_INVOKE,"",1).replace(p.FALL_INVOKE,"",1).replace(p.TARGET_INVOKE,"",1).replace(p.NODE_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),value)
+        self.assertEqual(result.replace(p.GUARD_INVOKE,"",1).replace(p.FALL_INVOKE,"",1).replace(p.TARGET_INVOKE,"",1).replace(p.PRE_INVOKE,"",1),value)
     def test_fallthrough_marker_once_between_if_and_p40(self):
         result=p.inject_precall(precall_fixture())
         self.assertEqual(result.count(p.FALL_INVOKE.strip()),1)
@@ -141,19 +140,4 @@ class PreCallTests(unittest.TestCase):
         x=precall_fixture().replace(":done",":missing",1)
         with self.assertRaises(p.Deny) as err:p.inject_precall(x)
         self.assertEqual(str(err.exception),"P209_DENY_ORIGINAL_IF_TAKEN_LABEL_UNIQUE")
-    def test_p218_node_marker_is_unique_and_ordered(self):
-        s=p.inject_precall(precall_fixture())
-        self.assertEqual(s.count(p.NODE_INVOKE.strip()),1)
-        self.assertLess(s.index(p.TARGET_INVOKE),s.index(p.NODE_INVOKE))
-        self.assertLess(s.index(p.NODE_INVOKE),s.index(p.NODE_TARGET))
-        self.assertLess(s.index(p.NODE_TARGET),s.index(p.PRE_INVOKE))
-    def test_p218_missing_original_node_call_denied(self):
-        with self.assertRaises(p.Deny):
-            p.inject_precall(precall_fixture().replace(
-                p.NODE_TARGET,"Lfake/Other;->installNodeRuntime("))
-    def test_p218_duplicate_original_node_call_denied(self):
-        s=precall_fixture()
-        line=next(x for x in s.splitlines(keepends=True) if p.NODE_TARGET in x)
-        with self.assertRaises(p.Deny):
-            p.inject_precall(s.replace(line,line+line))
 if __name__=="__main__":unittest.main(verbosity=2)
