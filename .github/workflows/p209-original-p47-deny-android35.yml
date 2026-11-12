@@ -27,6 +27,7 @@ jobs:
       P51_SIDE_BY_SIDE: '0'
       P208_CI_METHOD_ENTRY_ONLY: '1'
       P209_FINAL_DENY_ONLY: '1'
+      P222_OFFLINE_PROFILE: '1'
       P74_FIXTURE_ENGINE_BRIDGE: '0'
       P75_RENDEZVOUS_FIXTURE: '0'
     steps:
@@ -171,6 +172,7 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_p221_profile_manifest_policy.py 2>&1 | tee "$RUNNER_TEMP/p221-profile-unit.log"
           grep -Eq '^Ran 15 tests in' "$RUNNER_TEMP/p221-profile-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p221-profile-unit.log"
+          bash -n host_candidate/p209_original_p47_deny/p222_build_profileable_clone.sh
           bash -n host_candidate/p209_original_p47_deny/p220_profile_disposable.sh
           bash -n host_candidate/p209_original_p47_deny/p220_baseline_then_profile.sh
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh

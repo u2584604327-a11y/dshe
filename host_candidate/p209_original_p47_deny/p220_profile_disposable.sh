@@ -24,10 +24,25 @@ printf '%s\n' "$policy"
 [[ "$policy" == *P221_SIGNED_AND_DISPOSABLE_MANIFEST_POLICY_AUDIT=PASS* ]] || {
  echo P221_MISSING_MANIFEST_POLICY_PROOF=DENY;exit 2;
 }
+# Only a manifest-only differently signed temporary APK is profileable;
+# the signed original and baseline P209 APK remain immutable.
+trap 'rm -rf -- .p222tmp' EXIT
 if [[ "$policy" != *P221_DISPOSABLE_SHELL_PROFILE_ALLOWED=YES* ]];then
- echo P220_DISPOSABLE_TRACE=SKIPPED_UNPROFILEABLE_MANIFEST
- echo P220_EMPTY_TRACE_IS_NOT_METHOD_NONEXECUTION=YES
- exit 0
+ if [[ "$P222_OFFLINE_PROFILE" != 1 ]];then
+  echo P220_DISPOSABLE_TRACE=SKIPPED_UNPROFILEABLE_MANIFEST
+  exit 0
+ fi
+ bash host_candidate/p209_original_p47_deny/p222_build_profileable_clone.sh
+ apk=.p222tmp/P222-PROFILEABLE-OFFLINE-NOT-FOR-RELEASE.apk
+ policy="$(python3 -B host_candidate/p209_original_p47_deny/p221_profile_manifest_policy.py "$original" "$apk")" || {
+  echo P222_PROFILE_CLONE_POLICY=DENY;exit 2;
+ }
+ printf '%s\n' "$policy"
+ [[ "$policy" == *P221_DISPOSABLE_DEBUGGABLE=NO* &&
+    "$policy" == *P221_DISPOSABLE_SHELL_PROFILE_ALLOWED=YES* ]] || {
+  echo P222_PROFILE_CLONE_UNEXPECTED_POLICY=DENY;exit 2;
+ }
+ echo P222_MANIFEST_ONLY_EMULATOR_CLONE=PASS
 fi
 already="$(adb -s "$serial" shell pm list packages -U com.dsh.android | tr -d '\r')"
 [[ "$already" != *"package:com.dsh.android"* ]] || {
@@ -46,7 +61,7 @@ cleanup(){
  fi
  adb -s "$serial" shell pm uninstall com.dsh.android >/dev/null 2>&1 || true
  adb -s "$serial" shell rm -f "$remote" >/dev/null 2>&1 || true
- rm -rf -- "$tmp"
+ rm -rf -- "$tmp" .p222tmp
 }
 trap cleanup EXIT
 adb -s "$serial" shell test ! -e "$remote" || { echo P220_TRACE_ALREADY_EXISTS=DENY;exit 2; }
