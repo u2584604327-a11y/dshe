@@ -133,6 +133,33 @@ def normal_alias(rows,edges,receiver,source,target=190,register_count=None):
         answer="NOT_ATTESTED"
     return answer,incomplete,iterations
 
+def try_span_verdict(try_items, total_code_units):
+    """P242: try_item start/length are 16-bit DEX code units, PCs are bytes.
+
+    Classify overlapping byte ranges only. Handler target edges and coroutine
+    resume paths are not modeled; no all-path alias claim is possible here.
+    """
+    require(type(total_code_units) is int and 0<total_code_units<=200000,
+            "P242_METHOD_SIZE_BOUND")
+    require(len(try_items)<=4096,"P242_TRY_ITEMS_BOUND")
+    intervals=[]
+    for start,count in try_items:
+        require(type(start) is int and type(count) is int and
+                0<=start<total_code_units and 0<count<=65535 and
+                start+count<=total_code_units,"P242_TRY_RANGE_BOUNDS")
+        intervals.append((2*start,2*(start+count)))
+    intervals.sort()
+    require(all(intervals[i-1][1]<=intervals[i][0]
+                for i in range(1,len(intervals))),"P242_OVERLAPPING_TRY_ITEMS")
+    covers=lambda pc:any(a<=pc<b for a,b in intervals)
+    overlaps=lambda lo,hi:any(a<hi and lo<b for a,b in intervals)
+    return (
+        "YES" if covers(176) else "NO",
+        "YES" if overlaps(182,190) else "NO",
+        "YES" if covers(190) else "NO",
+        "YES" if overlaps(0,190) else "NO"
+    )
+
 def audit(original):
     import hashlib,zipfile
     from androguard.core.dex import DEX
@@ -187,11 +214,23 @@ def audit(original):
         answer="NOT_ATTESTED"
     handlers=code.get_tries_size()
     require(type(handlers) is int and 0<=handlers<=4096,"P241_TRY_TABLE")
+    items=list(code.get_tries() or [])
+    require(len(items)==handlers,"P242_TRY_TABLE_COUNT")
+    intervals=[(item.get_start_addr(),item.get_insn_count()) for item in items]
+    c176,c182_190,c190,c0_190=try_span_verdict(
+        intervals,code.get_insns_size())
     print("P241_SIGNED_SHA_AND_ORIGINAL_PC190_OPERAND=PASS")
     print("P241_PC190_NORMAL_CFG_SOURCE_ALIAS="+answer)
     print("P241_NORMAL_CFG_INCOMPLETE_OPCODE="+("YES" if incomplete else "NO"))
     print("P241_SWITCH_OR_PAYLOAD_UNMODELED="+("YES" if unknown else "NO"))
     print("P241_EXCEPTION_HANDLERS="+("PRESENT" if handlers else "NONE"))
+    print("P242_PC176_IN_TRY_REGION="+c176)
+    print("P242_PC182_TO_PC190_TRY_OVERLAP="+c182_190)
+    print("P242_PC190_IN_TRY_REGION="+c190)
+    print("P242_PRE_PC190_ANY_TRY_REGION="+c0_190)
+    print("P242_EXCEPTION_HANDLER_TARGET_EDGES=NOT_MODELED")
+    print("P242_ALL_PATH_ALIAS_WITH_EXCEPTIONS=NOT_ATTESTED")
+    print("P242_TRY_RANGES_CODEUNIT_TO_BYTE_PC=PASS")
     print("P241_REG_ALIAS_EXCEPTION_SUSPENSION_AND_RUNTIME=NOT_ATTESTED")
     print("P241_ORIGINAL_PC202_PC214_DYNAMIC_BRANCH=NOT_ATTESTED")
     print("P241_SIGNED_ORIGINAL_DEX_AND_USER_DATA_EDITED=NO")

@@ -2,7 +2,7 @@
 """P241 synthetic receiver-alias CFG positives and fail-closed negatives."""
 import unittest
 from p238_signed_coroutine_capture import Denied
-from p241_signed_pc190_receiver_alias import normal_alias,ALIAS
+from p241_signed_pc190_receiver_alias import normal_alias,ALIAS,try_span_verdict
 
 def fake(rows,edges,receiver=0,source=1,target=6):
     return normal_alias(rows,edges,receiver,source,target)
@@ -51,6 +51,30 @@ class Tests(unittest.TestCase):
               6:("iget-object","v3,v1,Lx;->p Ly;")}
         with self.assertRaises(Denied):
             normal_alias(rows,{0:(2,),2:(6,),6:()},0,1,6,register_count=2)
+    def test_p242_try_covering_both_pc176_and_pc190(self):
+        self.assertEqual(try_span_verdict([(80,30)],300),
+                         ("YES","YES","YES","YES"))
+    def test_p242_pc182_window_only(self):
+        self.assertEqual(try_span_verdict([(91,4)],300),
+                         ("NO","YES","NO","YES"))
+    def test_p242_pc190_boundary_is_exclusive(self):
+        self.assertEqual(try_span_verdict([(88,7)],300),
+                         ("YES","YES","NO","YES"))
+    def test_p242_region_start_at_pc190_not_pre_window(self):
+        self.assertEqual(try_span_verdict([(95,4)],300),
+                         ("NO","NO","YES","NO"))
+    def test_p242_later_try_does_not_cover_early(self):
+        self.assertEqual(try_span_verdict([(300,10)],400),
+                         ("NO","NO","NO","NO"))
+    def test_p242_out_of_range_denied(self):
+        with self.assertRaises(Denied):
+            try_span_verdict([(9,400)],300)
+    def test_p242_overlapping_protection_denied(self):
+        with self.assertRaises(Denied):
+            try_span_verdict([(10,10),(15,8)],300)
+    def test_p242_noninteger_start_denied(self):
+        with self.assertRaises(Denied):
+            try_span_verdict([("88",7)],300)
     def test_reg_bound_denied(self):
         with self.assertRaises(Denied):
             fake({0:("nop",""),6:("nop","")},{0:(6,),6:()},source=1000)
