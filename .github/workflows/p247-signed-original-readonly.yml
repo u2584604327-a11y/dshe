@@ -1,0 +1,71 @@
+name: P247 signed v138 read-only original DEX parser
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p246_exception_semantics/**'
+      - '.github/workflows/p247-signed-original-readonly.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p247-original-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p247-signed-original:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify signed original only, never assemble or run app
+        run: |
+          set -euo pipefail
+          test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
+          test "$(git hash-object host_candidate/p43_original_service/build_embedded_emulator_apk.sh)" = 62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f
+          python3 - <<'PY'
+          from pathlib import Path
+          for n in ('p246_exception_semantics.py','p247_signed_v138_readonly.py'):
+            f=Path('host_candidate/p246_exception_semantics')/n
+            compile(f.read_text(encoding='utf-8'),str(f),'exec')
+          print('P247_ORIGINAL_AUDITOR_SOURCE_SYNTAX=PASS')
+          PY
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt >/dev/null
+          python3 - <<'PY'
+          import importlib.metadata
+          assert importlib.metadata.version('androguard')=='4.1.4'
+          print('P247_PINNED_ANDROGUARD_414=PASS')
+          PY
+          tmp="$RUNNER_TEMP/p247-signed-original"
+          mkdir -p "$tmp"
+          trap 'rm -rf "$RUNNER_TEMP/p247-signed-original"' EXIT
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo "$GH_REPO" --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --dir "$tmp" >/dev/null
+          file="$tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk"
+          test -f "$file" && test ! -L "$file"
+          test "$(stat -c %s "$file")" = 147341486
+          echo '3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5  '"$file" | sha256sum -c - >/dev/null
+          if ! python3 -B host_candidate/p246_exception_semantics/p247_signed_v138_readonly.py "$file" > "$tmp/check.log" 2>&1;then
+            grep -E '^(P247|P246|P243)_DENY_[A-Z0-9_]+$' "$tmp/check.log" || echo P247_DENY_UNEXPECTED
+            exit 2
+          fi
+          grep -Fxq 'P247_SIGNED_V138_SHA_AND_DEX=PASS' "$tmp/check.log"
+          grep -Fxq 'P247_ORIGINAL_START2_INSTRUCTION_COVERAGE=PASS' "$tmp/check.log"
+          grep -Fxq 'P247_P243_INDEPENDENT_TARGET_CROSSCHECK=PASS' "$tmp/check.log"
+          grep -Fxq 'P247_P245_DERIVED_PARITY=NOT_ATTESTED' "$tmp/check.log"
+          grep -Fxq 'P247_V139=STRUCTURAL_BLOCKED' "$tmp/check.log"
+          grep -Fxq 'P247_SIGNED_ORIGINAL_READONLY_AUDIT=PASS' "$tmp/check.log"
+          grep -E '^P247_[A-Z0-9_]+=' "$tmp/check.log"
+          test -z "$(git status --porcelain)"
+          echo P247_NO_APK_BUILD_ADB_EMULATOR_INSTALL=PASS
