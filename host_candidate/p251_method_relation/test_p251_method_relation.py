@@ -89,8 +89,8 @@ class Tests(unittest.TestCase):
     with self.assertRaises(Deny):check({START:base()},{START:bad})
  def test_24_byte_offset_relocation_no_semantics_change(self):
     changed=Method(code=Code(tries=[Try(off=4)],
-                             table=Table([Handler(off=204)],total=6)))
-    self.assertEqual(check({START:base()},{START:changed() if callable(changed) else changed})["relation"],"NOT_APPLICABLE")
+                             table=Table([Handler(off=204)],base=200),total=6))
+    self.assertEqual(check({START:base()},{START:changed})["relation"],"NOT_APPLICABLE")
  def test_25_exception_ordinal_map_preserved(self):
     self.assertEqual(ordinal_edges(base(),decode(base(),D)),ordinal_edges(moved(),decode(moved(),D)))
  def test_26_exception_ordinal_map_changed_on_scope_shift(self):
