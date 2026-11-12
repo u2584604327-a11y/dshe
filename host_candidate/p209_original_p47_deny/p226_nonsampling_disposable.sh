@@ -105,16 +105,31 @@ if [[ ! -s "$localdir/data.trace" ]];then
     echo P228_REMOTE_TRACE_UNBOUNDED=DENY
    elif (( remote_bytes > 16777216 ));then
     echo P228_REMOTE_TRACE_BAND=ABOVE_16M_CAP
-    if adb -s "$s" exec-out dd if="$stream" bs=65536 count=128 2>/dev/null > "$localdir/bounded-prefix.trace";then
-     # ART streaming starts with binary SLOW, then interleaves method/thread
-     # metadata and method events; it is NOT nonstreaming text-header-first.
-     if python3 -B host_candidate/p209_original_p47_deny/p229_stream_v1_prefix.py "$localdir/bounded-prefix.trace";then
-      echo P229_STREAMING_PREFIX_AUDIT=PASS
+    # P230: leave a full MiB headroom below the strict 8MiB prefix cap.
+    # Some ADB transports merge a bounded amount of remote dd diagnostics
+    # into stdout. Never accept corrupted prefix data as ART events.
+    # Report only a local-size band, NEVER raw bytes or remote trace paths.
+    if adb -s "$s" exec-out dd if="$stream" bs=65536 count=112 2>/dev/null > "$localdir/bounded-prefix.trace";then
+     local_size="$(stat -c '%s' "$localdir/bounded-prefix.trace" 2>/dev/null || true)"
+     if [[ ! "$local_size" =~ ^[0-9]+$ ]];then
+      echo P230_PREFIX_TRANSFER_BAND=UNKNOWN
+     elif (( local_size == 0 ));then
+      echo P230_PREFIX_TRANSFER_BAND=EMPTY
+     elif (( local_size < 32 ));then
+      echo P230_PREFIX_TRANSFER_BAND=TINY
+     elif (( local_size > 8388608 ));then
+      echo P230_PREFIX_TRANSFER_BAND=ABOVE_CAP
      else
-      echo P229_STREAMING_PREFIX_AUDIT=NOT_ATTESTED
+      echo P230_PREFIX_TRANSFER_BAND=WITHIN_CAP
+      # P229 validates SLOW/header/metadata, so any transport text is rejected.
+      if python3 -B host_candidate/p209_original_p47_deny/p229_stream_v1_prefix.py "$localdir/bounded-prefix.trace";then
+       echo P230_STREAMING_PREFIX_AUDIT=PASS
+      else
+       echo P230_STREAMING_PREFIX_AUDIT=NOT_ATTESTED
+      fi
      fi
     else
-     echo P228_BOUND_PREFIX_TRANSFER=NOT_ATTESTED
+     echo P230_BOUND_PREFIX_TRANSFER=NOT_ATTESTED
     fi
    elif (( remote_bytes <= 16777216 ));then
     echo P228_REMOTE_TRACE_BAND=WITHIN_16M_CAP
