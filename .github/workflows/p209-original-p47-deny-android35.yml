@@ -204,6 +204,8 @@ jobs:
           grep -Eq '^Ran 16 tests in' "$RUNNER_TEMP/p233-prefix-replay-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p233-prefix-replay-unit.log"
           bash -n host_candidate/p209_original_p47_deny/p226_nonsampling_disposable.sh
+          bash -n host_candidate/p209_original_p47_deny/p236_cold_stream_disposable.sh
+          echo P236_COLD_STREAM_SCRIPT_SYNTAX=PASS
           python3 - <<'PY'
           from pathlib import Path
           for name in ("p221_profile_manifest_policy.py",

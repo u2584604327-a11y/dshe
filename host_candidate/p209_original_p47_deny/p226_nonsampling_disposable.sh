@@ -24,6 +24,7 @@ echo P226_TEMP_UID_IPV4_IPV6_REJECT=PASS
 trace=/data/local/tmp/p226-temp-full-trace.trace
 bounded=/data/local/tmp/p235-disposable-bounded-prefix.trace
 bounded_created=0
+p235_parser_pass=0
 adb -s "$s" shell test ! -e "$trace" || { echo P226_TRACE_PREEXISTS=DENY;exit 2; }
 umask 077
 localdir="$(mktemp -d .p226-full.XXXXXXXX)"
@@ -137,6 +138,7 @@ if [[ ! -s "$localdir/data.trace" ]];then
         echo P235_BOUNDED_TRANSFER=PASS
         if python3 -B host_candidate/p209_original_p47_deny/p229_stream_v1_prefix.py "$localdir/bounded-prefix.trace";then
          echo P230_STREAMING_PREFIX_AUDIT=PASS
+         p235_parser_pass=1
         else
          echo P230_STREAMING_PREFIX_AUDIT=NOT_ATTESTED
         fi
@@ -170,3 +172,13 @@ else
 fi
 echo P227_EXPLICIT_SESSION_NOT_COLD_STARTUP_WITNESS=YES
 echo P226_NOT_ORIGINAL_V138_PROCESS_WITNESS=YES
+# P236 is a NEW disposable cold-start test, only after strict P235 PASS.
+if [[ "$p235_parser_pass" == 1 ]];then
+ if bash host_candidate/p209_original_p47_deny/p236_cold_stream_disposable.sh "$apk" "$uid";then
+  echo P236_DISPOSABLE_COLD_EXPERIMENT=EXECUTED
+ else
+  echo P236_DISPOSABLE_COLD_EXPERIMENT=NOT_ATTESTED
+ fi
+else
+ echo P236_DISPOSABLE_COLD_EXPERIMENT=SKIPPED_P235_NOT_PROVEN
+fi
