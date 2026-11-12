@@ -106,10 +106,12 @@ if [[ ! -s "$localdir/data.trace" ]];then
    elif (( remote_bytes > 16777216 ));then
     echo P228_REMOTE_TRACE_BAND=ABOVE_16M_CAP
     if adb -s "$s" exec-out dd if="$stream" bs=65536 count=128 2>/dev/null > "$localdir/bounded-prefix.trace";then
-     if python3 -B host_candidate/p209_original_p47_deny/p228_bounded_prefix_positive.py "$localdir/bounded-prefix.trace";then
-      echo P228_POSITIVE_ONLY_PREFIX_AUDIT=PASS
+     # ART streaming starts with binary SLOW, then interleaves method/thread
+     # metadata and method events; it is NOT nonstreaming text-header-first.
+     if python3 -B host_candidate/p209_original_p47_deny/p229_stream_v1_prefix.py "$localdir/bounded-prefix.trace";then
+      echo P229_STREAMING_PREFIX_AUDIT=PASS
      else
-      echo P228_POSITIVE_ONLY_PREFIX_AUDIT=NOT_ATTESTED
+      echo P229_STREAMING_PREFIX_AUDIT=NOT_ATTESTED
      fi
     else
      echo P228_BOUND_PREFIX_TRANSFER=NOT_ATTESTED
