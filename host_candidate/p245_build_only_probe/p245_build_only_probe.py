@@ -80,13 +80,56 @@ def restore():
     print("P245_TEMP_SMALI_RESTORE=BYTE_EXACT")
 def ins(m):
     return [(pc,i.get_name(),i.get_length(),i.get_output()) for pc,i in m.get_instructions_idx()]
+def semantic_exceptions(method,dex):
+    """Canonical try spans and ordered typed/catch-all targets, not pool indices."""
+    code=method.get_code()
+    if code is None:return None
+    tries=code.get_tries() or []
+    table=code.get_handlers()
+    if not tries:
+        need(code.get_tries_size()==0 and (table is None or table.get_size()==0),
+             "EMPTY_EXCEPTION_TABLE_PARITY")
+        return ()
+    need(table is not None and len(tries)==code.get_tries_size(),"CATCH_LIST_EXISTS")
+    origin=table.get_off()
+    handlers={}
+    valid={pc//2 for pc,_ in method.get_instructions_idx()}
+    total=code.get_insns_size()
+    for h in table.get_list():
+        offset=h.get_off()-origin
+        need(type(offset) is int and offset>=1 and offset not in handlers,
+             "CATCH_OFF_UNIQUE")
+        typed=[]
+        for pair in (h.get_handlers() or []):
+            typ=dex.get_cm_type(pair.get_type_idx())
+            need(type(typ) is str and typ.startswith("L") and typ.endswith(";"),
+                 "CATCH_TYPE_RESOLVED")
+            need(pair.get_addr() in valid,"CATCH_TARGET_ALIGNED")
+            typed.append((typ,pair.get_addr()))
+        catchall=h.get_catch_all_addr() if h.get_size()<=0 else None
+        if catchall is not None:need(catchall in valid,"CATCHALL_TARGET_ALIGNED")
+        need(typed or catchall is not None,"NONEMPTY_HANDLER")
+        handlers[offset]=(tuple(typed),catchall)
+    need(len(handlers)==table.get_size(),"CATCH_COUNT")
+    normalized=[]
+    for t in tries:
+        start=t.get_start_addr();end=start+t.get_insn_count()
+        need(start in valid and (end in valid or end==total) and end>start,
+             "TRY_BOUNDARIES_ALIGNED")
+        off=t.get_handler_off()
+        need(off in handlers,"TRY_OFF_RESOLVED")
+        normalized.append((start,t.get_insn_count(),handlers[off]))
+    return tuple(normalized)
+
 def verify(candidate):
     scope()
     need(not SEAL.exists() and SRC.read_text().count(OLD)==1,"RESTORED_FIRST")
     need(candidate.is_file() and not candidate.is_symlink(),"UNSIGNED_APK")
     si=method_index(load_dex(SIGN))
-    bi=method_index(load_dex(BASE))
-    ci=method_index(load_dex(candidate))
+    base_dex=load_dex(BASE)
+    candidate_dex=load_dex(candidate)
+    bi=method_index(base_dex)
+    ci=method_index(candidate_dex)
     target=(OWNER,"invokeSuspend","(Ljava/lang/Object;)Ljava/lang/Object;")
     witness=(OWNER,NAME,DESC)
     need(target in si and target in bi and witness not in bi and
@@ -103,7 +146,8 @@ def verify(candidate):
         bc,cc=bm.get_code(),cm.get_code()
         need((bc.get_registers_size(),bc.get_ins_size(),bc.get_outs_size())==
              (cc.get_registers_size(),cc.get_ins_size(),cc.get_outs_size()),"ORIGINAL_REGISTERS")
-        need(exception_structure(bm)==exception_structure(cm),"ORIGINAL_EXCEPTION_HANDLERS")
+        need(semantic_exceptions(bm,base_dex)==semantic_exceptions(cm,candidate_dex),
+             "ORIGINAL_EXCEPTION_SEMANTICS")
         diff=[(x,y) for x,y in zip(b,c) if x!=y]
         if key==target:
             need(len(diff)==1,"ONE_EXISTING_SLOT")
