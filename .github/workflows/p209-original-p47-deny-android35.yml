@@ -160,6 +160,17 @@ jobs:
           python3 -B host_candidate/p209_original_p47_deny/test_p220_trace_parser.py 2>&1 | tee "$RUNNER_TEMP/p220-trace-unit.log"
           grep -Eq '^Ran 25 tests in' "$RUNNER_TEMP/p220-trace-unit.log"
           grep -Fxq OK "$RUNNER_TEMP/p220-trace-unit.log"
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ("p221_profile_manifest_policy.py",
+                       "test_p221_profile_manifest_policy.py"):
+              f=Path("host_candidate/p209_original_p47_deny")/name
+              compile(f.read_text(encoding="utf-8"),str(f),"exec")
+          print("P221_MANIFEST_POLICY_SOURCE_SYNTAX=PASS")
+          PY
+          python3 -B host_candidate/p209_original_p47_deny/test_p221_profile_manifest_policy.py 2>&1 | tee "$RUNNER_TEMP/p221-profile-unit.log"
+          grep -Eq '^Ran 15 tests in' "$RUNNER_TEMP/p221-profile-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p221-profile-unit.log"
           bash -n host_candidate/p209_original_p47_deny/p220_profile_disposable.sh
           bash -n host_candidate/p209_original_p47_deny/p220_baseline_then_profile.sh
           bash -n host_candidate/p209_original_p47_deny/run_android35_deny.sh
@@ -331,6 +342,13 @@ jobs:
           grep -Fxq 'P219_SIGNED_ORIGINAL_START_CFG_AUDIT=PASS' "$RUNNER_TEMP/p219-cfg-static.log"
           grep -Fxq 'P219_PC406_PC414_REAL_ANDROID_EXECUTION=NOT_ATTESTED' "$RUNNER_TEMP/p219-cfg-static.log"
           grep -Fxq 'P219_V139_RELEASE=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p219-cfg-static.log"
+          python3 -B host_candidate/p209_original_p47_deny/p221_profile_manifest_policy.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            | tee "$RUNNER_TEMP/p221-profile-manifest.log"
+          grep -Fxq 'P221_SIGNED_AND_DISPOSABLE_MANIFEST_POLICY_AUDIT=PASS' "$RUNNER_TEMP/p221-profile-manifest.log"
+          grep -Fxq 'P221_METHOD_TRACE_EMPTY_FILE_CAUSE=NOT_PROVEN' "$RUNNER_TEMP/p221-profile-manifest.log"
+          grep -Fxq 'P221_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p221-profile-manifest.log"
           echo P209_ORIGINAL_P47_GATE_BINARY_AND_SOURCE_PARITY=PASS
           echo P208_EXACT_ORIGINAL_METHOD_WITNESS_SOURCE_PROVENANCE=PASS
       - name: P210 STATIC-ONLY equal-width Node usability deny candidate, NEVER install

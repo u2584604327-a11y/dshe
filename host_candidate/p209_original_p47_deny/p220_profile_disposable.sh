@@ -15,6 +15,20 @@ badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk")"
 [[ "$badging" == *"package: name='com.dsh.android'"* ]]
 launch="$(sed -n "s/^launchable-activity: name='\([^']*\)'.*/\1/p" <<< "$badging" | head -n1)"
 [[ "$launch" == com.dsh.android.MainActivity ]]
+# Read-only pinned original vs offline test APK eligibility; unsupported
+# profiling must not be repeatedly attempted or misread as no Node call.
+policy="$(python3 -B host_candidate/p209_original_p47_deny/p221_profile_manifest_policy.py "$original" "$apk")" || {
+ echo P221_MANIFEST_POLICY_PRECHECK=DENY;exit 2;
+}
+printf '%s\n' "$policy"
+[[ "$policy" == *P221_SIGNED_AND_DISPOSABLE_MANIFEST_POLICY_AUDIT=PASS* ]] || {
+ echo P221_MISSING_MANIFEST_POLICY_PROOF=DENY;exit 2;
+}
+if [[ "$policy" != *P221_DISPOSABLE_SHELL_PROFILE_ALLOWED=YES* ]];then
+ echo P220_DISPOSABLE_TRACE=SKIPPED_UNPROFILEABLE_MANIFEST
+ echo P220_EMPTY_TRACE_IS_NOT_METHOD_NONEXECUTION=YES
+ exit 0
+fi
 already="$(adb -s "$serial" shell pm list packages -U com.dsh.android | tr -d '\r')"
 [[ "$already" != *"package:com.dsh.android"* ]] || {
  echo P220_PREEXISTING_PACKAGE_OR_DATA=DENY;exit 2;
