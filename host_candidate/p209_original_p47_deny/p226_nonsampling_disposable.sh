@@ -27,7 +27,7 @@ umask 077
 localdir="$(mktemp -d .p226-full.XXXXXXXX)"
 cleanup(){
  adb -s "$s" shell am profile stop com.dsh.android >/dev/null 2>&1 || true
- adb -s "$s" shell rm -f "$trace" >/dev/null 2>&1 || true
+ adb -s "$s" shell rm -f "$trace" /data/local/tmp/p227-disposable-streaming-full.trace >/dev/null 2>&1 || true
  rm -rf -- "$localdir"
 }
 trap cleanup EXIT
@@ -75,4 +75,44 @@ if python3 -B host_candidate/p209_original_p47_deny/p226_event_audit.py "$locald
 else
  echo P226_FULL_METHOD_TRACE_AUDIT=NOT_ATTESTED
 fi
+# P227: only if cold-launch non-sampling trace was EMPTY, test a bounded
+# *explicit* non-sampling streaming session on the SAME already running
+# offline-clone PID. This cannot attest cold startup or original Dalvik PCs.
+if [[ ! -s "$localdir/data.trace" ]];then
+ stream=/data/local/tmp/p227-disposable-streaming-full.trace
+ if ! adb -s "$s" shell test ! -e "$stream";then
+  echo P227_PREEXISTING_STREAM_TRACE=DENY
+ elif [[ "$(adb -s "$s" shell pidof com.dsh.android | tr -d '\r\n' || true)" != "$pid" ]];then
+  echo P227_STABLE_HOST_PID=NOT_ATTESTED
+ elif ! adb -s "$s" shell iptables -w -C OUTPUT -m owner --uid-owner "$uid" -j REJECT >/dev/null 2>&1 ||
+      ! adb -s "$s" shell ip6tables -w -C OUTPUT -m owner --uid-owner "$uid" -j REJECT >/dev/null 2>&1;then
+  echo P227_IPV4_IPV6_DENY_LOST=DENY
+ elif adb -s "$s" shell am profile start --streaming "$pid" "$stream" >/dev/null 2>&1;then
+  echo P227_EXPLICIT_NON_SAMPLED_STREAMING_START=ACCEPTED
+  sleep 2
+  current="$(adb -s "$s" shell pidof com.dsh.android | tr -d '\r\n' || true)"
+  if [[ "$current" != "$pid" ]];then
+   echo P227_PROCESS_CONTINUITY=DENY
+   adb -s "$s" shell am profile stop "$pid" >/dev/null 2>&1 || true
+  elif adb -s "$s" shell am profile stop "$pid" >/dev/null 2>&1;then
+   echo P227_EXPLICIT_NON_SAMPLED_STREAMING_STOP=ACCEPTED
+   if adb -s "$s" pull "$stream" "$localdir/stream.trace" >/dev/null 2>&1;then
+    if python3 -B host_candidate/p209_original_p47_deny/p226_event_audit.py "$localdir/stream.trace";then
+     echo P227_STRICT_NON_SAMPLED_STREAMING_AUDIT=PASS
+    else
+     echo P227_STRICT_NON_SAMPLED_STREAMING_AUDIT=NOT_ATTESTED
+    fi
+   else
+    echo P227_STREAM_TRACE_TRANSFER=NOT_ATTESTED
+   fi
+  else
+   echo P227_EXPLICIT_NON_SAMPLED_STREAMING_STOP=NOT_ATTESTED
+  fi
+ else
+  echo P227_EXPLICIT_NON_SAMPLED_STREAMING_START=NOT_ATTESTED
+ fi
+else
+ echo P227_STREAMING_CONTROL=SKIPPED_NONEMPTY_COLD_TRACE
+fi
+echo P227_EXPLICIT_SESSION_NOT_COLD_STARTUP_WITNESS=YES
 echo P226_NOT_ORIGINAL_V138_PROCESS_WITNESS=YES
