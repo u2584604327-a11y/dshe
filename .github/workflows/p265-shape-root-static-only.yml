@@ -40,7 +40,7 @@ jobs:
           test "$(git hash-object host_candidate/p259_all_operands/p259_all_operands.py)" = f4b383766a10a4c14795bc3f3d4c5f2a2a52a099
           test "$(git hash-object host_candidate/p261_all_method_census/p261_all_method_census.py)" = d4724ef5045857b6583a27251171ea4e3f1413e9
           test "$(git hash-object host_candidate/p263_operand_correlation/p263_operand_correlation.py)" = 6ce541aa73300795b5866fabd3b469d7655a1ed0
-          test "$(git hash-object host_candidate/p265_operand_shape/p265_operand_shape.py)" = cbc53e5f0436b231f1987099017e0dd6d241b9ef
+          test "$(git hash-object host_candidate/p265_operand_shape/p265_operand_shape.py)" = c73d09ab7efa2503a542c0a0a21bbbe33c95a360
           python3 - <<'PY'
           from pathlib import Path
           for filename in ('p253_cfg_ordinal.py','test_p253_cfg_ordinal.py'):
