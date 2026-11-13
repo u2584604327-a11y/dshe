@@ -124,8 +124,8 @@ class Tests(unittest.TestCase):
     a,b=pair()
     self.assertEqual(result(b,a),"INVOKE_WORD_SEQUENCE_MATCH_CANDIDATE")
  def test_29_fixed_partial_registers_unattested(self):
-    a,b=pair();a=row("invoke-static",(1,2),ref=REF)
-    self.assertEqual(result(a,b),"INVOKE_WIDE_WORD_LAYOUT_INVALID")
+    a,b=pair();a[3].regs=(1,2)  # decoder view disagrees with raw 3 words
+    self.assertEqual(result(a,b),"INVOKE_REFERENCE_NOT_ATTESTED")
  def test_30_public_denial_and_private_scrub(self):
     q={"causes":{k:0 for k in CAUSES},"examined":1,
        "unknown":492,"total_shapes":1}
