@@ -107,7 +107,7 @@ def catch_profile(method,dex,rows):
         cases=decoded[1]
         if len(cases)!=1:return "DIFFERENT"
         _,_,(typed,catchall)=cases[0]
-        if typed!=(("Ljava/lang/Throwable;",typed[0][1]),) if typed else True:
+        if len(typed)!=1 or typed[0][0]!="Ljava/lang/Throwable;":
             return "DIFFERENT"
         if catchall is not None:return "DIFFERENT"
         target=typed[0][1]
