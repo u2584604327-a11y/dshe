@@ -77,9 +77,9 @@ class Tests(unittest.TestCase):
     b=row("invoke-static/range",(1,2,3))
     self.assertEqual(result(a,b),"INVOKE_WIDE_WORD_LAYOUT_INVALID")
  def test_11_raw_wrong_opcode(self):
-    a,b=pair();b=row("invoke-static/range",(1,2,3),raw=b"\x74\x03\x11\x00\x01\x00")
+    a,b=pair();b=row("invoke-static/range",(1,2,3),raw=b"\x77\x03\x11\x00\x01\x00")
     self.assertEqual(result(a,b),"INVOKE_WORD_SEQUENCE_MATCH_CANDIDATE")
-    b=row("invoke-static/range",(1,2,3),raw=b"\x73\x03\x11\x00\x01\x00")
+    b=row("invoke-static/range",(1,2,3),raw=b"\x76\x03\x11\x00\x01\x00")
     self.assertEqual(result(a,b),"INVOKE_RAW_FORMAT_UNATTESTED")
  def test_12_raw_truncated(self):
     a,b=pair();b=row("invoke-static/range",(1,2,3),raw=b"123")
