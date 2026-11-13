@@ -36,7 +36,7 @@ jobs:
           test "$(git hash-object host_candidate/p249_dual_diff/p249_dual_diff.py)" = 44248b92504cbf6d3406ffdccbde61e1099dcc7f
           test "$(git hash-object host_candidate/p251_method_relation/p251_method_relation.py)" = 136289c3d270d130270ce0b648070996df73b14a
           test "$(git hash-object host_candidate/p253_cfg_ordinal/p253_cfg_ordinal.py)" = 9ff606e656fce61eb11c83e3dd4b2ab93385f7e0
-          test "$(git hash-object host_candidate/p257_opcode_family/p257_opcode_family.py)" = aa85d4e58d5b7ce6c428a881dba0d9798ae9f760
+          test "$(git hash-object host_candidate/p257_opcode_family/p257_opcode_family.py)" = 5afdef13bd3999744be931c457d3b514fd1459e2
           test "$(git hash-object host_candidate/p261_all_method_census/p261_all_method_census.py)" = d4724ef5045857b6583a27251171ea4e3f1413e9
           python3 - <<'PY'
           from pathlib import Path
