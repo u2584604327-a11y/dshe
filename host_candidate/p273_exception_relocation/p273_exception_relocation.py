@@ -29,7 +29,7 @@ from p257_opcode_family import encoding_candidate, frame
 from p261_all_method_census import explicit_branches, opaque
 
 MAP_CATEGORIES=("EXACT_BOUNDARY_REMAP","MAPPED_TABLE_DIFFER","UNVERIFIED_LAYOUT")
-ORDINAL_CATEGORIES=("SAME","DIFFER")
+ORDINAL_CATEGORIES=("SAME","DIFFER","UNVERIFIED")
 OPCODE_CATEGORIES=("EXACT_OPCODE_NAMES","ENCODING_FAMILY_ONLY",
                    "OPERATION_KIND_CHANGED","INSTRUCTION_COUNT_CHANGED",
                    "OPAQUE_PAYLOAD_UNVERIFIED")
@@ -116,9 +116,12 @@ def provenance(left,right,ra,rb,prior_opaque=False,frame_category="MATCH"):
         mapped=("EXACT_BOUNDARY_REMAP" if remapped==right[1]
                 else "MAPPED_TABLE_DIFFER")
     # Independently recompute descriptor-bearing typed/catch-all ordinals.
-    ord_a=ordinal_from_rows(left,ra)
-    ord_b=ordinal_from_rows(right,rb)
-    ordinal="SAME" if ord_a==ord_b else "DIFFER"
+    if mapping is None:
+        ordinal="UNVERIFIED"
+    else:
+        ord_a=ordinal_from_rows(left,ra)
+        ord_b=ordinal_from_rows(right,rb)
+        ordinal="SAME" if ord_a==ord_b else "DIFFER"
     if prior_opaque:
         branch="UNVERIFIED"
     else:
@@ -175,9 +178,10 @@ def audit(original,derived,da,db):
             need(name in SHIFT_CATEGORIES and type(value) is bool,"SHIFT_SCHEMA")
             shifts[name]+=int(value)
         # Independently match P251's ordinal classification. A mismatch is fatal.
-        need((data["classes"][1]=="SAME")==
-             (ordinal_edges(a,left)==ordinal_edges(b,right)),
-             "ORDINAL_INDEPENDENT_RECONCILIATION")
+        if data["classes"][1]!="UNVERIFIED":
+            need((data["classes"][1]=="SAME")==
+                 (ordinal_edges(a,left)==ordinal_edges(b,right)),
+                 "ORDINAL_INDEPENDENT_RECONCILIATION")
         raw+=1
     need(raw>0 and raw<=method_count<=1000000,"RAW_COUNT")
     need((raw>0)==(base["exception_gate"]=="DENY"),"P249_EXCEPTION_GATE")
