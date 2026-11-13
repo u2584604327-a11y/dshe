@@ -1,0 +1,77 @@
+name: P271 source-only raw invoke register-word delta and method-reference checks
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '.github/workflows/p271-word-delta-source-only.yml'
+      - 'host_candidate/p271_word_delta/**'
+permissions:
+  contents: read
+concurrency:
+  group: p271-source-only-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p271-source-only:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate unchanged safety and original instrument contracts
+        run: |
+          set -euo pipefail
+          test "$(git hash-object host_candidate/p267_invoke_words/p267_invoke_words.py)" = 36b295a65ef1063f9a68a1b2e8ca60c0fddf98f1
+          test "$(git hash-object host_candidate/p269_method_pool/p269_method_pool.py)" = 5680d35aeb18f0869eeb368487105d54680fb748
+          test "$(git hash-object host_candidate/p265_operand_shape/p265_operand_shape.py)" = c73d09ab7efa2503a542c0a0a21bbbe33c95a360
+          test "$(git hash-object host_candidate/p259_all_operands/p259_all_operands.py)" = f4b383766a10a4c14795bc3f3d4c5f2a2a52a099
+          test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('p271_word_delta.py','test_p271_word_delta.py'):
+              p=Path('host_candidate/p271_word_delta')/name
+              compile(p.read_text(),str(p),'exec')
+          print('P271_SOURCE_SYNTAX=PASS')
+          PY
+      - name: Run original 383 cases and 34 new fail-closed argument tests
+        run: |
+          set -euo pipefail
+          for entry in \
+            "host_candidate/p245_build_only_probe/test_p245_build_only_probe.py 15" \
+            "host_candidate/p246_exception_semantics/test_p246_exception_semantics.py 30" \
+            "host_candidate/p246_exception_semantics/test_p247_classifier_contract.py 12" \
+            "host_candidate/p249_dual_diff/test_p249_dual_diff.py 26" \
+            "host_candidate/p251_method_relation/test_p251_method_relation.py 32" \
+            "host_candidate/p253_cfg_ordinal/test_p253_cfg_ordinal.py 30" \
+            "host_candidate/p255_branch_separation/test_p255_branch_separation.py 22" \
+            "host_candidate/p257_opcode_family/test_p257_opcode_family.py 36" \
+            "host_candidate/p259_all_operands/test_p259_all_operands.py 38" \
+            "host_candidate/p261_all_method_census/test_p261_all_method_census.py 36" \
+            "host_candidate/p263_operand_correlation/test_p263_operand_correlation.py 26" \
+            "host_candidate/p265_operand_shape/test_p265_operand_shape.py 28" \
+            "host_candidate/p267_invoke_words/test_p267_invoke_words.py 31" \
+            "host_candidate/p269_method_pool/test_p269_method_pool.py 21" \
+            "host_candidate/p271_word_delta/test_p271_word_delta.py 34"; do
+            read -r script expected <<< "$entry"
+            python3 -B "$script" > "$RUNNER_TEMP/fixture.log" 2>&1 || { cat "$RUNNER_TEMP/fixture.log"; exit 1; }
+            grep -Eq "^Ran $expected tests in" "$RUNNER_TEMP/fixture.log"
+            grep -Fxq 'OK' "$RUNNER_TEMP/fixture.log"
+          done
+          echo P271_SYNTHETIC_417_OF_417=PASS
+      - name: Source-only deny and no sensitive logs or release
+        run: |
+          set -euo pipefail
+          python3 -B host_candidate/p271_word_delta/p271_word_delta.py > "$RUNNER_TEMP/source-only.log"
+          grep -Fxq P271_SOURCE_ONLY=YES "$RUNNER_TEMP/source-only.log"
+          grep -Fxq P271_REAL_WORD_DIFFERENCE=NOT_ATTESTED "$RUNNER_TEMP/source-only.log"
+          grep -Fxq P271_RELEASE=DENY "$RUNNER_TEMP/source-only.log"
+          grep -Fxq P271_V139=STRUCTURAL_BLOCKED "$RUNNER_TEMP/source-only.log"
+          echo P271_PRIVATE_REGISTER_AND_METHOD_VALUES=WITHHELD
+          echo P271_NO_APK_ADB_EMULATOR_SIGN_INSTALL_OR_RELEASE=YES
