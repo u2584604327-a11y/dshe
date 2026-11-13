@@ -41,7 +41,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           for name in ('p281_helper_predicates.py','test_p281_helper_predicates.py'):
-              f=Path('host_candidate/p281_helper-predicates')/name
+              f=Path('host_candidate/p281_helper_predicates')/name
               compile(f.read_text(),str(f),'exec')
           print('P281_SOURCE_SYNTAX=PASS')
           PY
