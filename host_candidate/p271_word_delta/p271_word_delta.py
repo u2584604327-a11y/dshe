@@ -85,7 +85,7 @@ def pair_detail(x, y, a, b, dex_a, dex_b):
 
     try:
         f_a, f_b = a.get_code(), b.get_code()
-        frames = tuple((
+        frames = tuple(tuple(
             getattr(frame, method)()
             for method in ("get_registers_size", "get_ins_size", "get_outs_size")
         ) for frame in (f_a, f_b))
