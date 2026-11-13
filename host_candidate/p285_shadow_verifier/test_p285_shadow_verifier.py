@@ -223,8 +223,12 @@ class Tests(unittest.TestCase):
  def test_41_jumbo_string_allowed_if_content_same(self):
     a=fresh_rows()
     a[5]=(a[5][0],Ins("const-string/jumbo",refstring(7,1,True),6))
-    self.assertEqual(m.shape(rows(Method(a))),"PASS")
-    self.assertEqual(m.safe_literal_flow(rows(Method(a)),Dex()),"PASS")
+    pc=0;rebuilt=[]
+    for _,inst in a:
+      rebuilt.append((pc,inst))
+      pc+=inst.length
+    self.assertEqual(m.shape(rows(Method(rebuilt))),"PASS")
+    self.assertEqual(m.safe_literal_flow(rows(Method(rebuilt)),Dex()),"PASS")
  def test_42_wrong_catch_type(self):
     with patch.object(m,"decode",return_value=decoded(typ="Ljava/lang/Error;")):
       self.assertEqual(m.try_catch(Method(),Dex(),rows()),"FAIL")
