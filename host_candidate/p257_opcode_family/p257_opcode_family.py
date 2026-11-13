@@ -71,7 +71,7 @@ def normalized_operands(inst):
     for item in values:
         if not isinstance(item,(tuple,list)) or len(item)<2:return None
         tag,value=item[0],item[1]
-        if type(tag) is not int or type(value) is not int:return None
+        if not isinstance(tag,int) or type(value) is not int:return None
         if tag==0 and len(item)==2 and 0<=value<=65535:
             result.append(("R",value))
         elif tag==1 and len(item)==2 and -(1<<63)<=value<(1<<64):
