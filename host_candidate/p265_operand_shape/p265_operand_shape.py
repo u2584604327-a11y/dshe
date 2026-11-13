@@ -40,7 +40,7 @@ def raw_signature(ins):
         if not isinstance(item,(list,tuple)) or not (2<=len(item)<=4):
             return None
         tag=item[0]
-        if type(tag) is not int:return None
+        if not isinstance(tag,int) or isinstance(tag,bool):return None
         out.append((tag,len(item)))
     return tuple(out)
 
