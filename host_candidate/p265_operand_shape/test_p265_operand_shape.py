@@ -60,11 +60,11 @@ class Tests(unittest.TestCase):
     a=(0,"const/4",2,Op("const/4"))
     self.assertEqual(shape_cause(a,src()),"ONE_SIDE_UNDECODABLE")
  def test_11_unknown_operand_tag_not_value(self):
-    self.assertEqual(raw_signature(op(raw=((2,9999),))),((2,2),))
+    self.assertEqual(raw_signature(op(args=((2,9999),))),((2,2),))
  def test_12_missing_operands_api_unknown(self):
     self.assertIsNone(raw_signature(Op("nop")))
  def test_13_malformed_raw_not_counted_as_verified(self):
-    self.assertIsNone(raw_signature(op(raw=((2,),))))
+    self.assertIsNone(raw_signature(op(args=((2,),))))
  def test_14_nonlist_raw_not_verified(self):
     class Weird(Op):
         def get_operands(self):return object()
