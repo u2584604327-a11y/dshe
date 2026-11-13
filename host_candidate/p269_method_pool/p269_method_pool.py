@@ -43,8 +43,8 @@ def method_pool(dex,ref_idx):
     except Exception:return None
     if not isinstance(item,(list,tuple)) or len(item)!=3:return None
     cls,name,proto=item
-    if not isinstance(cls,str) or not re.fullmatch(r"L[^;()\\s]+;",cls):return None
-    if not isinstance(name,str) or not (0<len(name)<=8192) or re.search(r"[()\\s]",name):return None
+    if not isinstance(cls,str) or not re.fullmatch(r"L[^;()\s]+;",cls):return None
+    if not isinstance(name,str) or not (0<len(name)<=8192) or re.search(r"[()\s]",name):return None
     if not isinstance(proto,(list,tuple)) or len(proto)!=2 or not all(isinstance(v,str) for v in proto):return None
     args,ret=proto
     if not args.startswith("(") or not args.endswith(")"):return None
