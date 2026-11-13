@@ -1,0 +1,82 @@
+name: P273 source-only original DEX exception boundary remap and fail-closed source audit
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '.github/workflows/p273-exception-relocation-source-only.yml'
+      - 'host_candidate/p273_exception_relocation/**'
+permissions:
+  contents: read
+concurrency:
+  group: p273-source-only-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p273-source-only:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate frozen audit dependencies and P273 source
+        run: |
+          set -euo pipefail
+          test "$(git hash-object host_candidate/p273_exception_relocation/p273_exception_relocation.py)" = 24eb168ec2536ca38f1fddcb3df38963972f8dd6
+          test "$(git hash-object host_candidate/p267_invoke_words/p267_invoke_words.py)" = 36b295a65ef1063f9a68a1b2e8ca60c0fddf98f1
+          test "$(git hash-object host_candidate/p269_method_pool/p269_method_pool.py)" = 5680d35aeb18f0869eeb368487105d54680fb748
+          test "$(git hash-object host_candidate/p271_word_delta/p271_word_delta.py)" = 8c30641560d5e2c38c36ea7138f28319f7142200
+          test "$(git hash-object host_candidate/p246_exception_semantics/p246_exception_semantics.py)" = 59e64268fe80ceec0169417b83e96772b3e015a0
+          test "$(git hash-object host_candidate/p249_dual_diff/p249_dual_diff.py)" = 44248b92504cbf6d3406ffdccbde61e1099dcc7f
+          test "$(git hash-object host_candidate/p251_method_relation/p251_method_relation.py)" = 136289c3d270d130270ce0b648070996df73b14a
+          test "$(git hash-object host_candidate/p253_cfg_ordinal/p253_cfg_ordinal.py)" = 9ff606e656fce61eb11c83e3dd4b2ab93385f7e0
+          test "$(git hash-object host_candidate/p257_opcode_family/p257_opcode_family.py)" = aa85d4e58d5b7ce6c428a881dba0d9798ae9f760
+          test "$(git hash-object host_candidate/p261_all_method_census/p261_all_method_census.py)" = d4724ef5045857b6583a27251171ea4e3f1413e9
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('p273_exception_relocation.py','test_p273_exception_relocation.py'):
+              f=Path('host_candidate/p273_exception_relocation')/name
+              compile(f.read_text(),str(f),'exec')
+          print('P273_SOURCE_SYNTAX=PASS')
+          PY
+      - name: Original 417 synthetic cases and P273 35 adversarial cases
+        run: |
+          set -euo pipefail
+          for entry in \
+            "host_candidate/p245_build_only_probe/test_p245_build_only_probe.py 15" \
+            "host_candidate/p246_exception_semantics/test_p246_exception_semantics.py 30" \
+            "host_candidate/p246_exception_semantics/test_p247_classifier_contract.py 12" \
+            "host_candidate/p249_dual_diff/test_p249_dual_diff.py 26" \
+            "host_candidate/p251_method_relation/test_p251_method_relation.py 32" \
+            "host_candidate/p253_cfg_ordinal/test_p253_cfg_ordinal.py 30" \
+            "host_candidate/p255_branch_separation/test_p255_branch_separation.py 22" \
+            "host_candidate/p257_opcode_family/test_p257_opcode_family.py 36" \
+            "host_candidate/p259_all_operands/test_p259_all_operands.py 38" \
+            "host_candidate/p261_all_method_census/test_p261_all_method_census.py 36" \
+            "host_candidate/p263_operand_correlation/test_p263_operand_correlation.py 26" \
+            "host_candidate/p265_operand_shape/test_p265_operand_shape.py 28" \
+            "host_candidate/p267_invoke_words/test_p267_invoke_words.py 31" \
+            "host_candidate/p269_method_pool/test_p269_method_pool.py 21" \
+            "host_candidate/p271_word_delta/test_p271_word_delta.py 34" \
+            "host_candidate/p273_exception_relocation/test_p273_exception_relocation.py 35"; do
+            read -r script expected <<< "$entry"
+            python3 -B "$script" > "$RUNNER_TEMP/fixture.log" 2>&1 || { cat "$RUNNER_TEMP/fixture.log"; exit 1; }
+            grep -Eq "^Ran $expected tests in" "$RUNNER_TEMP/fixture.log"
+            grep -Fxq 'OK' "$RUNNER_TEMP/fixture.log"
+          done
+          echo P273_SYNTHETIC_452_OF_452=PASS
+      - name: P273 source-only explicit denial
+        run: |
+          set -euo pipefail
+          python3 -B host_candidate/p273_exception_relocation/p273_exception_relocation.py > "$RUNNER_TEMP/p273-source-only.log"
+          grep -Fxq P273_SOURCE_ONLY=YES "$RUNNER_TEMP/p273-source-only.log"
+          grep -Fxq P273_REAL_EXCEPTION_REMAP=NOT_ATTESTED "$RUNNER_TEMP/p273-source-only.log"
+          grep -Fxq P273_RELEASE=DENY "$RUNNER_TEMP/p273-source-only.log"
+          grep -Fxq P273_V139=STRUCTURAL_BLOCKED "$RUNNER_TEMP/p273-source-only.log"
+          echo P273_NO_APK_ADB_EMULATOR_SIGN_INSTALL_OR_RELEASE=YES
