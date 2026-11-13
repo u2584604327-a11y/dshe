@@ -1,0 +1,76 @@
+name: P267 source-only 35c to 3rc invoke word-sequence evidence
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '.github/workflows/p267-invoke-words-source-only.yml'
+      - 'host_candidate/p267_invoke_words/**'
+permissions:
+  contents: read
+concurrency:
+  group: p267-source-only-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p267-private-words-source-only:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Immutable preexisting audit files and P267 syntax
+        run: |
+          set -euo pipefail
+          test "$(git hash-object host_candidate/p265_operand_shape/p265_operand_shape.py)" = c73d09ab7efa2503a542c0a0a21bbbe33c95a360
+          test "$(git hash-object host_candidate/p263_operand_correlation/p263_operand_correlation.py)" = 6ce541aa73300795b5866fabd3b469d7655a1ed0
+          test "$(git hash-object host_candidate/p261_all_method_census/p261_all_method_census.py)" = d4724ef5045857b6583a27251171ea4e3f1413e9
+          test "$(git hash-object host_candidate/p259_all_operands/p259_all_operands.py)" = f4b383766a10a4c14795bc3f3d4c5f2a2a52a099
+          test "$(git hash-object host_candidate/p257_opcode_family/p257_opcode_family.py)" = 5afdef13bd3999744be931c457d3b514fd1459e2
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('p267_invoke_words.py','test_p267_invoke_words.py'):
+              path=Path('host_candidate/p267_invoke_words')/name
+              compile(path.read_text(),str(path),'exec')
+          print('P267_SYNTAX=PASS')
+          PY
+      - name: All 331 preexisting synthetic cases plus 31 P267 adversarial cases
+        run: |
+          set -euo pipefail
+          for entry in \
+            "host_candidate/p245_build_only_probe/test_p245_build_only_probe.py 15" \
+            "host_candidate/p246_exception_semantics/test_p246_exception_semantics.py 30" \
+            "host_candidate/p246_exception_semantics/test_p247_classifier_contract.py 12" \
+            "host_candidate/p249_dual_diff/test_p249_dual_diff.py 26" \
+            "host_candidate/p251_method_relation/test_p251_method_relation.py 32" \
+            "host_candidate/p253_cfg_ordinal/test_p253_cfg_ordinal.py 30" \
+            "host_candidate/p255_branch_separation/test_p255_branch_separation.py 22" \
+            "host_candidate/p257_opcode_family/test_p257_opcode_family.py 36" \
+            "host_candidate/p259_all_operands/test_p259_all_operands.py 38" \
+            "host_candidate/p261_all_method_census/test_p261_all_method_census.py 36" \
+            "host_candidate/p263_operand_correlation/test_p263_operand_correlation.py 26" \
+            "host_candidate/p265_operand_shape/test_p265_operand_shape.py 28" \
+            "host_candidate/p267_invoke_words/test_p267_invoke_words.py 31"; do
+            read -r script count <<< "$entry"
+            python3 -B "$script" > "$RUNNER_TEMP/fixture.log" 2>&1 || { cat "$RUNNER_TEMP/fixture.log"; exit 1; }
+            grep -Eq "^Ran $count tests in" "$RUNNER_TEMP/fixture.log"
+            grep -Fxq OK "$RUNNER_TEMP/fixture.log"
+          done
+          echo P267_SYNTHETIC_362_OF_362=PASS
+      - name: Source-only proof of no real release claim
+        run: |
+          set -euo pipefail
+          python3 -B host_candidate/p267_invoke_words/p267_invoke_words.py > "$RUNNER_TEMP/source-only.log"
+          grep -Fxq 'P267_SOURCE_ONLY=YES' "$RUNNER_TEMP/source-only.log"
+          grep -Fxq 'P267_REAL_INVOKE_WORDS=NOT_ATTESTED' "$RUNNER_TEMP/source-only.log"
+          grep -Fxq 'P267_RELEASE=DENY' "$RUNNER_TEMP/source-only.log"
+          grep -Fxq 'P267_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/source-only.log"
+          echo P267_NO_APK_ASSEMBLY_EMULATOR_ADB_PHONE_OR_SIGNING=YES
+          echo P267_REAL_PARAMETER_EQUIVALENCE=NOT_ATTESTED
+          echo P267_P245_ORIGINAL_DENY_UNMODIFIED=YES
