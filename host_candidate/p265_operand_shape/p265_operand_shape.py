@@ -49,6 +49,7 @@ def shape_cause(x,y):
     left,right=x[1],y[1]
     na,nb=operands(x[3],left),operands(y[3],right)
     if na is not None and nb is not None:
+        if na==nb:return "OTHER_NOT_ATTESTED"
         if len(na)!=len(nb):return "NORMALIZED_ITEM_COUNT"
         if tuple(v[0] for v in na)!=tuple(v[0] for v in nb):
             return "NORMALIZED_ITEM_KIND"

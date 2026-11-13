@@ -39,7 +39,7 @@ class Tests(unittest.TestCase):
     self.assertEqual(shape_cause(src(),src(raw=((0,0),(1,8)))),"NORMALIZED_VALUES_CHANGED")
  def test_04_enum_tag_is_supported(self):
     a=src(raw=((Tag.REGISTER,0),(Tag.LITERAL,7)))
-    self.assertEqual(shape_cause(a,src()),"NORMALIZED_VALUES_CHANGED")
+    self.assertEqual(shape_cause(a,src()),"OTHER_NOT_ATTESTED")
  def test_05_raw_item_count(self):
     a=src(raw=((2,3),))
     b=src(raw=((2,3),(2,4)))
