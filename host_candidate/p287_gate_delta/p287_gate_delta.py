@@ -25,7 +25,7 @@ from p249_dual_diff import seal
 from p281_helper_predicates import (
     OWNER,NAME,DESC,p245_checks,catch_profile,call_reference,PREDICATES)
 from p283_descriptor_normalization import (
-    audit as p283_audit,DETAIL,classify_detail)
+    audit as p283_audit,DETAIL)
 from p285_shadow_verifier import audit as p285_audit,FACTORS
 
 SINGLE_LOG=re.compile(
@@ -60,18 +60,23 @@ def candidate(original_predicates,original_catch,raw_getter,raw_log,shadow,
           "PASS" if original_predicates[PREDICATES[4]]=="FAIL" else
           "FAIL" if original_predicates[PREDICATES[4]]=="PASS" else "UNVERIFIED")
     checks["EXACT_ONE_ASCII_SEPARATOR"]=display_shape(log_output)
-    if isinstance(raw_getter,dict) and set(raw_getter)==set(DETAIL):
+    # Never trust a precomputed "canonical tuple" alone: the previous
+    # synthetic red-team case could spoof it while changing RAW_OWNER.
+    # Compare every raw field explicitly and reject internal contradictions.
+    if type(raw_getter) is dict and set(raw_getter)==set(DETAIL):
+        expected_getter={x:"PASS" for x in DETAIL}
         checks["CANONICAL_RAW_GETTER"]=(
-          "PASS" if classify_detail(raw_getter)=="EXACT" else
-          "UNVERIFIED" if classify_detail(raw_getter)=="UNVERIFIED" else "FAIL")
-    if isinstance(raw_log,dict) and set(raw_log)==set(DETAIL):
+            "PASS" if raw_getter==expected_getter else
+            "UNVERIFIED" if any(x not in STATES or x=="UNVERIFIED"
+                                for x in raw_getter.values()) else "FAIL")
+    if type(raw_log) is dict and set(raw_log)==set(DETAIL):
+        expected_log={x:"PASS" for x in DETAIL}
+        expected_log["RAW_ARGS_EXACT"]="FAIL"
+        expected_log["OUTPUT_TEXT_EXACT"]="FAIL"
         checks["CANONICAL_RAW_LOG"]=(
-          "PASS" if (classify_detail(raw_log)=="FORMAT_ONLY_CANDIDATE"
-              and raw_log["RAW_ARGS_EXACT"]=="FAIL"
-              and raw_log["RAW_ARGS_CANONICAL"]=="PASS"
-              and raw_log["OUTPUT_TEXT_EXACT"]=="FAIL"
-              and raw_log["OUTPUT_TEXT_CANONICAL"]=="PASS") else
-          "UNVERIFIED" if classify_detail(raw_log)=="UNVERIFIED" else "FAIL")
+            "PASS" if raw_log==expected_log else
+            "UNVERIFIED" if any(x not in STATES or x=="UNVERIFIED"
+                                for x in raw_log.values()) else "FAIL")
     checks["HELPER_ORIGINAL_TYPED_CATCH"]=(
       "PASS" if original_catch=="ONE_TYPED_THROWABLE_MOVE_EXCEPTION" else
       "UNVERIFIED" if original_catch=="UNVERIFIED" else "FAIL")
