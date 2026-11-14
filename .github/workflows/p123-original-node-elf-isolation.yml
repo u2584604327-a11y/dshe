@@ -1,0 +1,81 @@
+name: P123 exact-v138 original ARM64 Node ELF loader preflight
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p123_original_node_elf_isolation_preflight.py'
+      - '.github/workflows/p123-original-node-elf-isolation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p123-original-node-static-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  original-node-abi-and-linker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Obtain exact signed v138 input from existing repository Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .p123-input
+          gh release download dsh-baseline-v135dsh-baseline-v135 --repo "$GH_REPO" \
+            --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk --dir .p123-input
+          printf '%s  %s\n' \
+            3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 \
+            .p123-input/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk | sha256sum -c -
+      - name: Inspect real Node ELF and library closure; no binary execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile host_candidate/p123_original_node_elf_isolation_preflight.py
+          python3 host_candidate/p123_original_node_elf_isolation_preflight.py \
+            .p123-input/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --report .p123-node-audit.json | tee .p123-proof.txt
+          for proof in \
+            P123_EXACT_ORIGINAL_NODE_ELF_AARCH64=PASS \
+            P123_DYNAMIC_LINK_AND_RUNPATH=PASS_AUDITED \
+            P123_TAMPER_NEGATIVE=PASS \
+            P123_ISOLATED_NODE_EXEC=NOT_PROVEN \
+            P123_NATIVE_TOOLS=DENY_ALL; do
+            grep -Fxq "$proof" .p123-proof.txt
+          done
+          python3 - <<'PY'
+          import json
+          x=json.load(open('.p123-node-audit.json'))
+          assert x['actual_elf']['architecture']=='AArch64'
+          assert x['actual_elf']['interpreter']=='/system/bin/linker64'
+          assert x['actual_elf']['runpath']=='/data/data/com.termux/files/usr/lib'
+          assert 'libssl.so.3' in x['actual_elf']['unresolved_in_exact_runtime_archive']
+          assert 'libcrypto.so.3' in x['actual_elf']['unresolved_in_exact_runtime_archive']
+          assert x['gates']['isolated_android_node_exec']=='NOT_TESTED'
+          assert x['gates']['p109_sensitive_tools']=='DENY_ALL'
+          print('P123_ISOLATED_ARM64_NODE_REAL_EXECUTION=BLOCKED_NOT_TESTED')
+          PY
+          {
+            echo 'P123_EXACT_SIGNED_V138_NODE_LOADER_AUDIT=PASS'
+            echo 'P123_X86_64_ANDROID_EMULATOR_EXECUTION=ARCH_MISMATCH'
+            echo 'P123_REAL_ARM64_ISOLATED_NODE_EXECUTION=NOT_TESTED'
+            echo 'P123_P109_NATIVE_SENSITIVE_TOOLS=DENY_ALL'
+            echo 'P123_V139_RELEASE=BLOCKED'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove ephemeral APK and report (no binary artifacts)
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p123-input .p123-node-audit.json .p123-proof.txt

@@ -24,8 +24,13 @@ NEW_JS=r"""function mpClassifyTurnUsage(inputText, outputText, estimate) {
             if (input > 0 || output > 0) {
                 const estInput = /^[≈~]/.test(mpNormUsageText(inputText));
                 const estOutput = /^[≈~]/.test(mpNormUsageText(outputText));
-                if (input > 0 && output > 0 && estInput && estOutput)
-                    return {kind:'estimate',input,output,total:input+output,source:'visible-estimate'};
+                if (estInput || estOutput) {
+                    if (estInput && estOutput)
+                        return {kind:'estimate',input,output,total:input+output,source:'visible-estimate'};
+                    // Per-field provenance differs. Never promote an
+                    // estimated value to authoritative provider usage.
+                    return {kind:'mixed',input,output};
+                }
                 return {kind:'provider',input,output};
             }
             // Zero from a LAN-compatible API can mean "provider did not report
@@ -69,8 +74,24 @@ NEW_JS=r"""function mpClassifyTurnUsage(inputText, outputText, estimate) {
             const outputValue=mpFindTokValue(panel,outputLabel);
             if(!inputValue||!outputValue||inputValue===outputValue)return;
             const first=mpClassifyTurnUsage(inputValue.textContent,outputValue.textContent,null);
-            // Keep actual provider usage and partially populated official values.
+            // Keep real provider values, including valid partial zero values.
             if(first.kind==='provider'||first.kind==='other')return;
+            if(first.kind==='mixed'){
+                // Do not overwrite either side; do not add differently sourced
+                // tokens to an apparently authoritative turn total.
+                if(totalValue&&totalValue!==inputValue&&totalValue!==outputValue &&
+                   /^0\s*tok$/i.test(mpNormUsageText(totalValue.textContent)))
+                    totalValue.textContent='— tok';
+                mpPatchUsageUnknownHeader(panel,totalLabel,inputValue,outputValue);
+                if(totalLabel)totalLabel.textContent=/本轮用量/.test(totalLabel.textContent||'')
+                    ?'本轮用量（来源混合）':'Turn usage (mixed sources)';
+                panel.dataset.mpUsageEstimate='0';
+                panel.dataset.mpUsageEstimateSource='';
+                panel.dataset.mpUsageUnavailable='0';
+                panel.dataset.mpUsageMixed='1';
+                return;
+            }
+            panel.dataset.mpUsageMixed='0';
             let est=null;
             if(first.kind!=='estimate'){
                 est=mpEstimateDisplayableTurnUsage(mpUsageDialogTurn);

@@ -1,0 +1,72 @@
+name: P269 source-only independently resolve 35c zero-word method reference
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '.github/workflows/p269-method-pool-source-only.yml'
+      - 'host_candidate/p269_method_pool/**'
+permissions:
+  contents: read
+concurrency:
+  group: p269-source-only-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p269-pool-source:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: P267 immutable provenance and syntax
+        run: |
+          set -euo pipefail
+          test "$(git hash-object host_candidate/p267_invoke_words/p267_invoke_words.py)" = 36b295a65ef1063f9a68a1b2e8ca60c0fddf98f1
+          test "$(git hash-object host_candidate/p265_operand_shape/p265_operand_shape.py)" = c73d09ab7efa2503a542c0a0a21bbbe33c95a360
+          python3 - <<'PY'
+          from pathlib import Path
+          for n in ('p269_method_pool.py','test_p269_method_pool.py'):
+              f=Path('host_candidate/p269_method_pool')/n
+              compile(f.read_text(),str(f),'exec')
+          print('P269_SYNTAX=PASS')
+          PY
+      - name: P269 plus all prior private synthetic fixtures
+        run: |
+          set -euo pipefail
+          for entry in \
+            "host_candidate/p245_build_only_probe/test_p245_build_only_probe.py 15" \
+            "host_candidate/p246_exception_semantics/test_p246_exception_semantics.py 30" \
+            "host_candidate/p246_exception_semantics/test_p247_classifier_contract.py 12" \
+            "host_candidate/p249_dual_diff/test_p249_dual_diff.py 26" \
+            "host_candidate/p251_method_relation/test_p251_method_relation.py 32" \
+            "host_candidate/p253_cfg_ordinal/test_p253_cfg_ordinal.py 30" \
+            "host_candidate/p255_branch_separation/test_p255_branch_separation.py 22" \
+            "host_candidate/p257_opcode_family/test_p257_opcode_family.py 36" \
+            "host_candidate/p259_all_operands/test_p259_all_operands.py 38" \
+            "host_candidate/p261_all_method_census/test_p261_all_method_census.py 36" \
+            "host_candidate/p263_operand_correlation/test_p263_operand_correlation.py 26" \
+            "host_candidate/p265_operand_shape/test_p265_operand_shape.py 28" \
+            "host_candidate/p267_invoke_words/test_p267_invoke_words.py 31" \
+            "host_candidate/p269_method_pool/test_p269_method_pool.py 21"; do
+            read -r script expected <<< "$entry"
+            python3 -B "$script" > "$RUNNER_TEMP/fixture.log" 2>&1 || { cat "$RUNNER_TEMP/fixture.log"; exit 1; }
+            grep -Eq "^Ran $expected tests in" "$RUNNER_TEMP/fixture.log"
+            grep -Fxq OK "$RUNNER_TEMP/fixture.log"
+          done
+          echo P269_SYNTHETIC_383_OF_383=PASS
+      - name: Private and no release
+        run: |
+          set -euo pipefail
+          python3 -B host_candidate/p269_method_pool/p269_method_pool.py > "$RUNNER_TEMP/no-real.log"
+          grep -Fxq P269_SOURCE_ONLY=YES "$RUNNER_TEMP/no-real.log"
+          grep -Fxq P269_REAL_METHOD_POOL=NOT_ATTESTED "$RUNNER_TEMP/no-real.log"
+          grep -Fxq P269_RELEASE=DENY "$RUNNER_TEMP/no-real.log"
+          grep -Fxq P269_V139=STRUCTURAL_BLOCKED "$RUNNER_TEMP/no-real.log"
+          echo P269_NO_APK_ADB_EMULATOR_SIGN_INSTALL_OR_RELEASE=YES

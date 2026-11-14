@@ -1,0 +1,107 @@
+name: P108 original MIT Android host engine-epoch fail-closed source integration (no APK)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p108_original_host_epoch_patch.py'
+      - 'host_candidate/p108_original_host_gate_probe/P108GateProbe.java'
+      - '.github/workflows/p108-original-host-epoch-compile.yml'
+permissions:
+  contents: read
+jobs:
+  original-source-minimal-lifecycle-integration:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      UPSTREAM_SHA: 4dddb12fd076d052e788a16638a658b7a447b669
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
+    steps:
+      - name: Checkout authorized PR changes separately
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: changes
+      - name: Checkout pinned original MIT Android source
+        uses: actions/checkout@v4
+        with:
+          repository: pht88888888/DSHAPP
+          ref: 4dddb12fd076d052e788a16638a658b7a447b669
+          persist-credentials: false
+          path: original
+      - name: Apply exact fail-closed source patch in disposable runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original rev-parse HEAD)" = "$UPSTREAM_SHA"
+          cmp changes/THIRD_PARTY_LICENSES/DSHAPP-MIT.txt original/LICENSE
+          python3 changes/host_candidate/p108_original_host_epoch_patch.py --selftest
+          python3 changes/host_candidate/p108_original_host_epoch_patch.py --upstream-dir original
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          root=Path('original')
+          expected=['app/src/main/java/com/dsh/android/MainActivity.kt',
+                    'app/src/main/java/com/dsh/android/P108OriginalOwnerEpochGate.kt']
+          status=subprocess.check_output(['git','-C','original','status','--porcelain'],text=True).splitlines()
+          got=sorted(x[3:] for x in status)
+          assert got==sorted(expected),f'P108_UNAUTHORIZED_UPSTREAM_CHANGE_{got}'
+          patched=(root/expected[0]).read_text()
+          gate=(root/expected[1]).read_text()
+          assert patched.count('p108OriginalOwnerEpoch.observeEngineState(')==1
+          assert patched.count('p108OriginalOwnerEpoch.onActivityDestroyed()')==1
+          assert 'onActivityDestroyed()' in gate
+          assert '): Boolean = false' in gate
+          assert 'originalSessionId: String?' in gate
+          assert 'originalCallId: String?' in gate
+          assert 'claimedEpoch: Long' in gate
+          assert 'P108OriginalOwnerEpochGate' in patched
+          assert (root/'app/src/main/java/com/dsh/android/EngineService.kt').is_file()
+          assert 'override fun onBind(intent: Intent?): IBinder? = null' in (
+              root/'app/src/main/java/com/dsh/android/EngineService.kt').read_text()
+          print('P108_EXACT_ORIGINAL_ACTIVITY_LIFECYCLE_PATCH=PASS')
+          print('P108_ALL_UNVERIFIED_ORIGINAL_TOOL_CALLS_DENIED=PASS')
+          print('P108_NO_NEW_BINDER_OR_NODE_TOOL_REGISTRATION=PASS')
+          print('P108_ORIGINAL_APP_ENGINE_AND_MANIFEST_UNMODIFIED=PASS')
+          PY
+          echo 'P108_ORIGINAL_ANDROID_ACTIVITY_STATE_OWNER_HOOK=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P108_UNVERIFIED_ORIGINAL_SESSION_TOOL_CALL_DENIED=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P108_ORIGINAL_PRODUCTION_BINDER_TOOLRUNTIME=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+      - name: Configure JDK17 and Gradle8.13 (no signer)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Compile modified original Kotlin host, without assemble or APK
+        working-directory: original
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e keystore.properties
+          test ! -e dsh-release.jks
+          gradle --no-daemon --console=plain --max-workers=2 :app:compileSystemDebugKotlin
+          echo 'P108_PATCHED_ORIGINAL_HOST_KOTLIN_COMPILE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P108_ANY_SIGNED_OR_INSTALLED_APK=NO' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P108_V138_SOURCE_AND_SIGNING_EQUIVALENCE=NOT_PROVEN' >> "$GITHUB_STEP_SUMMARY"
+      - name: Execute real compiled Kotlin epoch and fail-closed JVM behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          class_path="$(find original/app/build -type f \
+            -path '*/com/dsh/android/P108OriginalOwnerEpochGate.class' \
+            -print -quit)"
+          test -s "$class_path"
+          classes="${class_path%/com/dsh/android/P108OriginalOwnerEpochGate.class}"
+          mkdir -p /tmp/p108-probe-classes
+          javac -d /tmp/p108-probe-classes \
+            changes/host_candidate/p108_original_host_gate_probe/P108GateProbe.java
+          java -cp "$classes:/tmp/p108-probe-classes" P108GateProbe
+          echo 'P108_ACTUAL_COMPILED_KOTLIN_LIFECYCLE_DENY_TEST=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P108_PRODUCTION_ORIGINAL_NODE_BINDER=NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"

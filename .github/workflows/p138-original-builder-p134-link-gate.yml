@@ -1,0 +1,110 @@
+name: P138 original DSH APK builder P134 guard class inclusion (no release)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p43_original_service/build_embedded_emulator_apk.sh'
+      - 'host_candidate/p134_real_arm64_gate/**'
+      - 'host_candidate/p138_original_build_gate/**'
+      - '.github/workflows/p138-original-builder-p134-link-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: p138-build-guard-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-builder-dependency-and-dex-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 38
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P49_NODE_STAGE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Exact original builder source + classes3 DEX assertion audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          python3 host_candidate/p138_original_build_gate/verify_p134_wired.py
+      - name: Compile P50 actual Android isolated child dependency and d8 runtime class references
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/d8"
+          mkdir -p "$RUNNER_TEMP/p138-classes" "$RUNNER_TEMP/p138-dex"
+          javac --release 8 -cp "$sdk/platforms/android-35/android.jar" \
+            -d "$RUNNER_TEMP/p138-classes" \
+            host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48FixedIsolatedChild.java \
+            host_candidate/p134_real_arm64_gate/src/com/dsh/android/p134/P134RealArm64Gate.java \
+            host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java
+          test -s "$RUNNER_TEMP/p138-classes/com/dsh/android/p134/P134RealArm64Gate.class"
+          test -s "$RUNNER_TEMP/p138-classes/com/dsh/android/p50/P50OriginalNodeFixedChild.class"
+          javap -c -p -classpath "$RUNNER_TEMP/p138-classes" com.dsh.android.p50.P50OriginalNodeFixedChild \
+             | grep -Fq "com/dsh/android/p134/P134RealArm64Gate.allow"
+          jar cf "$RUNNER_TEMP/p138.jar" -C "$RUNNER_TEMP/p138-classes" .
+          "$sdk/build-tools/35.0.0/d8" --min-api 26 --lib "$sdk/platforms/android-35/android.jar" --output "$RUNNER_TEMP/p138-dex" "$RUNNER_TEMP/p138.jar"
+          test -s "$RUNNER_TEMP/p138-dex/classes.dex"
+          strings "$RUNNER_TEMP/p138-dex/classes.dex" | grep -Fq "Lcom/dsh/android/p134/P134RealArm64Gate;"
+          strings "$RUNNER_TEMP/p138-dex/classes.dex" | grep -Fq "Lcom/dsh/android/p50/P50OriginalNodeFixedChild;"
+          echo P138_ANDROID35_P50_GUARD_JAVA_COMPILE_AND_DEX=PASS
+      - name: Restore build-only prerequisites for exact signed v138 scratch APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          manager="$(command -v sdkmanager || true)"
+          if test -z "$manager"; then manager="$(find "$sdk/cmdline-tools" -name sdkmanager -type f -perm /111 2>/dev/null | head -n1 || true)"; fi
+          test -n "$manager"
+          "$manager" --sdk_root="$sdk" "platforms;android-35" "build-tools;35.0.0"
+          echo P138_ACTUAL_BUILDER_PREREQUISITES=PASS
+      - name: Execute actual immutable original-APK test builder with ephemeral signer (do not publish)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$P47_NO_HOST_FALLBACK" = 1 && test "$P49_NODE_STAGE" = 1
+          python3 host_candidate/p138_original_build_gate/verify_p134_wired.py
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > "$RUNNER_TEMP/p138-builder.txt" 2>&1; then
+            echo P138_ACTUAL_ORIGINAL_APK_BUILDER=FAILED_NOT_RELEASED
+            grep -E "P43_|P47_|P49_|P50_|P134_|P138_|error:|Exception|Traceback|RuntimeError|cannot find symbol|not found" "$RUNNER_TEMP/p138-builder.txt" | tail -n 28 | cut -c 1-220 || true
+            exit 1
+          fi
+          for marker in \
+            P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA \
+            P43_ORIGINAL_P40_TRAMPOLINE_AND_P43_CLASSES3=PASS_STATIC \
+            P49_REAL_ORIGINAL_DSH_ASSETS_AND_LIBRARIES_BYTE_PRESERVED=PASS \
+            P49_11_ADDITIONAL_ARM64_ELF_STORED_16K_AND_SHA=PASS \
+            P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS; do
+            grep -Fq "$marker" "$RUNNER_TEMP/p138-builder.txt" || { echo "P138_REQUIRED_ORIGINAL_BUILD_MARKER_MISSING"; exit 1; }
+          done
+          test -s .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          echo P138_REAL_ORIGINAL_V138_SCRATCH_APK_FULL_BUILD=PASS
+          echo P138_REAL_P134_GUARD_INCLUDED_IN_CLASSES3_DEX=PASS
+          echo P138_FIXED_SIGNER_USED=NO
+          echo P138_TEST_APK_RELEASED=NO
+      - name: Keep deny gate and clear test classfiles
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/p138-classes" "$RUNNER_TEMP/p138-dex" "$RUNNER_TEMP/p138.jar" "$RUNNER_TEMP/p138-builder.txt" .p43tmp
+          echo P138_ORIGINAL_FULL_APK_BUILD=CHECK_PRECEDING_STEP >> "$GITHUB_STEP_SUMMARY"
+          echo P138_ORIGINAL_ENGINE_MANAGER_NODE_START=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P138_P109_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P138_FORMAL_V139_RELEASE=BLOCKED >> "$GITHUB_STEP_SUMMARY"

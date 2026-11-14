@@ -1,0 +1,33 @@
+# P205 — disposable genuine-original bootEngine entry witness
+
+P204 read the fixed signed-v138 MainActivity.onCreate bytecode and found a normal CFG path to its PC430 direct call into MainActivity.bootEngine. P150's original-stack counter is incremented only inside P47LaunchGate.startOrDeny, **not** at bootEngine entry. It cannot establish whether original bootEngine was entered.
+
+P205 adds exactly one **test-only** zero-register invoke-static call at the first original instruction of `MainActivity.bootEngine()V` in the *ephemeral Apktool-derived CI checkout* (never the original signed APK or repository's original source). The call invokes `P205BootEntryWitness.mark()`, a fixed-constant Android Log writer built into disposable classes3.dex. It does not call EngineManager.start, Node, P40 or the P43 synthetic bridge. The patcher requires existing Draft PR #80, correct original branch/remote, SHA-pinned original signed-v138 APK and SHA-pinned original P43 build script. It requires an exact unique method signature, one register directive, an expected boot lambda construction reference and no unsupported branch/try/switch code in that method; it refuses unknown structures. The original method text must be byte-for-byte identical after removal of the one injected probe line.
+
+The build validator compares the real original signed-v138 classes.dex `MainActivity.bootEngine()V` full opcode and resolved operand sequence with the disposable derived method, **excluding only its first added marker invoke**. It also requires the original MainActivity.onCreate(Bundle) complete instruction parity and marker uniqueness, P47 three typed no-host fallback DENY sites, original secondary dex/native/assets SHA, and identical permissions. The marker's own single class is only present in the temporary classes3.dex.
+
+The Android35 runner installs this test-key APK **only on a fresh disposable emulator** with no pre-existing DSH data, blocks its UID IPv4/IPv6 external egress, writes one unique log boundary **before cold launching the unmodified original manifest MainActivity** and reads only the two P205 fixed log tags. A matching marker must be emitted at most once by the same current real app PID; a rejected UID, duplicate, missing boundary or premature crash fails closed. Report either `P205_ORIGINAL_BOOTENGINE_METHOD_ENTRY=OBSERVED` or `NOT_OBSERVED` honestly. A passing observation **only demonstrates entry into the instrumented original method**, not completion of coroutine scheduling, P47 arrival, a Node process, OS-trusted owner generation, P184 handoff or actual HTTP readiness.
+
+All methods except the one disposable local injection retain their original semantics, and release builds never contain the marker. P192 isolated UID localhost TCP BIND_EACCES is a frozen architectural negative; no isolated Internet, SELinux change or host ProcessBuilder fallback. Native-sensitive tools DENY_ALL, GS screenshot OFF. No user-phone installation, account/cookie/credential access, third-party fingerprint website, bot challenge bypass or network identity rotation. The user permits eventual physical ARM64 testing, but that requires separate explicit per-test consent, independent test package, exact signing/package/permission checks and data-preserving preflight; never overwrite/uninstall installed DSH with this differently signed temporary same-package APK. Preserve original DSHAPP/pht88888888 MIT credit, third-party licenses and unofficial modification statement.
+
+Formal v139 remains STRUCTURAL_BLOCKED.
+
+## 2026-11-08 P205 bounded duplicate caller triage (no original DEX change)
+
+The signed-original v138 P205 smali patcher remains exactly pinned and unchanged,
+so the downstream P209 immutable hash requirement stays intact. Only the disposable
+Java witness and P205 runner gain fixed enum telemetry. The witness observes
+`FIRST`, `SECOND`, and `LATER` original method entries and records the immediate
+synchronous Java caller as `ONCREATE`, `MAINACTIVITY_OTHER`,
+`MAINACTIVITY_NESTED`, `OTHER_OR_UNKNOWN`, or `UNAVAILABLE`; it also records
+`MAIN` versus `OTHER` thread category. Neither PID/UID values, stack traces,
+Activity identity, user data, cookies nor arbitrary original class names are emitted.
+The runner prints a matching fixed caller category for the first and second entries
+only, after the current-run boundary. A missing/conflicting category or repeated
+entry still fails closed. Logging these categories cannot distinguish same-instance
+repeated invocation from framework Activity recreation; the P200 independent
+lifecycle callback categorization must not be misrepresented as a same-run join.
+
+No P47 authorization, Node start, native tools, extra test launch, credentials,
+production APK, release signing, physical phone, or original browser data is changed.
+`v139=STRUCTURAL_BLOCKED` remains mandatory.

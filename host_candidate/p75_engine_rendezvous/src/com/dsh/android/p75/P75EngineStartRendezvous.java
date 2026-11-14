@@ -1,6 +1,7 @@
 package com.dsh.android.p75;
 
 import com.dsh.p37.P37RemoteProcess;
+import com.dsh.android.p68.P184ChildStartReceipt;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
@@ -19,14 +20,25 @@ public final class P75EngineStartRendezvous {
   private static final String DENY="P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK";
   private static final long WAIT_MILLIS=12000;
   private static Pending pending;
-  private static final ThreadLocal<String> trustedCall=new ThreadLocal<>();
+  // A claim belongs to this exact pending lease object, not a reusable
+  // session string. Cancellation plus accidental host-session ID reuse must
+  // NEVER reactivate a stale engine-thread permit.
+  private static final ThreadLocal<Pending> trustedCall=new ThreadLocal<>();
   private static final class Pending {
     final String session;
+    final long ownerEpoch;
+    final boolean requiresP184Receipt;
     final CountDownLatch entered=new CountDownLatch(1);
     final CountDownLatch answered=new CountDownLatch(1);
     boolean waiting,terminal;
+    // One lease can belong to one actual engine call thread only.
+    // Session contents do not prove thread ownership.
+    Thread claimedThread;
     P37RemoteProcess proxy;
-    Pending(String s){session=s;}
+    Pending(String s){this(s,0L,false);}
+    Pending(String s,long epoch,boolean requireReceipt){
+      session=s;ownerEpoch=epoch;requiresP184Receipt=requireReceipt;
+    }
   }
   private P75EngineStartRendezvous(){}
   public static void armFromTrustedHost(String hostGeneratedSession) {
@@ -38,13 +50,31 @@ public final class P75EngineStartRendezvous {
       pending=new Pending(hostGeneratedSession);
     }
   }
+  /**
+   * P184 host-only opt-in: only the P68-issued one-use receipt may satisfy
+   * this particular pending generation. No user/worker/Bundle can arm it.
+   * Production launch argv remains DENY except the old fixed id -u fixture.
+   */
+  public static void armForVerifiedChildReceipt(String hostGeneratedSession,
+      long trustedOwnerEpoch) {
+    if(hostGeneratedSession==null ||
+       !hostGeneratedSession.matches("[0-9a-f]{64}") ||
+       trustedOwnerEpoch<=0)
+      throw new SecurityException("P184_TRUSTED_HOST_EPOCH_REQUIRED");
+    synchronized(LOCK){
+      if(pending!=null)throw new SecurityException("P184_ALREADY_ARMED");
+      pending=new Pending(hostGeneratedSession,trustedOwnerEpoch,true);
+    }
+  }
   /** Test host must bind the exact coroutine's intended thread; not Binder thread. */
   public static void claimOnEngineThread(String session){
     synchronized(LOCK) {
       if(pending==null || pending.terminal ||
-         !pending.session.equals(session) || trustedCall.get()!=null)
+         !pending.session.equals(session) || trustedCall.get()!=null ||
+         pending.claimedThread!=null)
         throw new SecurityException("P75_UNAUTHORIZED_ENGINE_THREAD");
-      trustedCall.set(session);
+      pending.claimedThread=Thread.currentThread();
+      trustedCall.set(pending);
     }
   }
   public static boolean awaitOriginalBridgeEntered(long timeoutMillis)
@@ -59,10 +89,16 @@ public final class P75EngineStartRendezvous {
       int platformSendingUid,P37RemoteProcess.IsolatedUidVerifier frameworkUidVerifier){
     synchronized(LOCK){
       Pending p=pending;
-      if(p==null || p.terminal || !p.waiting || p.proxy!=null ||
+      if(p==null || p.terminal || p.requiresP184Receipt ||
+         !p.waiting || p.proxy!=null ||
          !p.session.equals(hostGeneratedSession) || remote==null ||
          !remote.isAlive() || platformSendingUid<0 || frameworkUidVerifier==null ||
-         !frameworkUidVerifier.isIsolatedUid(platformSendingUid))
+         !frameworkUidVerifier.isIsolatedUid(platformSendingUid) ||
+         // P168: exact P37 proxy identity must match the Binder UID and
+         // host-minted pending session, not just caller-supplied labels.
+         // Does NOT authorize arbitrary Node argv, bypass P68, or confer
+         // production EngineManager access.
+         !remote.matchesBoundIdentity(platformSendingUid,hostGeneratedSession))
         return false;
       // Caller MUST be P48's onLiveProxy callback after P68 verified
       // Binder Message.sendingUid, session, ordering and CHILD_STARTED.
@@ -71,14 +107,36 @@ public final class P75EngineStartRendezvous {
       return true;
     }
   }
+  /**
+   * P184 verified path. Only receipts minted inside the real P68 Android
+   * Messenger after framework Message.sendingUid + ordered CHILD_STARTED
+   * are eligible. Caller-supplied UID/BooleanSupplier has NO path here.
+   */
+  public static boolean authenticatedChildStartedWithReceipt(
+      P184ChildStartReceipt verifiedReceipt, P37RemoteProcess remote){
+    synchronized(LOCK){
+      Pending p=pending;
+      if(p==null || p.terminal || !p.requiresP184Receipt ||
+         !p.waiting || p.proxy!=null || remote==null ||
+         verifiedReceipt==null)
+        return false;
+      // The receipt burns on the FIRST attempt, including identity mismatch.
+      // Owner epoch and session come from the trusted host pending lease.
+      if(!verifiedReceipt.consume(remote,p.session,p.ownerEpoch))
+        return false;
+      p.proxy=remote;
+      p.answered.countDown();
+      return true;
+    }
+  }
   public static Process startOrDeny(ProcessBuilder requested) throws IOException {
     Pending p;
-    String current=trustedCall.get();
+    Pending claimed=trustedCall.get();
     trustedCall.remove();
     synchronized(LOCK) {
       p=pending;
-      if(p==null || p.terminal || current==null ||
-         !current.equals(p.session) || p.waiting)
+      if(p==null || p.terminal || claimed!=p ||
+         p.claimedThread!=Thread.currentThread() || p.waiting)
         throw new IOException(DENY);
       // Reject unknown engine argv BEFORE any waiting or receipt of child.
       List<String> args=requested==null?null:requested.command();
@@ -100,38 +158,63 @@ public final class P75EngineStartRendezvous {
     try{got=p.answered.await(WAIT_MILLIS,TimeUnit.MILLISECONDS);}
     catch(InterruptedException cancelled){
       Thread.currentThread().interrupt();
-      cancelSession("CANCELLED");
+      // P177: this engine thread owns p, NOT whatever global pending
+      // might have been created after its own lease was cancelled.
+      // The old cancelSession() could revoke a newer (even identical
+      // session-text) lease when an abandoned old thread wakes late.
+      cancelExactPending(p);
       throw new IOException("P75_ENGINE_START_INTERRUPTED",cancelled);
     }
+    P37RemoteProcess abandoned=null;
+    Process returned=null;
     synchronized(LOCK){
-      // ProcessBuilder.start() may return a Process whose short-lived child
-      // exited after authenticated CHILD_STARTED. REMOTE_EXIT is legitimate;
-      // identity loss, kill, buffer failure and transport loss are NOT.
+      // REMOTE_EXIT is legitimate after CHILD_STARTED; identity/transport
+      // failures are not. A child can race an expired await() before LOCK.
       P37RemoteProcess.TerminalReason reason=p.proxy==null ? null : p.proxy.terminalReason();
       if(!got || p.terminal || p.proxy==null ||
          (reason!=P37RemoteProcess.TerminalReason.RUNNING &&
           reason!=P37RemoteProcess.TerminalReason.REMOTE_EXIT)) {
         if(pending==p)pending=null;
         p.terminal=true;
-        throw new IOException("P75_CHILD_ACK_MISSING_OR_TIMEOUT");
+        abandoned=p.proxy;
+        p.proxy=null;
+      } else {
+        returned=p.proxy;
+        p.terminal=true;
+        if(pending==p)pending=null;
       }
-      Process returned=p.proxy;
-      p.terminal=true;
-      if(pending==p)pending=null;
-      return returned;
     }
+    // Remote callbacks may reenter the rendezvous; never stop under LOCK.
+    if(abandoned!=null)abandoned.destroyForcibly();
+    if(returned==null)throw new IOException("P75_CHILD_ACK_MISSING_OR_TIMEOUT");
+    return returned;
+  }
+  // Identity-scoped interruption cleanup: an obsolete coroutine's
+  // cancellation may only affect its own exact pending generation.
+  // In particular it may not tear down a new lease after host re-arming.
+  private static void cancelExactPending(Pending target){
+    if(target==null)return;
+    P37RemoteProcess undelivered=null;
+    synchronized(LOCK) {
+      if(pending!=target)return;
+      target.terminal=true;
+      // A previously authenticated child must not survive cancellation
+      // before the engine thread actually receives its Process facade.
+      undelivered=target.proxy;
+      target.proxy=null;
+      target.answered.countDown();
+      pending=null;
+    }
+    // Never invoke a potentially reentrant remote-control callback under LOCK.
+    if(undelivered!=null)undelivered.destroyForcibly();
   }
   public static void cancelSession(String category){
     if(!"CANCELLED".equals(category) && !"BINDER_LOST".equals(category) &&
        !"ACTIVITY_GONE".equals(category) && !"TIMEOUT".equals(category))
       throw new IllegalArgumentException("P75_BOUNDED_REASON_REQUIRED");
-    synchronized(LOCK) {
-      Pending p=pending;
-      if(p==null)return;
-      p.terminal=true;
-      p.answered.countDown();
-      pending=null;
-    }
+    Pending target;
+    synchronized(LOCK){target=pending;}
+    cancelExactPending(target);
   }
   public static boolean isArmed() {
     synchronized(LOCK){return pending!=null;}

@@ -1,0 +1,85 @@
+name: P184 Java8 receipt one-shot source and Android framework issuer compile (no APK)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p184_verified_child_receipt/**'
+      - 'host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java'
+      - 'host_candidate/p75_engine_rendezvous/src/com/dsh/android/p75/P75EngineStartRendezvous.java'
+      - '.github/workflows/p184-verified-child-start-receipt.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p184-receipt-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  receipt-java8-and-android-source:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Run original P75 and P184 Java8 negative/cross-thread checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash host_candidate/p184_verified_child_receipt/run_java8.sh | tee "$RUNNER_TEMP/p184.log"
+          grep -Fq 'P75_CROSS_THREAD_ENGINE_BINDER_RENDEZVOUS_JVM=PASS assertions=' "$RUNNER_TEMP/p184.log"
+          grep -Fxq 'P184_PACKAGE_PRIVATE_PLATFORM_ISSUER_ONLY=PASS_SOURCE_BOUNDARY' "$RUNNER_TEMP/p184.log"
+          grep -Fxq 'P184_OWNER_EPOCH_EXACT_PROCESS_ONE_USE_RACE=PASS' "$RUNNER_TEMP/p184.log"
+          grep -Fxq 'P184_P75_RECEIPT_MODE_LEGACY_UID_CALLBACK_DENIED=PASS' "$RUNNER_TEMP/p184.log"
+          grep -Fq 'P184_JAVA8_NEGATIVE_AND_THREAD_TEST=PASS assertions=' "$RUNNER_TEMP/p184.log"
+          grep -Fxq 'P184_FRAMEWORK_MESSAGE_SENDING_UID=REQUIRES_ANDROID_TEST' "$RUNNER_TEMP/p184.log"
+          grep -Fxq 'P184_ORIGINAL_NODE_HTTP_TOKEN_READY=NOT_WIRED' "$RUNNER_TEMP/p184.log"
+      - name: Compile P68 genuine Android Message.sendingUid issuer and P75
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          jar="$sdk/platforms/android-35/android.jar"
+          test -s "$jar"
+          d="$RUNNER_TEMP/p184-android"
+          mkdir -p "$d"
+          javac --release 8 -cp "$jar" -d "$d" \
+            host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java \
+            host_candidate/p53_child_start/src/com/dsh/android/p53/P53StartOrder.java \
+            host_candidate/p67_authenticated_handoff/src/com/dsh/android/p67/P67AuthenticatedHandoff.java \
+            host_candidate/p184_verified_child_receipt/src/com/dsh/android/p68/P184ChildStartReceipt.java \
+            host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java \
+            host_candidate/p75_engine_rendezvous/src/com/dsh/android/p75/P75EngineStartRendezvous.java
+          grep -Fq 'int sender=msg.sendingUid;' host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java
+          grep -Fq 'msg.what==P53StartOrder.CHILD_STARTED && p184OwnerEpoch>0' host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java
+          grep -Fq 'takeVerifiedChildStartReceipt()' host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java
+          grep -Fq 'p.requiresP184Receipt' host_candidate/p75_engine_rendezvous/src/com/dsh/android/p75/P75EngineStartRendezvous.java
+          echo P184_ANDROID_FRAMEWORK_UID_ISSUER_SOURCE_COMPILE=PASS
+          echo P184_REAL_ANDROID_BINDER_RECEIPT_E2E=NOT_TESTED
+      - name: Verify attribution and unchanged default deny boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+          grep -Fq 'P75_PRODUCTION_ARGV_NOT_AUTHORIZED' host_candidate/p75_engine_rendezvous/src/com/dsh/android/p75/P75EngineStartRendezvous.java
+          grep -Fq 'P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK' host_candidate/p75_engine_rendezvous/src/com/dsh/android/p75/P75EngineStartRendezvous.java
+          echo P184_NO_NEW_NETWORK_FILE_OR_NATIVE_TOOL_PERMISSION=PASS_SOURCE_ONLY
+      - name: Deny production readiness claim
+        if: always()
+        shell: bash
+        run: |
+          echo P184_REAL_ANDROID35_DUAL_UID_RECEIPT=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P184_ORIGINAL_ENGINE_GENERATION=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P184_ORIGINAL_NODE_HTTP_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P184_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P184_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P184_GS_CAPTURE=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P184_SIGN_APK_OR_INSTALL=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P184_V139_RELEASE=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"
