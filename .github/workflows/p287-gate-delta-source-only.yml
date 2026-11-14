@@ -31,7 +31,7 @@ jobs:
           test "$(git hash-object host_candidate/p281_helper_predicates/p281_helper_predicates.py)" = 9fc33a0adef992fc8a7c295432d77fb4ce62df73
           test "$(git hash-object host_candidate/p283_descriptor_normalization/p283_descriptor_normalization.py)" = 76877acfabd19e79ce56610a80b89cb9410bc400
           test "$(git hash-object host_candidate/p285_shadow_verifier/p285_shadow_verifier.py)" = fdb305c94fa3d82c36943de0686f290c1716db5c
-          test "$(git hash-object host_candidate/p287_gate_delta/p287_gate_delta.py)" = 34582a60f9b8681f8bc8de6c8adcc7a7c340941b
+          test "$(git hash-object host_candidate/p287_gate_delta/p287_gate_delta.py)" = db5e404a4799ca8f67704dd0ffaf79bd34c085e8
           test "$(git hash-object host_candidate/p245_build_only_probe/p245_build_only_probe.py)" = 06f62f4d8c8ee141b6b2030ee6556c9a43d9e499
           test "$(git hash-object host_candidate/p273_exception_relocation/p273_exception_relocation.py)" = 24eb168ec2536ca38f1fddcb3df38963972f8dd6
           test "$(git hash-object host_candidate/p275_encoding_width/p275_encoding_width.py)" = 970e071eb4eaafec8e68f3eddcdb1f23172d09b7
@@ -59,7 +59,7 @@ jobs:
                   compile(f.read_text(),str(f),'exec')
           print('P287_SOURCE_SYNTAX=PASS')
           PY
-      - name: Execute and independently sum all 668 prior and 49 new adversarial cases
+      - name: Execute and independently sum all 668 prior and 64 new adversarial cases
         run: |
           set -euo pipefail
           total=0
@@ -86,16 +86,16 @@ jobs:
             "host_candidate/p281_helper_predicates/test_p281_helper_predicates.py 37" \
             "host_candidate/p283_descriptor_normalization/test_p283_descriptor_normalization.py 35" \
             "host_candidate/p285_shadow_verifier/test_p285_shadow_verifier.py 52" \
-            "host_candidate/p287_gate_delta/test_p287_gate_delta.py 49"; do
+            "host_candidate/p287_gate_delta/test_p287_gate_delta.py 64"; do
             read -r script expected <<< "$entry"
             python3 -B "$script" > "$RUNNER_TEMP/fixture.log" 2>&1 || { cat "$RUNNER_TEMP/fixture.log"; exit 1; }
             grep -Eq "^Ran $expected tests in" "$RUNNER_TEMP/fixture.log"
             grep -Fxq 'OK' "$RUNNER_TEMP/fixture.log"
             total=$((total+expected))
           done
-          test "$total" -eq 717
+          test "$total" -eq 732
           echo P287_ACTUAL_PER_SUITE_TEST_TOTAL="$total"
-          echo P287_SYNTHETIC_717_OF_717=PASS
+          echo P287_SYNTHETIC_732_OF_732=PASS
       - name: P287 source-only explicit denial
         run: |
           set -euo pipefail
