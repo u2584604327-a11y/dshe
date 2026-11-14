@@ -32,7 +32,6 @@ SINGLE_LOG=re.compile(
  r"v1, v2, Landroid/util/Log;->i\(Ljava/lang/String;[ \t]+Ljava/lang/String;\)I\Z",
  re.ASCII)
 OUTCOMES=("SAFE_FORMAT_DELTA_CANDIDATE_NOT_GATE",
-          "NO_DELTA_NEEDED_LEGACY_EXACT",
           "DENY_DIFFERENT_OR_UNVERIFIED")
 CHECKS=("ORIGINAL_FOUR_PREDICATES","LEGACY_TEXT_ONLY_FAIL",
         "EXACT_ONE_ASCII_SEPARATOR",
@@ -82,10 +81,6 @@ def candidate(original_predicates,original_catch,raw_getter,raw_log,shadow,
           "FAIL" if any(x=="FAIL" for x in shadow.values()) else "UNVERIFIED")
     if all(x=="PASS" for x in checks.values()):
         verdict="SAFE_FORMAT_DELTA_CANDIDATE_NOT_GATE"
-    elif (checks["LEGACY_TEXT_ONLY_FAIL"]=="FAIL" and
-          checks["ORIGINAL_FOUR_PREDICATES"]=="PASS" and
-          checks["P285_ALL_ELEVEN_FACTORS"]=="PASS"):
-        verdict="NO_DELTA_NEEDED_LEGACY_EXACT"
     else:verdict="DENY_DIFFERENT_OR_UNVERIFIED"
     return (checks,verdict)
 
