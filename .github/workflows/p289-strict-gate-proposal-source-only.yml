@@ -32,7 +32,7 @@ jobs:
           test "$(git hash-object host_candidate/p283_descriptor_normalization/p283_descriptor_normalization.py)" = 76877acfabd19e79ce56610a80b89cb9410bc400
           test "$(git hash-object host_candidate/p285_shadow_verifier/p285_shadow_verifier.py)" = fdb305c94fa3d82c36943de0686f290c1716db5c
           test "$(git hash-object host_candidate/p287_gate_delta/p287_gate_delta.py)" = db5e404a4799ca8f67704dd0ffaf79bd34c085e8
-          test "$(git hash-object host_candidate/p289_strict_gate_proposal/p289_strict_gate_proposal.py)" = 764ea7b3b557b7c2dae6af137e438808ec194b97
+          test "$(git hash-object host_candidate/p289_strict_gate_proposal/p289_strict_gate_proposal.py)" = 1ebd0c9991398f2af76cb163b9ffaffe836b6fd5
           test "$(git hash-object host_candidate/p245_build_only_probe/p245_build_only_probe.py)" = 06f62f4d8c8ee141b6b2030ee6556c9a43d9e499
           test "$(git hash-object host_candidate/p273_exception_relocation/p273_exception_relocation.py)" = 24eb168ec2536ca38f1fddcb3df38963972f8dd6
           test "$(git hash-object host_candidate/p275_encoding_width/p275_encoding_width.py)" = 970e071eb4eaafec8e68f3eddcdb1f23172d09b7
