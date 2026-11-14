@@ -38,8 +38,9 @@ DECISIONS=("STRICT_REPLACEMENT_PROPOSAL_ONLY","DENY")
 def raw_log_target(row,dex):
     """Independent raw DEX 35c decode; no display-string or summary trust."""
     out={x:"UNVERIFIED" for x in CHECKS289[2:8]}
-    if (not isinstance(row,(tuple,list)) or len(row)!=5 or
-        row[1]!="invoke-static"):
+    if not isinstance(row,(tuple,list)) or len(row)!=5:
+        return out  # impossible to inspect: UNVERIFIED -> DENY
+    if row[1]!="invoke-static":
         out["RAW_LOG_35C_FORMAT"]="FAIL"
         return out
     try: data=row[3].get_raw()
