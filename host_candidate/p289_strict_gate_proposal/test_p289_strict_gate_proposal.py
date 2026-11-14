@@ -40,7 +40,7 @@ def ready_checks():
 def shadow():
  return {k:"PASS" for k in FACTORS}
 def combined():
- base=object();candidate=object()
+ base=object();candidate=Dex()  # candidate must expose real-like indexed method pool
  def idx(v):
     if v is base:return {"old":object()}
     return {"old":object(),(OWNER,NAME,DESC):object()}
