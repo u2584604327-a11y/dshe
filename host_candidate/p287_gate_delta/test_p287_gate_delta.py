@@ -185,4 +185,50 @@ class Tests(unittest.TestCase):
    self.assertIn("P287_REAL_DELTA_REVIEW=NOT_ATTESTED",out.getvalue())
   finally:sys.argv=old
 
+ def test_50_spoof_getter_raw_word_count(self):
+  d=getter();d["RAW_WORD_COUNT"]="FAIL"
+  self.assertEqual(verdict(g=d),DENY)
+ def test_51_spoof_getter_raw_name(self):
+  d=getter();d["RAW_NAME"]="FAIL"
+  self.assertEqual(verdict(g=d),DENY)
+ def test_52_spoof_getter_return_type(self):
+  d=getter();d["RAW_RETURN"]="FAIL"
+  self.assertEqual(verdict(g=d),DENY)
+ def test_53_spoof_getter_raw_args(self):
+  d=getter();d["RAW_ARGS_EXACT"]="FAIL"
+  self.assertEqual(verdict(g=d),DENY)
+ def test_54_spoof_getter_raw_args_canonical(self):
+  d=getter();d["RAW_ARGS_CANONICAL"]="FAIL"
+  self.assertEqual(verdict(g=d),DENY)
+ def test_55_spoof_getter_exact_output(self):
+  d=getter();d["OUTPUT_TEXT_EXACT"]="FAIL"
+  self.assertEqual(verdict(g=d),DENY)
+ def test_56_spoof_getter_canonical_output(self):
+  d=getter();d["OUTPUT_TEXT_CANONICAL"]="FAIL"
+  self.assertEqual(verdict(g=d),DENY)
+ def test_57_spoof_log_owner_despite_tuple_pass(self):
+  d=logger();d["RAW_OWNER"]="FAIL"
+  self.assertEqual(verdict(l=d),DENY)
+ def test_58_spoof_log_name_despite_tuple_pass(self):
+  d=logger();d["RAW_NAME"]="FAIL"
+  self.assertEqual(verdict(l=d),DENY)
+ def test_59_spoof_log_return_despite_tuple_pass(self):
+  d=logger();d["RAW_RETURN"]="FAIL"
+  self.assertEqual(verdict(l=d),DENY)
+ def test_60_spoof_log_precomputed_canonical_flag(self):
+  d=logger();d["RAW_CANONICAL_TUPLE"]="FAIL"
+  self.assertEqual(verdict(l=d),DENY)
+ def test_61_spoof_log_canonical_output_mismatch(self):
+  d=logger();d["OUTPUT_TEXT_CANONICAL"]="FAIL"
+  self.assertEqual(verdict(l=d),DENY)
+ def test_62_spoof_unexpected_raw_status(self):
+  d=getter();d["RAW_OWNER"]="ALLOW"
+  self.assertEqual(verdict(g=d),DENY)
+ def test_63_spoof_unknown_raw_status(self):
+  d=logger();d["RAW_NAME"]="UNVERIFIED"
+  self.assertEqual(verdict(l=d),DENY)
+ def test_64_missing_log_raw_detail(self):
+  d=logger();d.pop("RAW_OWNER")
+  self.assertEqual(verdict(l=d),DENY)
+
 if __name__=="__main__":unittest.main()
