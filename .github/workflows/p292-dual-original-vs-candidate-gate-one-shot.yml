@@ -1,3 +1,4 @@
+# P292: isolated, non-release dual-verifier evidence only; original P245 immutable.
 name: P292 one-shot original P245 DENY versus SHA-pinned strict verifier candidate PASS; no release
 on:
   pull_request:
