@@ -131,9 +131,8 @@ class Cases(unittest.TestCase):
         self.assertEqual(q["categories"]["MATCHING_INVOKE_METHOD_TARGETS_CANDIDATE"],1)
     def test_26_malformed_method_pool_item(self):
         self.assertIsNone(p297.resolved(Pool({1:("Lsample/Record;","call","bad")}),1))
-    def test_27_null_input_output(self):
-        self.assertIsNone(p297.raw_invokes(method()))
-        if False: pass
+    def test_27_no_invoke_is_empty_tuple(self):
+        self.assertEqual(p297.raw_invokes(method()), ())
     def test_28_index_is_derived_per_side(self):
         lhs=Pool({4:REF});rhs=Pool({7:REF})
         self.assertEqual(p297.category(method(invoke(index=4)),method(invoke(index=7)),lhs,rhs),
