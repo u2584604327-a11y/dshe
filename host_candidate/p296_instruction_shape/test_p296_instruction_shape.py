@@ -47,7 +47,7 @@ class Cases(unittest.TestCase):
         self.assertEqual(p296.encoded_shape(method(),method(data=b"\x12\x00\x00\x00")),
                          "RAW_DIFFER_WIDTH")
     def test_04_opcode_changed_same_width(self):
-        self.assertEqual(p296.encoded_shape(method(),method(name="move")),
+        self.assertEqual(p296.encoded_shape(method(),method(name="move",data=b"\x01\x00")),
                          "RAW_DIFFER_OPCODE")
     def test_05_same_opcode_width_but_raw_diff(self):
         self.assertEqual(p296.encoded_shape(method(),method(data=b"\x12\x01")),
