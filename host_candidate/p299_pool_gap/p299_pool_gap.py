@@ -60,9 +60,9 @@ def reason_for_pool(dex,kind,idx):
             x=dex.get_cm_field(idx)
             if not isinstance(x,(tuple,list)) or len(x)!=3:return "FIELD_TUPLE_INVALID"
             owner,typ,name=x
-            if (not isinstance(owner,str) or re.fullmatch(r"L[^;()\\s]+;",owner) is None
+            if (not isinstance(owner,str) or re.fullmatch(r"L[^;()\s]+;",owner) is None
                 or not valid_type(typ) or not isinstance(name,str) or not (0<len(name)<=8192)
-                or re.search(r"[()\\s]",name)):
+                or re.search(r"[()\s]",name)):
                 return "FIELD_DESCRIPTOR_INVALID"
             return None
     except Exception:
