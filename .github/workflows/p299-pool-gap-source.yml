@@ -40,7 +40,6 @@ jobs:
           test "$(git hash-object host_candidate/p297_raw_invoke_pool/p297_raw_invoke_pool.py)" = 71beaf48cc4eb53de00a33489f16b8f7c94cecf8
           test "$(git hash-object host_candidate/p298_other_pool_refs/p298_other_pool_refs.py)" = ebee9de3ca891184b1599929b8b6a64ed2cea0b9
           test "$(git hash-object host_candidate/p299_pool_gap/p299_pool_gap.py)" = c370cb46d12d630c4e37c85504f906f6274609a2
-          test "$(git hash-object host_candidate/p299_pool_gap/p299_pool_gap.py)" = ebee9de3ca891184b1599929b8b6a64ed2cea0b9
           python3 -B host_candidate/p299_pool_gap/test_p299_pool_gap.py 2>&1 | tee "$RUNNER_TEMP/p299-tests.log"
           grep -Eq '^Ran 34 tests in' "$RUNNER_TEMP/p299-tests.log"
           grep -Fxq OK "$RUNNER_TEMP/p299-tests.log"
