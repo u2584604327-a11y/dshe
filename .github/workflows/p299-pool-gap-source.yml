@@ -1,0 +1,53 @@
+# P299: source-only deny-only indexed field/type/string pool tests.
+name: P299 source-only one missing DEX pool reference root-cause triage, release DENY
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p299_pool_gap/**'
+      - '.github/workflows/p299-pool-gap-source.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p299-source-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p299-source:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify source-only P299 34 cases and pinned P245/P298
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('p299_pool_gap.py','test_p299_pool_gap.py'):
+            p=Path('host_candidate/p299_pool_gap')/name
+            compile(p.read_text(encoding='utf-8'),str(p),'exec')
+          print('P299_SOURCE_SYNTAX=PASS')
+          PY
+          test "$(git hash-object host_candidate/p245_build_only_probe/p245_build_only_probe.py)" = 06f62f4d8c8ee141b6b2030ee6556c9a43d9e499
+          test "$(git hash-object host_candidate/p297_raw_invoke_pool/p297_raw_invoke_pool.py)" = 71beaf48cc4eb53de00a33489f16b8f7c94cecf8
+          test "$(git hash-object host_candidate/p298_other_pool_refs/p298_other_pool_refs.py)" = ebee9de3ca891184b1599929b8b6a64ed2cea0b9
+          test "$(git hash-object host_candidate/p299_pool_gap/p299_pool_gap.py)" = c370cb46d12d630c4e37c85504f906f6274609a2
+          test "$(git hash-object host_candidate/p299_pool_gap/p299_pool_gap.py)" = ebee9de3ca891184b1599929b8b6a64ed2cea0b9
+          python3 -B host_candidate/p299_pool_gap/test_p299_pool_gap.py 2>&1 | tee "$RUNNER_TEMP/p299-tests.log"
+          grep -Eq '^Ran 34 tests in' "$RUNNER_TEMP/p299-tests.log"
+          grep -Fxq OK "$RUNNER_TEMP/p299-tests.log"
+          python3 -B host_candidate/p299_pool_gap/p299_pool_gap.py | tee "$RUNNER_TEMP/p299-source.log"
+          grep -Fxq P299_REAL_ROOT_CAUSE=NOT_ATTESTED "$RUNNER_TEMP/p299-source.log"
+          grep -Fxq P299_RELEASE=DENY "$RUNNER_TEMP/p299-source.log"
+          echo P299_ACTUAL_34_OF_34=PASS
+          echo P299_ORIGINAL_P245_BLOB=BYTE_EXACT
+          echo P299_RELEASE=DENY
+          echo P299_V139=STRUCTURAL_BLOCKED
