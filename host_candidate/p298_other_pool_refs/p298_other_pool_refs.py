@@ -68,7 +68,7 @@ def valid_type(s):
     if not isinstance(s,str) or not (0<len(s)<=8192):
         return False
     # Primitive, object and non-void arrays. No descriptor-internal space.
-    return re.fullmatch(r"(?:[ZBCSIFJD]|L[^;()\\s]+;|\\[+(?:[ZBCSIFJD]|L[^;()\\s]+;))",s) is not None
+    return re.fullmatch(r"(?:[ZBCSIFJD]|L[^;()\s]+;|\[+(?:[ZBCSIFJD]|L[^;()\s]+;))",s) is not None
 
 def pool_value(dex,kind,idx):
     """Return ('ok', opaque comparable value) or None, never log the value."""
@@ -86,9 +86,9 @@ def pool_value(dex,kind,idx):
             val=dex.get_cm_field(idx)
             if not isinstance(val,(tuple,list)) or len(val)!=3:return None
             owner,typ,name=val
-            if (not isinstance(owner,str) or re.fullmatch(r"L[^;()\\s]+;",owner) is None
+            if (not isinstance(owner,str) or re.fullmatch(r"L[^;()\s]+;",owner) is None
                 or not valid_type(typ) or not isinstance(name,str) or not (0<len(name)<=8192)
-                or re.search(r"[()\\s]",name)):
+                or re.search(r"[()\s]",name)):
                 return None
             return (owner,typ,name)
     except Exception:
