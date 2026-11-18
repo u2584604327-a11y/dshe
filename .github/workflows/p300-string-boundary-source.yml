@@ -1,0 +1,49 @@
+# P300 source-only dual-side string boundary diagnosis, no APK operations.
+name: P300 source-only paired DEX string-boundary diagnosis and deny-only fixtures
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p300_string_boundary/**'
+      - '.github/workflows/p300-string-boundary-source.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p300-source-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p300-source:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check source pin, full 32-case negative suite and no release
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('p300_string_boundary.py','test_p300_string_boundary.py'):
+            p=Path('host_candidate/p300_string_boundary')/name
+            compile(p.read_text(encoding='utf-8'),str(p),'exec')
+          print('P300_SOURCE_SYNTAX=PASS')
+          PY
+          test "$(git hash-object host_candidate/p245_build_only_probe/p245_build_only_probe.py)" = 06f62f4d8c8ee141b6b2030ee6556c9a43d9e499
+          python3 -B host_candidate/p300_string_boundary/test_p300_string_boundary.py 2>&1 | tee "$RUNNER_TEMP/p300-tests.log"
+          grep -Eq '^Ran 32 tests in' "$RUNNER_TEMP/p300-tests.log"
+          grep -Fxq OK "$RUNNER_TEMP/p300-tests.log"
+          python3 -B host_candidate/p300_string_boundary/p300_string_boundary.py | tee "$RUNNER_TEMP/p300-source.log"
+          grep -Fxq P300_REAL_INVALID_STRING_CLASS=NOT_ATTESTED "$RUNNER_TEMP/p300-source.log"
+          grep -Fxq P300_RELEASE=DENY "$RUNNER_TEMP/p300-source.log"
+          echo P300_SOURCE_32_OF_32=PASS
+          echo P300_ORIGINAL_P245_BLOB=BYTE_EXACT
+          echo P300_RELEASE=DENY
+          echo P300_V139=STRUCTURAL_BLOCKED
