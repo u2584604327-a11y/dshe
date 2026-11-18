@@ -22,13 +22,30 @@ public final class ProbeActivity extends Activity {
   private static final String TAG="P301_HOST";
   private static final byte[] PAYLOAD="P301_SYNTHETIC".getBytes(StandardCharsets.US_ASCII);
   private Messenger remote;
+  // A/B only: keep the host-side local read endpoint alive until the
+  // isolated worker has finished its own reliable-pipe EOF verification.
+  private ParcelFileDescriptor heldLocalReader;
   private boolean bound=false;
   private int phase=0;
   private boolean terminated=false;
+  private void releaseHeldReader() {
+    final ParcelFileDescriptor fd=heldLocalReader;
+    heldLocalReader=null;
+    if(fd!=null) {
+      try {
+        fd.close();
+        Log.i(TAG,"P301_HOST_READER_RELEASED_AFTER_WORKER=PASS");
+      } catch(Exception fail) {
+        // A release failure cannot authorize a successful test.
+        Log.i(TAG,"P301_DENY_HOST_READER_RELEASE=DENY");
+      }
+    }
+  }
   private void deny(String cause){
     if(terminated)return;
     terminated=true;
     Log.i(TAG,"P301_DENY_"+cause+"=DENY");
+    releaseHeldReader();
     finish();
   }
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()){
@@ -49,7 +66,10 @@ public final class ProbeActivity extends Activity {
         sendFd();
       } else if(phase==1 && "FD_PAYLOAD_OK".equals(outcome)) {
         Log.i(TAG,"P301_HOST_FD_RECEIPT=PASS");
-        phase=2;terminated=true;finish();
+        phase=2;
+        terminated=true;
+        releaseHeldReader();
+        finish();
       } else if(phase==1 && IsolatedPipeService.FAILURES.contains(outcome)) {
         deny("WORKER_FAILURE");
       } else {
@@ -81,11 +101,13 @@ public final class ProbeActivity extends Activity {
       m.setData(data);
       remote.send(m);
       Log.i(TAG,"P301_HOST_FD_SENT=PASS");
-      // P301 controlled A/B: keep our read-side reliable status channel
-      // alive until AFTER the writer has sent its clean-close status.
-      // Closing the local reader first can deliver an early peer status
-      // and suppress a later writer-side OK notification. This is a
-      // hypothesis to test, not an approved production FD protocol.
+      // Controlled AB-2: preserve the host's local read-side status channel
+      // until after the worker has returned the terminal Binder reply.
+      // AB-1 kept it only until writer close; that still produced DEAD.
+      // This is an isolated synthetic experiment, NOT a production protocol.
+      heldLocalReader=pipe[0];
+      pipe[0]=null;
+      Log.i(TAG,"P301_HOST_READER_RETAINED=PASS");
       try(ParcelFileDescriptor.AutoCloseOutputStream out =
           new ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])) {
         out.write(PAYLOAD);
@@ -93,9 +115,6 @@ public final class ProbeActivity extends Activity {
       }
       pipe[1]=null;
       Log.i(TAG,"P301_HOST_WRITE_COMPLETE=PASS");
-      pipe[0].close();
-      pipe[0]=null;
-      Log.i(TAG,"P301_HOST_READER_RELEASED_AFTER_WRITER=PASS");
     } catch(Exception ex) { deny("HOST_PIPE_IO"); }
     finally {
       if(pipe!=null)for(ParcelFileDescriptor fd:pipe)if(fd!=null){
@@ -110,6 +129,8 @@ public final class ProbeActivity extends Activity {
     if(!bound)deny("BIND_SERVICE");
   }
   @Override public void onDestroy(){
+    // Process/activity recreation and cancellation must not leak a host FD.
+    releaseHeldReader();
     if(bound){unbindService(conn);bound=false;}
     super.onDestroy();
   }
