@@ -1,0 +1,102 @@
+name: P301 Android35 isolated FD read-stage diagnostic, synthetic only, release DENY
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p301_android35_fd_diag/**'
+      - '.github/workflows/p301-android35-isolated-fd-diagnostic.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p301-fd-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p301-android35-synthetic-only:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Static original-gate pin and no permissions, sockets, or user data
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object host_candidate/p245_build_only_probe/p245_build_only_probe.py)" = 06f62f4d8c8ee141b6b2030ee6556c9a43d9e499
+          p=host_candidate/p301_android35_fd_diag
+          s="$p/probe/src"
+          test -f "$s/main/java/com/dsh/p301probe/ProbeActivity.java"
+          test -f "$s/main/java/com/dsh/p301probe/IsolatedPipeService.java"
+          grep -Fq 'android:isolatedProcess="true"' "$s/main/AndroidManifest.xml"
+          grep -Fq 'android:exported="false"' "$s/main/AndroidManifest.xml"
+          grep -Fq 'android:allowBackup="false"' "$s/main/AndroidManifest.xml"
+          grep -Fq 'android:usesCleartextTraffic="false"' "$s/main/AndroidManifest.xml"
+          grep -Fq 'ParcelFileDescriptor.createReliablePipe()' "$s/main/java/com/dsh/p301probe/ProbeActivity.java"
+          grep -Fq 'Process.isIsolatedUid(msg.sendingUid)' "$s/main/java/com/dsh/p301probe/ProbeActivity.java"
+          grep -Fq 'msg.sendingUid!=getApplicationInfo().uid' "$s/main/java/com/dsh/p301probe/IsolatedPipeService.java"
+          grep -Fq 'P301_WORKER_CONTENT_MATCHED=PASS' "$s/main/java/com/dsh/p301probe/IsolatedPipeService.java"
+          grep -Fq 'P301_DENY_READ_IO_EOF_CHECK' "$p/run_android35.sh"
+          ! grep -RqE '<uses-permission|sharedUserId|android.permission.INTERNET|addJavascriptInterface|ProcessBuilder|ServerSocket|ServerSocketChannel|java.net' "$s"
+          ! grep -RqE 'https?://|download|model|credential|cookie' "$s"
+          bash -n "$p/run_android35.sh"
+          grep -Fq 'getprop ro.kernel.qemu' "$p/run_android35.sh"
+          grep -Fq 'getprop ro.build.version.sdk' "$p/run_android35.sh"
+          echo P301_SOURCE_PERMISSION_AND_NETWORK_DENY=PASS
+          echo P301_ORIGINAL_P245_BLOB=BYTE_EXACT
+          echo P301_PRODUCTION_APK_AND_DEVICE=NOT_TOUCHED
+      - name: Build exactly one disposable diagnostic APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=host_candidate/p301_android35_fd_diag/probe
+          gradle -p "$p" --no-daemon assembleDebug > "$RUNNER_TEMP/p301-build.log" 2>&1 || {
+            echo P301_DISPOSABLE_BUILD=DENY
+            tail -n 35 "$RUNNER_TEMP/p301-build.log"
+            exit 2
+          }
+          dir="$p/build/outputs/apk/debug"
+          test "$(find "$dir" -maxdepth 1 -name '*.apk' -type f | wc -l)" -eq 1
+          a="$(find "$dir" -maxdepth 1 -name '*.apk' -type f | head -n1)"
+          badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$a")"
+          [[ "$badging" == *"package: name='com.dsh.p301probe'"* &&
+             "$badging" != *"uses-permission:"* ]]
+          cp "$a" "$p/.p301-disposable.apk"
+          echo P301_BUILD_SYNTHETIC_APK=PASS
+          echo P301_NO_INSTALL_TO_USER_PHONE=YES
+      - name: Enable only Github-hosted QEMU KVM
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_3a
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p301_android35_fd_diag/run_android35.sh
+      - name: Never publish or install P301 as original DSH v139
+        if: always()
+        shell: bash
+        run: |
+          rm -f host_candidate/p301_android35_fd_diag/probe/.p301-disposable.apk
+          echo P301_ORIGINAL_NODE_FD_INTEGRATION=NOT_ATTESTED
+          echo P301_P192_ISOLATED_TCP_BIND=STILL_BLOCKED
+          echo P301_B3_B4_BROWSER_PROFILE_ROUTING=NOT_ATTESTED
+          echo P301_RELEASE=DENY
+          echo P301_V139=STRUCTURAL_BLOCKED
