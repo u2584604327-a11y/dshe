@@ -84,6 +84,21 @@ def snapshot(method, dex):
     except Exception:
         return None
 
+def raw_opcodes(method):
+    """Require matching *encoded* opcodes, even if parser instruction labels lie."""
+    if instruction_bytes(method) is None:
+        return None
+    try:
+        result = []
+        for _, ins in method.get_instructions_idx():
+            data = ins.get_raw()
+            if type(data) is not bytes or not data:
+                return None
+            result.append(data[0])
+        return tuple(result)
+    except Exception:
+        return None
+
 def invalid(v):
     return not isinstance(v, str) or len(v) > VALIDATOR_LIMIT
 
@@ -107,6 +122,11 @@ def issue(a, b):
 def classify(method_a, method_b, dex_a, dex_b):
     shape = encoded_shape(method_a, method_b)
     if shape not in ("RAW_EXACT", "RAW_DIFFER_SAME_SHAPE"):
+        return "RAW_LAYOUT_UNVERIFIED"
+    # Synthetic parser labels and pretty-printer output are untrusted.
+    # Compare opcode *bytes* before correlating individual raw string indices.
+    op_a, op_b = raw_opcodes(method_a), raw_opcodes(method_b)
+    if op_a is None or op_b is None or op_a != op_b:
         return "RAW_LAYOUT_UNVERIFIED"
     aa, bb = snapshot(method_a, dex_a), snapshot(method_b, dex_b)
     if aa is None or bb is None or len(aa) != len(bb):
