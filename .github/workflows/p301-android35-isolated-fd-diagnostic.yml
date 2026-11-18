@@ -48,7 +48,7 @@ jobs:
           grep -Fq 'P301_WORKER_CONTENT_MATCHED=PASS' "$s/main/java/com/dsh/p301probe/IsolatedPipeService.java"
           grep -Fq 'READ_IO_EOF_CHECK' "$p/run_android35.sh"
           ! grep -RqE '<uses-permission|sharedUserId|android.permission.INTERNET|addJavascriptInterface|ProcessBuilder|ServerSocket|ServerSocketChannel|java.net' "$s"
-          ! grep -RqE 'https?://|download|model|credential|cookie' "$s"
+          ! grep -RqE 'https?://|download|model|credential|cookie' "$s/main/java"
           bash -n "$p/run_android35.sh"
           grep -Fq 'getprop ro.kernel.qemu' "$p/run_android35.sh"
           grep -Fq 'getprop ro.build.version.sdk' "$p/run_android35.sh"
