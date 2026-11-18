@@ -80,9 +80,12 @@ public final class ProbeActivity extends Activity {
       data.putParcelable("fd",pipe[0]);
       m.setData(data);
       remote.send(m);
-      pipe[0].close();
-      pipe[0]=null;
       Log.i(TAG,"P301_HOST_FD_SENT=PASS");
+      // P301 controlled A/B: keep our read-side reliable status channel
+      // alive until AFTER the writer has sent its clean-close status.
+      // Closing the local reader first can deliver an early peer status
+      // and suppress a later writer-side OK notification. This is a
+      // hypothesis to test, not an approved production FD protocol.
       try(ParcelFileDescriptor.AutoCloseOutputStream out =
           new ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])) {
         out.write(PAYLOAD);
@@ -90,6 +93,9 @@ public final class ProbeActivity extends Activity {
       }
       pipe[1]=null;
       Log.i(TAG,"P301_HOST_WRITE_COMPLETE=PASS");
+      pipe[0].close();
+      pipe[0]=null;
+      Log.i(TAG,"P301_HOST_READER_RELEASED_AFTER_WRITER=PASS");
     } catch(Exception ex) { deny("HOST_PIPE_IO"); }
     finally {
       if(pipe!=null)for(ParcelFileDescriptor fd:pipe)if(fd!=null){
