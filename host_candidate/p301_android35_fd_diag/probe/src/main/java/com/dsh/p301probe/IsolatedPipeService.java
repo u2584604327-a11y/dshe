@@ -27,6 +27,8 @@ public final class IsolatedPipeService extends Service {
   public static final Set<String> FAILURES=Collections.unmodifiableSet(new HashSet<>(
     Arrays.asList("DENY_BAD_FRAME","DENY_EARLY_EOF","DENY_LENGTH",
       "DENY_READ_IO_ZERO","DENY_READ_IO_PARTIAL","DENY_READ_IO_EOF_CHECK",
+      "DENY_READ_EOF_PEER_DEAD","DENY_READ_EOF_PEER_LEAKED",
+      "DENY_READ_EOF_DETACHED","DENY_READ_EOF_REMOTE_ERROR",
       "DENY_READ_SECURITY","DENY_READ_RUNTIME","DENY_EXTRA_BYTES",
       "DENY_DESCRIPTOR_OPEN","DENY_WORKER_REPLAY")));
   private boolean consumed=false;
@@ -90,7 +92,18 @@ public final class IsolatedPipeService extends Service {
       Log.i(TAG,"P301_WORKER_CLEAN_EOF=PASS");
       return "FD_PAYLOAD_OK";
     } catch(IOException io) {
-      if("EOF_CHECK".equals(phase))return "DENY_READ_IO_EOF_CHECK";
+      if("EOF_CHECK".equals(phase)) {
+        // Strict fixed Android-framework categories; never log the exception
+        // text, error payload, FD number, process UID or stack.
+        if(io instanceof ParcelFileDescriptor.FileDescriptorDetachedException)
+          return "DENY_READ_EOF_DETACHED";
+        final String m=io.getMessage();
+        if("Remote side is dead".equals(m))return "DENY_READ_EOF_PEER_DEAD";
+        if("Remote side was leaked".equals(m))return "DENY_READ_EOF_PEER_LEAKED";
+        if(m!=null && m.startsWith("Remote error: "))
+          return "DENY_READ_EOF_REMOTE_ERROR";
+        return "DENY_READ_IO_EOF_CHECK";
+      }
       return received>0?"DENY_READ_IO_PARTIAL":"DENY_READ_IO_ZERO";
     } catch(SecurityException denied) {
       return "DENY_READ_SECURITY";
