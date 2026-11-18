@@ -83,7 +83,7 @@ printf '%s\n' "$selected" | awk '
 /P301_HOST_FD_RECEIPT=PASS/{g=NR}
 /P301_HOST_READER_RETAINED=PASS/{h=NR}
 /P301_HOST_READER_RELEASED_AFTER_WORKER=PASS/{i=NR}
-END{if(!(a>0&&b>a&&c>b&&d>c&&e>d&&f>e&&g>f&&h>c&&i>g))exit 2}' || {
+END{if(!(a>0&&b>a&&c>b&&d>c&&e>d&&f>e&&g>f&&h>0&&h<g&&i>g))exit 2}' || {
   echo P301_REQUIRED_ORDER=DENY;exit 2;
 }
 echo P301_ANDROID35_HOST_TO_ISOLATED_FD=PASS
