@@ -4,7 +4,7 @@ on:
     types: [opened, synchronize]
     paths:
       - 'host_candidate/p309_three_way_original/**'
-      - '.github/workflows/p309-original-archive-fd-host-loopback.yml'
+      - '.github/workflows/p309-original-fd-loopback-p37-process.yml'
 permissions:
   contents: read
 concurrency:
@@ -44,6 +44,10 @@ jobs:
           test "$P181_THREE_ORIGINAL_START_DENY" = 1
           test "$P49_NODE_STAGE" = 0
           test "$P51_SIDE_BY_SIDE" = 0
+          test -f .github/workflows/p309-original-fd-loopback-p37-process.yml
+          grep -Fqx "      - '.github/workflows/p309-original-fd-loopback-p37-process.yml'" \
+            .github/workflows/p309-original-fd-loopback-p37-process.yml
+          echo P309_WORKFLOW_SELF_PATH_MATCH=PASS
           bash -n host_candidate/p309_three_way_original/run_android35.sh
           python3 - <<'PY'
           import ast
