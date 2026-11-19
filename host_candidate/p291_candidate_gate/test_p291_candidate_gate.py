@@ -40,10 +40,7 @@ def test_gate(method=None,methodrows=None,raw_result=None,shadow_result=None,
  if shadow_result is None:shadow_result=shadow()
  with patch.object(m,"helper_rows",return_value=methodrows),\
       patch.object(m,"raw_log_target",return_value=raw_result),\
-      patch.object(m,"shadow_audit",return_value=shadow_result),\
-      patch.object(m,"display_shape",return_value="PASS" if
-        methodrows is not None and len(methodrows)==14 and
-        methodrows[10][4]==SPACED else "FAIL"):
+      patch.object(m,"shadow_audit",return_value=shadow_result):
     if exception is not None:
       with patch.object(m,"raw_log_target",side_effect=exception):
        return m.p291_strict_log_call(method,object(),object())
