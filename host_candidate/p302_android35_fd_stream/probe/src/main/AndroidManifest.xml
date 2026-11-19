@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <application android:label="P302 disposable FD diagnostic" android:allowBackup="false" android:usesCleartextTraffic="false">
+    <!-- P306 synthetic-only: retain old mask 0x40003fb4 plus ASSETS_PATHS 0x80000000.
+         SDK 35 lacks its named flag; RESTORED_STATE stays fail-closed. -->
     <activity android:name=".ProbeActivity" android:exported="true"
-      <!-- P306 synthetic one-shot: original flags 0x40003fb4 plus ASSETS_PATHS 0x80000000.
-           Android35 SDK lacks symbolic assetsPaths; keep the exact composite mask.
-           RESTORED_STATE remains fail-closed in ProbeActivity. -->
       android:configChanges="0xC0003FB4">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>
