@@ -17,6 +17,7 @@ public final class P67AuthenticatedHandoff {
   private final String hostSession;
   private final P37RemoteProcess.IsolatedUidVerifier verifier;
   private final P37RemoteProcess.RemoteControl remoteControl;
+  private final boolean mergeErrorToOutput;
   private final P53StartOrder ordering = new P53StartOrder();
   private P37RemoteProcess process;
   private boolean terminal;
@@ -26,6 +27,17 @@ public final class P67AuthenticatedHandoff {
       int frameworkIsolatedUid, String hostGeneratedSession,
       P37RemoteProcess.IsolatedUidVerifier frameworkVerifier,
       P37RemoteProcess.RemoteControl trustedStopControl) {
+    this(frameworkIsolatedUid, hostGeneratedSession,
+         frameworkVerifier, trustedStopControl, false);
+  }
+  /** P141 opt-in is selected by trusted native host, never by a Binder Bundle.
+   * It does not make an original EngineManager production launch authorized.
+   */
+  public P67AuthenticatedHandoff(
+      int frameworkIsolatedUid, String hostGeneratedSession,
+      P37RemoteProcess.IsolatedUidVerifier frameworkVerifier,
+      P37RemoteProcess.RemoteControl trustedStopControl,
+      boolean trustedHostRequestsMergedStderr) {
     if (frameworkIsolatedUid < 0 || frameworkVerifier == null ||
         trustedStopControl == null || hostGeneratedSession == null ||
         !hostGeneratedSession.matches("[a-f0-9]{64}") ||
@@ -36,6 +48,7 @@ public final class P67AuthenticatedHandoff {
     hostSession = hostGeneratedSession;
     verifier = frameworkVerifier;
     remoteControl = trustedStopControl;
+    mergeErrorToOutput = trustedHostRequestsMergedStderr;
   }
 
   private boolean verify(int frameworkUid, String incomingSession) {
@@ -94,7 +107,8 @@ public final class P67AuthenticatedHandoff {
       }
       try {
         process = new P37RemoteProcess(
-            expectedUid, hostSession, verifier, remoteControl);
+            expectedUid, hostSession, verifier, remoteControl,
+            mergeErrorToOutput);
         startConfirmed = true;
         return true;
       } catch (RuntimeException invalid) {

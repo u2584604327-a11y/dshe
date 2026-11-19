@@ -15,6 +15,11 @@ import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
 import com.dsh.android.p48.P48HostProcessProbe;
 import com.dsh.p37.P37RemoteProcess;
+import com.dsh.android.p150.P150OriginalCoroutineObserver;
+import com.dsh.android.p151.P151OriginalEngineStateSampler;
+import com.dsh.android.p152.P152TermuxReadOnly;
+import com.dsh.android.p153.P153OriginalNodeElfProbe;
+import com.dsh.android.p156.P156OriginalAppLibProbe;
 
 /**
  * P43 temporary exported test entry exists ONLY in the throwaway emulator APK.
@@ -81,6 +86,31 @@ public final class P43ProbeActivity extends Activity {
         fail("P46_CONTENT_ADDRESSED_BUNDLE_REJECTED");return;
       }
       received=true;
+      // Original MainActivity is already launched by the emulator runner.
+      // Observe its existing EngineManager singleton without creating one,
+      // calling start(), reading data or modifying bootstrap.
+      for(final int t:new int[]{5,20,40}){
+        main.postDelayed(()->{
+          P151OriginalEngineStateSampler.Sample sample=
+              P151OriginalEngineStateSampler.sample();
+          log("P151_ORIGINAL_ENGINE_AT_"+t+"S="+sample.safeLine());
+          log("P152_TERMUX_METADATA_AT_"+t+"S="+P152TermuxReadOnly.safeSnapshot(getApplicationContext()));
+          log("P153_NODE_ELF_AT_"+t+"S="+P153OriginalNodeElfProbe.safeSnapshot(getApplicationContext()));
+          log("P156_APP_UID_LIBS_AT_"+t+"S="+P156OriginalAppLibProbe.safeSnapshot(getApplicationContext()));
+          if(t==40){
+            log(P150OriginalCoroutineObserver.observedOriginal()>0?
+              "P151_REAL_COROUTINE_REACHED_PRELAUNCH=OBSERVED":
+              "P151_REAL_COROUTINE_REACHED_PRELAUNCH=NOT_OBSERVED");
+            log("P151_ACTUAL_ARGV_ENV_CWD_ORIGINAL=NOT_PROVEN");
+          }
+        },t*1000L);
+      }
+      main.postDelayed(()->{
+        log(P150OriginalCoroutineObserver.observedOriginal()>0 ?
+          "P150_ACTUAL_ENGINE_COROUTINE_STACK=OBSERVED" :
+          "P150_ACTUAL_ENGINE_COROUTINE_STACK=NOT_OBSERVED");
+        log("P150_ORIGINAL_COROUTINE_STACK_IS_NOT_OS_ATTESTATION=YES");
+      },5000);
       log("P46_ORIGINAL_DSH_CONTENT_ADDRESSED_BUNDLE_FD=PASS");
       log("P46_TWO_FIXTURES_HASH_AND_BYTE_BOUNDS=PASS");
       log("P46_REAL_NODE_SCRIPT_EXECUTED=NO");
@@ -248,6 +278,7 @@ public final class P43ProbeActivity extends Activity {
   private boolean assertExactBridgeFailClosed() {
     File canary=new File(getCacheDir(),"p47-no-host-fallback-canary");
     if(canary.exists() && !canary.delete())return false;
+    final int beforeSynthetic=P150OriginalCoroutineObserver.observedOther();
     ProcessBuilder candidate=new ProcessBuilder(
         "/system/bin/sh","-c","echo P47_UNAUTHORIZED > "+canary.getAbsolutePath());
     candidate.directory(getCacheDir());
@@ -267,8 +298,12 @@ public final class P43ProbeActivity extends Activity {
         return false;
     }catch(Exception invalid){return false;}
     if(canary.exists()){canary.delete();return false;}
+    if(P150OriginalCoroutineObserver.observedOther()!=beforeSynthetic+1)return false;
+    log("P150_SYNTHETIC_BRIDGE_CALL_NOT_CONFUSED_WITH_ORIGINAL=PASS");
     log("P47_REAL_ORIGINAL_MAIN_DEX_ENGINE_BRIDGE_DENIES_HOST_START=PASS");
     log("P47_NO_HOST_PROCESSBUILDER_FALLBACK=PASS");
+    log("P149_P43_SYNTHETIC_BUILDER_THROUGH_PINNED_MAIN_DEX_BRIDGE=PASS");
+    log("P149_REAL_ENGINEMANAGER_COROUTINE_INVOKED=NO");
     log("P47_PRODUCTION_NODE_ENGINE_RUNNING=NO");
     return true;
   }
@@ -359,7 +394,16 @@ public final class P43ProbeActivity extends Activity {
     bound=bindService(new Intent(this,P43IsolatedWorker.class),
                       connection,Context.BIND_AUTO_CREATE);
     if(!bound)fail("BIND_FAILED");
-    main.postDelayed(()->{if(!received&&!failed)fail("BINDER_ACK_TIMEOUT");},12000);
+    // P167: the 57 MB original archive FD CI probe may cold-start an
+    // isolated worker slowly under disposable emulator resource pressure.
+    // Extend ONLY p76_archive's test Binder HELLO deadline; all unrelated
+    // P43 probes keep 12 s, and UID/session/hash/timeout fail-closed checks
+    // remain identical. This Activity is absent from any release APK.
+    final boolean p143ArchiveTest=getIntent()!=null &&
+        getIntent().getBooleanExtra("p76_archive",false);
+    final long binderAckBudgetMs=p143ArchiveTest?45000L:12000L;
+    main.postDelayed(()->{if(!received&&!failed)fail("BINDER_ACK_TIMEOUT");},
+                     binderAckBudgetMs);
   }
   @Override protected void onDestroy(){
     if(getIntent()!=null && getIntent().getBooleanExtra("p75_rendezvous",false))

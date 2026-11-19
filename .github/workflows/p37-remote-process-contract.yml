@@ -15,8 +15,12 @@ jobs:
   source-only-process-proxy-test:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'dsh/p37-remote-process-proxy-contract-20261029' &&
-      github.event.pull_request.base.ref == 'dsh/p36-real-original-node-to-trusted-host-ipc-20261029'
+      (
+        (github.event.pull_request.head.ref == 'dsh/p37-remote-process-proxy-contract-20261029' &&
+         github.event.pull_request.base.ref == 'dsh/p36-real-original-node-to-trusted-host-ipc-20261029') ||
+        (github.event.pull_request.number == 80 &&
+         github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030')
+      )
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
@@ -32,6 +36,8 @@ jobs:
           set -euo pipefail
           bash host_candidate/p37_remote_process/run_contract_tests.sh | tee p37-result.txt
           grep -Eq '^P37_JAVA_PROCESS_LIFECYCLE_PROXY_TESTS=PASS assertions=[0-9]+$' p37-result.txt
+          grep -Fxq 'P37_BUFFERED_TOKEN_BYTES_ZEROIZED_AFTER_READ_DISCARD=PASS' p37-result.txt
+          grep -Fxq 'P37_EXIT_FRAME_ORDER_SERIALIZED_WITH_TERMINAL=PASS' p37-result.txt
           grep -Fxq 'P37_ORIGINAL_ENGINEMANAGER_WIRING=NO' p37-result.txt
           grep -Fxq 'P37_ANDROID_BINDER_RUNTIME_E2E=NOT_TESTED' p37-result.txt
           grep -Fxq 'P37_V139_RELEASE=BLOCKED' p37-result.txt

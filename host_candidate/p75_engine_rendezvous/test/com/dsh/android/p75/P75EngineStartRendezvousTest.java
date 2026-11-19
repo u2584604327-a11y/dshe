@@ -3,17 +3,20 @@ import com.dsh.p37.P37RemoteProcess;
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 public final class P75EngineStartRendezvousTest {
   static final String S="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   static final P37RemoteProcess.IsolatedUidVerifier UID = u->u==99055;
   static int count;
   static void check(boolean yes,String why){count++;if(!yes)throw new AssertionError("P75_"+why);}
-  static P37RemoteProcess remote(){
-    return new P37RemoteProcess(99055,S,UID,new P37RemoteProcess.RemoteControl(){
+  static P37RemoteProcess remoteFor(String session,int uid){
+    return new P37RemoteProcess(uid,session,u->u==uid,new P37RemoteProcess.RemoteControl(){
       public void requestGracefulStop(){}
       public void requestForceStop(){}
     });
   }
+  static P37RemoteProcess remote(){return remoteFor(S,99055);}
   static ProcessBuilder fixture(){return new ProcessBuilder("/system/bin/id","-u").directory(new File("/"));}
   static String error(ProcessBuilder p){
     try{P75EngineStartRendezvous.startOrDeny(p);return "UNEXPECTED_SUCCESS";}
@@ -37,6 +40,15 @@ public final class P75EngineStartRendezvousTest {
     check(P75EngineStartRendezvous.awaitOriginalBridgeEntered(2000),"wait_entered");
     check(error(fixture()).equals("P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK"),
           "other_thread_not_authorized");
+    // P168 negative: the host session/UID in the callback can be correct
+    // while the remote Process proxy belongs to a different session/UID.
+    // Before the P168 fix these two forged-proxy calls were accepted.
+    check(!P75EngineStartRendezvous.authenticatedChildStarted(
+          S,remoteFor(S.replace('a','b'),99055),99055,UID),
+          "other_session_proxy_denied_even_when_callback_session_matches");
+    check(!P75EngineStartRendezvous.authenticatedChildStarted(
+          S,remoteFor(S,99056),99055,UID),
+          "other_uid_proxy_denied_even_when_callback_uid_isolated");
     check(!P75EngineStartRendezvous.authenticatedChildStarted(S,remote(),99056,UID),
           "wrong_framework_uid");
     check(!P75EngineStartRendezvous.authenticatedChildStarted(S+"bad",remote(),99055,UID),
@@ -99,6 +111,139 @@ public final class P75EngineStartRendezvousTest {
     quick.join(2500);
     check(!quick.isAlive() && shortError.get()==null &&
           shortResult.get()==shortLived,"early_exit_keeps_actual_process_facade");
+    // P170: deterministically prove a cancelled lease's thread capability
+    // cannot become valid again if a buggy host reuses an identical session.
+    // The old session value alone was previously enough to pass validation.
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    CountDownLatch oldClaimReady=new CountDownLatch(1);
+    CountDownLatch useOldClaim=new CountDownLatch(1);
+    AtomicReference<String> staleResult=new AtomicReference<>();
+    Thread staleClaim=new Thread(()->{
+      try{
+        P75EngineStartRendezvous.claimOnEngineThread(S);
+        oldClaimReady.countDown();
+        if(!useOldClaim.await(3,TimeUnit.SECONDS)){
+          staleResult.set("THREAD_COORDINATION_TIMEOUT");
+          return;
+        }
+        staleResult.set(error(fixture()));
+      }catch(Exception exception){staleResult.set("THREAD_EXCEPTION");}
+    },"p170-cancelled-generation-engine-thread");
+    staleClaim.start();
+    check(oldClaimReady.await(2,TimeUnit.SECONDS),"old_generation_claimed");
+    P75EngineStartRendezvous.cancelSession("CANCELLED");
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    useOldClaim.countDown();
+    staleClaim.join(2500);
+    check(!staleClaim.isAlive(),"old_generation_rejected_without_waiting");
+    check("P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK".equals(staleResult.get()),
+          "cancelled_generation_cannot_reuse_identical_session_string");
+    check(P75EngineStartRendezvous.isArmed(),"fresh_generation_not_consumed_by_stale_thread");
+    check(!P75EngineStartRendezvous.authenticatedChildStarted(S,remote(),99055,UID),
+          "fresh_generation_child_not_accepted_without_fresh_bridge_call");
+    P75EngineStartRendezvous.cancelSession("CANCELLED");
+    check(!P75EngineStartRendezvous.isArmed(),"fresh_generation_can_be_cancelled");
+    // P171: a one-shot pending lease must have EXACTLY ONE engine-thread
+    // claimant. A second thread with the same host session cannot race the
+    // authentic original-engine caller or consume its Process handoff.
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    CountDownLatch ownerClaimed=new CountDownLatch(1);
+    CountDownLatch ownerGo=new CountDownLatch(1);
+    AtomicReference<Process> ownerProcess=new AtomicReference<>();
+    AtomicReference<Throwable> ownerError=new AtomicReference<>();
+    Thread owner=new Thread(()->{
+      try{
+        P75EngineStartRendezvous.claimOnEngineThread(S);
+        ownerClaimed.countDown();
+        if(!ownerGo.await(3,TimeUnit.SECONDS))
+          throw new AssertionError("owner coordination timeout");
+        ownerProcess.set(P75EngineStartRendezvous.startOrDeny(fixture()));
+      }catch(Throwable e){ownerError.set(e);}
+    },"p171-legitimate-engine-lease-owner");
+    owner.start();
+    check(ownerClaimed.await(2,TimeUnit.SECONDS),"one_engine_claimed");
+    CountDownLatch contenderDone=new CountDownLatch(1);
+    AtomicReference<String> contenderResult=new AtomicReference<>();
+    Thread contender=new Thread(()->{
+      try{
+        P75EngineStartRendezvous.claimOnEngineThread(S);
+        contenderResult.set("UNEXPECTED_SECOND_THREAD_CLAIM");
+      }catch(SecurityException expected){
+        contenderResult.set(expected.getMessage());
+      }finally{contenderDone.countDown();}
+    },"p171-competing-engine-thread");
+    contender.start();
+    check(contenderDone.await(2,TimeUnit.SECONDS),"contender_finished_before_valid_engine");
+    contender.join(2500);
+    check("P75_UNAUTHORIZED_ENGINE_THREAD".equals(contenderResult.get()),
+          "second_thread_cannot_claim_exact_pending_lease");
+    check(!P75EngineStartRendezvous.authenticatedChildStarted(S,remote(),99055,UID),
+          "contender_did_not_create_pending_child_wait");
+    check(P75EngineStartRendezvous.isArmed(),"legitimate_pending_not_consumed");
+    ownerGo.countDown();
+    check(P75EngineStartRendezvous.awaitOriginalBridgeEntered(2000),
+          "original_engine_still_enters_its_rendezvous");
+    P37RemoteProcess legitimate=remote();
+    check(P75EngineStartRendezvous.authenticatedChildStarted(S,legitimate,99055,UID),
+          "original_engine_owns_authentic_child");
+    owner.join(2500);
+    check(!owner.isAlive() && ownerError.get()==null &&
+          ownerProcess.get()==legitimate,
+          "original_engine_receives_exact_child_not_competitor");
+    check(!P75EngineStartRendezvous.isArmed(),"race_consumed_once");
+    // P175: pin the authenticated-but-undelivered pending state without
+    // a timing-sensitive race. Earlier cases validate the real Binder callback;
+    // reflection here is restricted to the JVM cancellation-boundary test.
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    java.lang.reflect.Field pendingField=
+        P75EngineStartRendezvous.class.getDeclaredField("pending");
+    pendingField.setAccessible(true);
+    Object lease=pendingField.get(null);
+    java.lang.reflect.Field proxyField=lease.getClass().getDeclaredField("proxy");
+    proxyField.setAccessible(true);
+    java.util.concurrent.atomic.AtomicInteger stops=
+        new java.util.concurrent.atomic.AtomicInteger();
+    P37RemoteProcess undelivered=new P37RemoteProcess(99055,S,UID,
+        new P37RemoteProcess.RemoteControl(){
+          public void requestGracefulStop(){}
+          public void requestForceStop(){stops.incrementAndGet();}
+        });
+    proxyField.set(lease,undelivered);
+    P75EngineStartRendezvous.cancelSession("BINDER_LOST");
+    check(stops.get()==1,"cancel_reclaims_undelivered_child");
+    P75EngineStartRendezvous.cancelSession("BINDER_LOST");
+    check(stops.get()==1,"duplicate_cancel_does_not_repeat_force_stop");
+    check(!P75EngineStartRendezvous.isArmed(),"cancelled_lease_consumed");
+    // P177: deterministically exercise the exact generation cancellation
+    // helper invoked on interrupted old engine threads. The production
+    // interruption catch used to cancel the global pending by name and could
+    // revoke a fresh session armed after the old lease was abandoned.
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    Object oldLease=pendingField.get(null);
+    P75EngineStartRendezvous.cancelSession("CANCELLED");
+    P75EngineStartRendezvous.armFromTrustedHost(S);
+    Object freshLease=pendingField.get(null);
+    check(oldLease!=freshLease,"distinct_lease_objects_on_rearm");
+    java.lang.reflect.Method scopedCancel=P75EngineStartRendezvous.class
+        .getDeclaredMethod("cancelExactPending",oldLease.getClass());
+    scopedCancel.setAccessible(true);
+    scopedCancel.invoke(null,oldLease);
+    check(P75EngineStartRendezvous.isArmed(),
+          "interrupted_old_lease_cannot_revoke_new_same_session");
+    check(pendingField.get(null)==freshLease,
+          "interrupted_old_lease_keeps_exact_new_pending_identity");
+    check(!P75EngineStartRendezvous.authenticatedChildStarted(S,remote(),99055,UID),
+          "fresh_session_still_requires_own_engine_bridge");
+    scopedCancel.invoke(null,freshLease);
+    check(!P75EngineStartRendezvous.isArmed(),
+          "interrupted_current_lease_can_revoke_its_own_generation");
+    scopedCancel.invoke(null,oldLease);
+    check(!P75EngineStartRendezvous.isArmed(),
+          "duplicate_old_cancel_is_idempotent");
+    System.out.println("P177_INTERRUPTED_OLD_LEASE_CANNOT_REVOKE_NEW_SAME_SESSION=PASS");
+    System.out.println("P175_CANCEL_UNDELIVERED_AUTHENTICATED_CHILD_REVOKED=PASS");
+    System.out.println("P171_ONE_PENDING_LEASE_EXACTLY_ONE_ENGINE_THREAD_CLAIM=PASS");
+    System.out.println("P170_CANCELLED_LEASE_REARM_SAME_SESSION_STALE_THREAD_DENIED=PASS");
     System.out.println("P75_CROSS_THREAD_ENGINE_BINDER_RENDEZVOUS_JVM=PASS assertions="+count);
     System.out.println("P75_NON_MAIN_LAUNCH_WAITS_FOR_AUTHENTICATED_CHILD=PASS");
     System.out.println("P75_UNAUTHORIZED_ARGV_AND_NO_HOST_FALLBACK=PASS");

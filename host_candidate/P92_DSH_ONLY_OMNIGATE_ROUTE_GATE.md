@@ -1,5 +1,30 @@
 # P92 DSH-only → OmniGate 8787 → unchanged original Native API
 
+## P96 narrow correction (2026-10-30, source-only)
+
+**Original model adapter requests are not browser composer clicks.** The old P92
+constructor backed by P90 remains unchanged for the WebView bubble/editor path,
+including the exact editor receipt and false-SENT protection. The same
+P92DshRouteGate now also exposes
+`forOriginalProviderTurn(originalTurnId, trustedOriginalSessionCallback)`:
+- The original DSH session controller's *current committed user turn* is the
+  prerequisite, not OmniGate WebView editor length or send-button state.
+- Reject missing, stale, invalid and changed turn identities, including a
+  second check immediately before the single outbound attempt. Do not accept
+  an arbitrary JS/model bool as the trusted callback.
+- Both paths preserve the existing exact 8787 main/overlay Native owner
+  preflight and server-side POST 409 guard, no automatic retry.
+- HTTP 200 plus matching original user-turn observation can acknowledge
+  the local attempt but **cannot prove model answer, tool_result return, or
+  active agent step completion**. Reversing receipt/HTTP event order is safe.
+- 409 and disconnected responses never claim success or retry.
+
+Validated in the P96 Draft JVM regression; the required production adapter
+from the genuine original session controller to this candidate callback is
+**NOT_CONNECTED**. This corrects a source-level contract defect; it does
+NOT change the installed original DSH or OmniGate application.
+
+
 2026-10-30 user chose a single authoritative send path **from DSH only**, while retaining OmniGate as the provider API bridge. Direct user interaction in the OmniGate/underlying web UI is not a requirement for handoff continuity. This narrows the scope; it does not disable the user's OmniGate UI or modify its browser sessions.
 
 ## Source facts and invariants

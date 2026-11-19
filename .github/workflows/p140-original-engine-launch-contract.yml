@@ -1,0 +1,43 @@
+name: P140 real original EngineManager three process launches and readiness (no APK)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p140_production_engine_contract/**'
+      - '.github/workflows/p140-original-engine-launch-contract.yml'
+      - 'host_candidate/p37_remote_process/**'
+      - 'host_candidate/p50_original_arm64_node/**'
+      - 'host_candidate/p74_engine_fixture/**'
+      - 'host_candidate/p75_engine_rendezvous/**'
+      - 'host_candidate/p51_side_by_side/**'
+permissions:
+  contents: read
+concurrency:
+  group: p140-engine-three-spawns-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  three-path-original-engine-source-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: changes
+      - uses: actions/checkout@v4
+        with:
+          repository: pht88888888/DSHAPP
+          ref: 4dddb12fd076d052e788a16638a658b7a447b669
+          persist-credentials: false
+          path: original
+      - name: Read-only pinned original EngineManager compatibility audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile changes/host_candidate/p140_production_engine_contract/audit.py
+          python3 changes/host_candidate/p140_production_engine_contract/audit.py --original original --changes changes
+          echo P140_PRODUCTION_ENGINE_SPAWN_AND_READINESS=REQUIRES_REAL_BROKER_AND_URL >> "$GITHUB_STEP_SUMMARY"
+          echo P140_USER_REAL_ARM64_NODE_FIXED_TEST=REPORTED_NOT_PRODUCTION >> "$GITHUB_STEP_SUMMARY"
+          echo P140_NO_APK_OR_ORIGINAL_SOURCE_PATCH=YES >> "$GITHUB_STEP_SUMMARY"
+          echo P140_P109_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P140_V139=BLOCKED >> "$GITHUB_STEP_SUMMARY"

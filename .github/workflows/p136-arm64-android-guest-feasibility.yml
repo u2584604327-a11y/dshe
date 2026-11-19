@@ -1,0 +1,52 @@
+name: P136 bounded real ARM64 Android system-image TCG feasibility (no Node)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p136_actual_arm64_android_guest_feasibility.sh'
+      - 'host_candidate/p137_manual_sdk_license_gate.sh'
+      - '.github/workflows/p136-arm64-android-guest-feasibility.yml'
+  workflow_dispatch:
+    inputs:
+      acknowledge_sdk_license:
+        description: "Manual only, once registered on default branch: see host_candidate/P137_MANUAL_SDK_LICENSE_AND_POSITIVE_PROOF_GATE.md for exact acknowledgment."
+        required: false
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: p136-arm64-systemimage-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-arm64-android-system-image-feasibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Probe API35 native ARM64 guest system image with bounded unsupported TCG
+        shell: bash
+        env:
+          P136_LICENSE_ACKNOWLEDGEMENT: ${{ github.event.inputs.acknowledge_sdk_license }}
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p136_actual_arm64_android_guest_feasibility.sh
+          bash -n host_candidate/p137_manual_sdk_license_gate.sh
+          test "$(env GITHUB_EVENT_NAME=pull_request P136_LICENSE_ACKNOWLEDGEMENT=I_ACCEPT_GOOGLE_ANDROID_SDK_LICENSE_FOR_ARM64_IMAGE bash host_candidate/p137_manual_sdk_license_gate.sh choice)" = n
+          test "$(env GITHUB_EVENT_NAME=workflow_dispatch P136_LICENSE_ACKNOWLEDGEMENT=WRONG bash host_candidate/p137_manual_sdk_license_gate.sh choice)" = n
+          test "$(env GITHUB_EVENT_NAME=workflow_dispatch P136_LICENSE_ACKNOWLEDGEMENT=I_ACCEPT_GOOGLE_ANDROID_SDK_LICENSE_FOR_ARM64_IMAGE bash host_candidate/p137_manual_sdk_license_gate.sh choice)" = y
+          echo P137_FAIL_CLOSED_DEFAULT_NO_ACCEPT=PASS
+          bash host_candidate/p136_actual_arm64_android_guest_feasibility.sh
+      - name: Preserve production deny-gates independent of feasibility
+        if: always()
+        shell: bash
+        run: |
+          echo P136_ORIGINAL_SIGNED_DSH_APK=NOT_INSTALLED >> "$GITHUB_STEP_SUMMARY"
+          echo P136_ORIGINAL_NODE=NOT_EXECUTED >> "$GITHUB_STEP_SUMMARY"
+          echo P136_PRODUCTION_ISOLATED_UID=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P136_ENGINE_MANAGER_LIFECYCLE=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P136_P109_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P137_REAL_ARM64_ISOLATED_NODE_PROOF=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P136_FORMAL_V139=BLOCKED >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,121 @@
+name: P184 original-derived Android35 real P68 to P75 one-use Binder receipt (no Node)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p184_android35/**'
+      - 'host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48HostProcessProbe.java'
+      - '.github/workflows/p184-android35-real-p68-p75-receipt.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p184-android35-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  original-android35-uid-and-one-shot-receipt:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 58
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      P49_NODE_STAGE: '0'
+      P51_SIDE_BY_SIDE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify original branch and old JVM receipt/Process regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P181_THREE_ORIGINAL_START_DENY" = 1
+          test "$P49_NODE_STAGE" = 0
+          test "$P51_SIDE_BY_SIDE" = 0
+          bash -n host_candidate/p184_android35/run_android35_receipt.sh
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          ast.parse(Path("host_candidate/p184_android35/patch_p43_ci_only.py").read_text())
+          print("P184_ANDROID35_SOURCE_PATCHER_AST=PASS")
+          PY
+          bash host_candidate/p184_verified_child_receipt/run_java8.sh | tee "$RUNNER_TEMP/p184-base.log"
+          grep -Fq 'P184_JAVA8_NEGATIVE_AND_THREAD_TEST=PASS assertions=53' "$RUNNER_TEMP/p184-base.log"
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+      - name: Amend only two pinned original P43 test fixtures in CI checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p184_android35/patch_p43_ci_only.py --ci
+          git diff --name-only | sort > .p184_actual
+          printf '%s\n' \
+            host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java \
+            host_candidate/p43_original_service/build_embedded_emulator_apk.sh | sort > .p184_expected
+          cmp .p184_actual .p184_expected
+          echo P184_CI_ONLY_PINNED_P43_SCOPE=PASS
+      - name: Provision disposable original Android35 build requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/d8"
+      - name: Build exact v138-derived disposable ORIGINAL package test APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh >.p184_build.log 2>&1; then
+            grep -E 'P43_|P47_|P75_|P184_|error:|Traceback|Failed|failed' .p184_build.log | tail -n 35 || true
+            echo P184_EPHEMERAL_ORIGINAL_BUILD_FAILED
+            exit 1
+          fi
+          test -s .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p184_build.log
+          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p184_build.log
+          grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p184_build.log
+          grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p184_build.log
+          echo P184_ORIGINAL_P43_EMULATOR_TEST_APK_COMPILED=PASS
+      - name: Enable disposable Android emulator KVM
+        shell: bash
+        run: if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Real Android35 UID P68 receipt P75 exact Process one-use acceptance
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p184_android35/run_android35_receipt.sh
+      - name: Revoke runner scratch and state nonrelease boundary
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp .p184_build.log .p184_actual .p184_expected
+          echo P184_ANDROID35_RECEIPT_PASS=CHECK_ACTUAL_EMULATOR_JOB >> "$GITHUB_STEP_SUMMARY"
+          echo P184_ORIGINAL_P40_COROUTINE=NOT_INVOKED >> "$GITHUB_STEP_SUMMARY"
+          echo P184_REAL_ARM64_NODE=NOT_EXECUTED >> "$GITHUB_STEP_SUMMARY"
+          echo P184_FULL_JS_FD_HTTP_TOKEN_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P184_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P184_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P184_GS_CAPTURE=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P184_SIGN_OR_INSTALL_USER_PHONE=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P184_V139_RELEASE=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"

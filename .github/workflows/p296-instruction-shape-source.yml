@@ -1,0 +1,49 @@
+# P296 source-only adversarial tests; no production P245 mutation or APK.
+name: P296 source-only unknown DEX instruction-shape and reference-view classification
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p296_instruction_shape/**'
+      - '.github/workflows/p296-instruction-shape-source.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p296-source-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p296-source:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Source syntax, 30 real executed cases, original P245 source pin
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('p296_instruction_shape.py','test_p296_instruction_shape.py'):
+            p=Path('host_candidate/p296_instruction_shape')/name
+            compile(p.read_text(encoding='utf-8'), str(p),'exec')
+          print('P296_SOURCE_SYNTAX=PASS')
+          PY
+          test "$(git hash-object host_candidate/p245_build_only_probe/p245_build_only_probe.py)" = 06f62f4d8c8ee141b6b2030ee6556c9a43d9e499
+          python3 -B host_candidate/p296_instruction_shape/test_p296_instruction_shape.py 2>&1 | tee "$RUNNER_TEMP/p296-tests.log"
+          grep -Eq '^Ran 30 tests in' "$RUNNER_TEMP/p296-tests.log"
+          grep -Fxq OK "$RUNNER_TEMP/p296-tests.log"
+          python3 -B host_candidate/p296_instruction_shape/p296_instruction_shape.py | tee "$RUNNER_TEMP/p296-source.log"
+          grep -Fxq P296_REAL_REFERENCE_AND_SHAPE=NOT_ATTESTED "$RUNNER_TEMP/p296-source.log"
+          grep -Fxq P296_NO_APK_SIGN_ADB_INSTALL_OR_RELEASE=YES "$RUNNER_TEMP/p296-source.log"
+          echo P296_ACTUAL_30_OF_30=PASS
+          echo P296_ORIGINAL_P245_BLOB=BYTE_EXACT
+          echo P296_RELEASE=DENY
+          echo P296_V139=STRUCTURAL_BLOCKED

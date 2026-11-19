@@ -1,0 +1,132 @@
+name: P139 P51 ARM64 isolated Node side-by-side TEST APK (1-day artifact)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '.github/workflows/p139-p51-arm64-sidecar-test-apk-artifact.yml'
+      - 'host_candidate/p51_side_by_side/**'
+      - 'host_candidate/p43_original_service/build_embedded_emulator_apk.sh'
+      - 'host_candidate/p134_real_arm64_gate/**'
+      - 'host_candidate/p50_original_arm64_node/**'
+      - 'host_candidate/p138_original_build_gate/**'
+permissions:
+  contents: read
+concurrency:
+  group: p139-safe-apk-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  build-side-by-side-test-apk:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P49_NODE_STAGE: '1'
+      P51_SIDE_BY_SIDE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Fail-closed immutable original source, distinct package and original-builder guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P49_NODE_STAGE" = 1
+          test "$P51_SIDE_BY_SIDE" = 1
+          python3 host_candidate/p138_original_build_gate/verify_p134_wired.py
+          python3 host_candidate/p51_side_by_side/test_manifest.py
+          bash -n host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          echo P139_ONLY_PR80_SEPARATE_P51_PACKAGE=PASS
+      - name: Install offline build prerequisites; do not accept Android SDK licenses
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/aapt"
+          test -x "$sdk/build-tools/35.0.0/d8"
+          test -x "$sdk/build-tools/35.0.0/apksigner"
+      - name: Build exact original-derived P51 separate package in ephemeral CI only
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > "$RUNNER_TEMP/p139-builder.log" 2>&1; then
+            echo P139_TEST_APK_BUILDER=FAILED_NOT_PUBLISHED
+            grep -E "P43_|P47_|P49_|P50_|P51_|P134_|RuntimeError|Exception|Traceback|error:" "$RUNNER_TEMP/p139-builder.log" | tail -n 22 | cut -c 1-220 || true
+            exit 1
+          fi
+          for marker in \
+            P51_SIGNED_APK_SEPARATE_PACKAGE_NO_PERMISSIONS=PASS \
+            P51_NO_PERMISSIONS_AND_SEPARATE_SIGNER=PASS \
+            P51_ORIGINAL_DSH_PACKAGE_CANNOT_BE_UPDATED_BY_THIS_APK=PASS \
+            P49_REAL_ORIGINAL_DSH_ASSETS_AND_LIBRARIES_BYTE_PRESERVED=PASS \
+            P49_11_ADDITIONAL_ARM64_ELF_STORED_16K_AND_SHA=PASS \
+            P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS \
+            P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA; do
+            grep -Fq "$marker" "$RUNNER_TEMP/p139-builder.log" || { echo P139_REQUIRED_SAFETY_MARKER_MISSING; exit 1; }
+          done
+          original=".p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk"
+          apk=".p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
+          test -s "$original" && test -s "$apk"
+          printf "%s  %s\n" 3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 "$original" | sha256sum -c -
+          python3 host_candidate/p51_side_by_side/p51_manifest.py verify "$apk"
+          bt="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools/35.0.0"
+          "$bt/apksigner" verify "$apk"
+          "$bt/aapt" dump badging "$apk" | grep -Fq "package: name='com.dsh.p51.isolatedprobe'"
+          if "$bt/aapt" dump permissions "$apk" | grep -Eq "^uses-permission:"; then echo P139_PERMISSIONS_FOUND_BLOCKED; exit 1; fi
+          original_cert="$("$bt/apksigner" verify --print-certs "$original" | sed -n "s/^Signer #1 certificate SHA-256 digest: //p" | head -n1)"
+          test -n "$original_cert"
+          test_cert="$("$bt/apksigner" verify --print-certs "$apk" | sed -n "s/^Signer #1 certificate SHA-256 digest: //p" | head -n1)"
+          test -n "$test_cert" && test "$test_cert" != "$original_cert"
+          unzip -p "$apk" classes3.dex | strings | grep -Fq "Lcom/dsh/android/p134/P134RealArm64Gate;"
+          unzip -p "$apk" classes3.dex | strings | grep -Fq "Lcom/dsh/android/p50/P50OriginalNodeFixedChild;"
+          echo P139_SEPARATE_PACKAGE_PERMISSIONLESS_DIFFERENT_SIGNER=PASS
+          echo P139_P134_REAL_KERNEL_GUARD_INSIDE_P51_DEX=PASS
+      - name: Prepare limited-life APK artifact and SHA256 manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p139delivery"
+          from=".p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
+          to="$RUNNER_TEMP/p139delivery/P139-P51-ARM64-Isolated-Node-TEST-ONLY.apk"
+          cp "$from" "$to"
+          (cd "$RUNNER_TEMP/p139delivery" && sha256sum P139-P51-ARM64-Isolated-Node-TEST-ONLY.apk > SHA256SUMS.txt)
+          sha="$(sha256sum "$to" | cut -d" " -f1)"
+          test "${#sha}" = 64
+          echo "P139_TEST_APK_SHA256=$sha" >> "$GITHUB_STEP_SUMMARY"
+          echo "P139_TEST_APK_PACKAGE=com.dsh.p51.isolatedprobe" >> "$GITHUB_STEP_SUMMARY"
+          echo "P139_DO_NOT_INSTALL_OVER_ORIGINAL_DSH=YES" >> "$GITHUB_STEP_SUMMARY"
+          echo "P139_ORIGINAL_NODE_ARM64_RUNTIME=NOT_TESTED" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload single short-lived download ZIP containing test-only APK and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: p139-p51-arm64-isolated-node-test-only
+          path: ${{ runner.temp }}/p139delivery/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+      - name: Always wipe original input, derived APK and ephemeral signer
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp "$RUNNER_TEMP/p139delivery" "$RUNNER_TEMP/p139-builder.log"
+          echo P139_NO_PRODUCTION_SIGNING_KEY=YES >> "$GITHUB_STEP_SUMMARY"
+          echo P139_NO_FORMAL_V139_RELEASE=YES >> "$GITHUB_STEP_SUMMARY"
+          echo P139_P109_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P139_ORIGINAL_USER_APP_AND_DATA=UNTOUCHED >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,116 @@
+name: B1 real Android35 two-process offline WebView storage isolation
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/browser_isolation_audit/android_probe/**'
+      - 'host_candidate/browser_isolation_audit/run_android35.sh'
+      - '.github/workflows/b1-android35-webview-storage-isolation.yml'
+permissions:
+  contents: read
+concurrency:
+  group: b1-profile-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-android35-storage-isolation:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Verify exact process slots, no permissions or sensitive bridges
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=host_candidate/browser_isolation_audit/android_probe
+          test -s "$p/src/main/AndroidManifest.xml"
+          test -s "$p/src/main/java/com/dsh/b1probe/ProbeApp.java"
+          test -s "$p/src/main/java/com/dsh/b1probe/SlotProbe.java"
+          test -s "$p/src/main/java/com/dsh/b1probe/MainProbe.java"
+          test "$(grep -c 'android:process=":slot' "$p/src/main/AndroidManifest.xml")" -eq 4
+          test "$(grep -c 'android:name=".ConcurrentSlot.*Service"' "$p/src/main/AndroidManifest.xml")" -eq 2
+          test "$(grep -c 'android:exported="false"/>' "$p/src/main/AndroidManifest.xml")" -eq 2
+          test -s "$p/src/main/java/com/dsh/b1probe/ConcurrentSlotService.java"
+          test -s "$p/src/main/java/com/dsh/b1probe/ConcurrentHarness.java"
+          grep -Fq 'android:allowBackup="false"' "$p/src/main/AndroidManifest.xml"
+          test "$(grep -c 'android:screenOrientation="portrait"' "$p/src/main/AndroidManifest.xml")" -eq 3
+          test "$(grep -c 'android:configChanges=' "$p/src/main/AndroidManifest.xml")" -eq 3
+          ! grep -q '<uses-permission' "$p/src/main/AndroidManifest.xml"
+          ! grep -RqE 'addJavascriptInterface|ProcessBuilder|Runtime.getRuntime|android.permission.INTERNET' "$p/src/main/java"
+          grep -Fq 'WebView.setDataDirectorySuffix("b1_slot_a")' "$p/src/main/java/com/dsh/b1probe/ProbeApp.java"
+          grep -Fq 'WebView.setDataDirectorySuffix("b1_slot_b")' "$p/src/main/java/com/dsh/b1probe/ProbeApp.java"
+          grep -Fq 'WebView.disableWebView()' "$p/src/main/java/com/dsh/b1probe/ProbeApp.java"
+          grep -Fq 'B1_ONLY_DISPOSABLE_ACTIVITY_RECREATION_FULL_RESEED=1' host_candidate/browser_isolation_audit/run_android35.sh
+          grep -Fq 'B1_SEED_RETRY_OTHER_DENIAL_PRESENT=DENY' host_candidate/browser_isolation_audit/run_android35.sh
+          bash -n host_candidate/browser_isolation_audit/run_android35.sh
+          echo B1_TWO_NONEXPORTED_BROWSER_PROCESS_SLOTS_NO_INTERNET=PASS
+      - name: Build disposable app with no original DSH assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle -p host_candidate/browser_isolation_audit/android_probe --no-daemon assembleDebug \
+            > "$RUNNER_TEMP/b1-build.log" 2>&1 || {
+              echo B1_DISPOSABLE_ANDROID_GRADLE_BUILD=FAIL
+              exit 2
+            }
+          echo B1_DISPOSABLE_ANDROID_GRADLE_BUILD=PASS
+          # Fail before any Android boot or install if Gradle produced an
+          # unexpected number of APKs. Only the exact disposable package is
+          # eligible; never select original DSH or an arbitrary artifact.
+          p=host_candidate/browser_isolation_audit/android_probe
+          if [[ "$RUNNER_OS" != Linux ]]; then exit 2; fi
+          found="$(find . -type f -path '*/build/outputs/apk/debug/*.apk' | wc -l)"
+          if [[ "$found" -ne 1 ]];then
+            echo B1_APK_OUTPUT_COUNT_NOT_ONE
+            exit 2
+          fi
+          apk="$(find . -type f -path '*/build/outputs/apk/debug/*.apk' | head -n1)"
+          test -s "$apk"
+          sdk="$ANDROID_HOME"
+          badging="$("$sdk/build-tools/35.0.0/aapt" dump badging "$apk")"
+          [[ "$badging" == *"package: name='com.dsh.b1probe'"* ]] || {
+            echo B1_APK_PACKAGE_MISMATCH
+            exit 2
+          }
+          cp "$apk" "$p/.b1-verified-disposable.apk"
+          echo B1_DISPOSABLE_VERIFIED_APK_FOR_EMULATOR=PASS
+      - name: KVM for disposable runner emulator
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_3a
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/browser_isolation_audit/run_android35.sh
+      - name: Retain strict OS and VM security limits
+        if: always()
+        shell: bash
+        run: |
+          echo B1_REAL_ANDROID_WEBVIEW_ONLY=CHECK_ANDROID_JOB >> "$GITHUB_STEP_SUMMARY"
+          echo B1_SAME_UID_IS_NOT_OS_PROFILE_SECURITY=YES >> "$GITHUB_STEP_SUMMARY"
+          echo B1_WORK_PROFILE_AVF=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo B1_ORIGINAL_DSH_USER_DATA_TOUCHED=NO >> "$GITHUB_STEP_SUMMARY"
+          echo B1_AI_BROWSER=DEFERRED >> "$GITHUB_STEP_SUMMARY"
+          echo B1_P47_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo B1_GS_CAPTURE=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo B1_V139_RELEASE=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"

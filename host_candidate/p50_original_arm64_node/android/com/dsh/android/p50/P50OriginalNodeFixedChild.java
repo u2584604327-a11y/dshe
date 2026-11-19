@@ -9,6 +9,8 @@ import android.os.Message;
 import android.os.Messenger;
 import android.os.Process;
 import android.os.RemoteException;
+import android.system.Os;
+import com.dsh.android.p134.P134RealArm64Gate;
 import com.dsh.android.p48.P48FixedIsolatedChild;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -125,8 +127,11 @@ public final class P50OriginalNodeFixedChild {
   private void runFixedOriginalNode(){
     java.lang.Process node=null;
     try{
-      if(!Process.isIsolated() || Build.VERSION.SDK_INT<34 ||
-         !Arrays.asList(Build.SUPPORTED_ABIS).contains("arm64-v8a"))
+      // P134: x86_64 Google APIs Native Bridge advertises arm64-v8a in
+      // SUPPORTED_ABIS. That is NOT evidence of an ARM64 kernel/process.
+      // Reject translated guest architectures before any asset read/exec.
+      if(!P134RealArm64Gate.allow(Process.isIsolated(),
+            Build.VERSION.SDK_INT,Build.SUPPORTED_ABIS,Os.uname().machine))
         throw new SecurityException("P50_REQUIRES_REAL_ARM64_ISOLATED_ANDROID");
       if(context.checkSelfPermission(Manifest.permission.INTERNET)
            ==PackageManager.PERMISSION_GRANTED)

@@ -1,0 +1,131 @@
+name: P198 signed v138 EngineManager caller provenance (read-only original DEX)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p198_original_source/**'
+      - '.github/workflows/p198-original-engine-caller-provenance.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p198-original-callers-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  fixed-original-v138-caller-discovery:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      P49_NODE_STAGE: '0'
+      P51_SIDE_BY_SIDE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Read-only caller-scanner negative tests and immutable originals
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B host_candidate/p198_original_source/test_entry_callers.py 2>&1 |
+            tee "$RUNNER_TEMP/p198-tests.log"
+          grep -Eq '^Ran 14 tests in' "$RUNNER_TEMP/p198-tests.log"
+          grep -Fxq 'OK' "$RUNNER_TEMP/p198-tests.log"
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('host_candidate/p198_original_source/audit_entry_callers.py')
+          compile(path.read_text(),str(path),'exec')
+          print("P198_STATIC_CALLER_SOURCE_SYNTAX=PASS")
+          PY
+          test "$(git hash-object host_candidate/p35_original_engine_spawn_contract.py)" = ff1b65e7fc915a8b23f363db93659cc221aaa6a0
+          test "$(git hash-object host_candidate/p196_dex_lifecycle/audit_exact_v138_dex.py)" = 4236ec6db86402ff10947d33266fd21018d196ac
+          test "$(git hash-object host_candidate/p43_original_service/build_embedded_emulator_apk.sh)" = 62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P181_THREE_ORIGINAL_START_DENY" = 1
+          test "$P49_NODE_STAGE" = 0
+          test "$P51_SIDE_BY_SIDE" = 0
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+          test -s host_candidate/p198_original_source/BROWSER_PRIVACY_QA.md
+          echo P198_PINNED_ORIGINAL_V138_SOURCE_AND_DENY_ONLY_BUILD=PASS
+      - name: Prepare exact original signed APK from existing no-exec test builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          python3 - <<'PY'
+          import importlib.metadata
+          assert importlib.metadata.version("androguard")=="4.1.4"
+          print("P198_ANDROGUARD_414_PINNED=PASS")
+          PY
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/d8"
+          mkdir -p .p198tmp
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > .p198tmp/build.log 2>&1; then
+            echo P198_EXACT_ORIGINAL_TEST_BUILD_FAILED
+            exit 1
+          fi
+          test -s .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p198tmp/build.log
+          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p198tmp/build.log
+          grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p198tmp/build.log
+          grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p198tmp/build.log
+          echo P198_EXACT_ORIGINAL_APK_READY_NO_ENGINE_EXEC=PASS
+      - name: Analyze actual signed v138 application DEX direct EngineManager callers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -B host_candidate/p198_original_source/audit_entry_callers.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --report .p198tmp/redacted-summary.json |
+            tee "$RUNNER_TEMP/p198-proof.log"
+          grep -Fxq 'P198_EXACT_SIGNED_V138_CALLER_GRAPH_DECODED=PASS' "$RUNNER_TEMP/p198-proof.log"
+          grep -Fxq 'P198_REAL_ENGINE_COROUTINE_RUNTIME_ORIGIN=NOT_ATTESTED' "$RUNNER_TEMP/p198-proof.log"
+          grep -Fxq 'P198_ORIGINAL_ARM64_NODE_HTTP_TOKEN_READY=NOT_WIRED' "$RUNNER_TEMP/p198-proof.log"
+          grep -Fxq 'P198_FORMAL_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p198-proof.log"
+          python3 - <<'PY'
+          import json
+          r=json.load(open(".p198tmp/redacted-summary.json"))
+          assert r["exact_signed_v138_sha256"]=="3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5"
+          assert set(r["targets"])=={"MAIN","PROBE","CONFIG"}
+          assert all(type(r["targets"][mode]["direct_callsites"]) is int
+                     for mode in ("MAIN","PROBE","CONFIG"))
+          assert r["real_android_coroutine_invoked"] is False
+          assert r["original_coroutine_os_generation_attested"] is False
+          assert r["binder_receipt_delivered_to_original_coroutine"] is False
+          assert r["production_node_http_ready"] is False
+          assert r["release"]=="STRUCTURAL_BLOCKED"
+          print("P198_REAL_APK_BOUNDED_CALLER_PROVENANCE_REPORT=PASS")
+          PY
+          echo P198_ORIGINAL_ENGINE_CALLERS_ONLY_NOT_RUNTIME=PASS
+      - name: Erase original APK, derived scratch and token-free reports
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp .p198tmp
+          echo P198_SIGNED_V138_CALLER_GRAPH=CHECK_ACTUAL_BINARY_JOB >> "$GITHUB_STEP_SUMMARY"
+          echo P198_ORIGINAL_KOTLIN_COROUTINE_LIVE_SOURCE=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P198_HOST_UID_P197_TO_ORIGINAL_COROUTINE=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P198_REAL_NODE_HTTP_TOKEN_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P198_ALL_P47_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P198_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P198_GS_SCREENSHOT=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P198_EXTERNAL_FINGERPRINT_SITES_AUTO_REQUESTED=NO >> "$GITHUB_STEP_SUMMARY"
+          echo P198_RELEASE_SIGN_OR_USER_PHONE_INSTALL=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P198_FORMAL_V139=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"

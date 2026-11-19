@@ -1,0 +1,65 @@
+name: P251 source-only first method relation and exception ordinal audit
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p251_method_relation/**'
+      - '.github/workflows/p251-method-relation-static-only.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p251-source-only-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p251-static-only:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify original gate seals and run 115 source-only fixtures
+        run: |
+          set -euo pipefail
+          test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
+          test "$(git hash-object host_candidate/p43_original_service/build_embedded_emulator_apk.sh)" = 62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f
+          test "$(git hash-object host_candidate/p245_build_only_probe/p245_build_only_probe.py)" = 06f62f4d8c8ee141b6b2030ee6556c9a43d9e499
+          test "$(git hash-object host_candidate/p246_exception_semantics/p246_exception_semantics.py)" = 59e64268fe80ceec0169417b83e96772b3e015a0
+          test "$(git hash-object host_candidate/p249_dual_diff/p249_dual_diff.py)" = 44248b92504cbf6d3406ffdccbde61e1099dcc7f
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('p251_method_relation.py','test_p251_method_relation.py'):
+            p=Path('host_candidate/p251_method_relation')/name
+            compile(p.read_text(encoding='utf-8'),str(p),'exec')
+          print('P251_SOURCE_SYNTAX=PASS')
+          PY
+          python3 -B host_candidate/p245_build_only_probe/test_p245_build_only_probe.py > "$RUNNER_TEMP/p251-p245.log" 2>&1
+          grep -Eq '^Ran 15 tests in' "$RUNNER_TEMP/p251-p245.log"
+          grep -Fxq OK "$RUNNER_TEMP/p251-p245.log"
+          python3 -B host_candidate/p246_exception_semantics/test_p246_exception_semantics.py > "$RUNNER_TEMP/p251-p246.log" 2>&1
+          grep -Eq '^Ran 30 tests in' "$RUNNER_TEMP/p251-p246.log"
+          grep -Fxq OK "$RUNNER_TEMP/p251-p246.log"
+          python3 -B host_candidate/p246_exception_semantics/test_p247_classifier_contract.py > "$RUNNER_TEMP/p251-p247.log" 2>&1
+          grep -Eq '^Ran 12 tests in' "$RUNNER_TEMP/p251-p247.log"
+          grep -Fxq OK "$RUNNER_TEMP/p251-p247.log"
+          python3 -B host_candidate/p249_dual_diff/test_p249_dual_diff.py > "$RUNNER_TEMP/p251-p249.log" 2>&1
+          grep -Eq '^Ran 26 tests in' "$RUNNER_TEMP/p251-p249.log"
+          grep -Fxq OK "$RUNNER_TEMP/p251-p249.log"
+          python3 -B host_candidate/p251_method_relation/test_p251_method_relation.py 2>&1 | tee "$RUNNER_TEMP/p251-contract.log"
+          grep -Eq '^Ran 32 tests in' "$RUNNER_TEMP/p251-contract.log"
+          grep -Fxq OK "$RUNNER_TEMP/p251-contract.log"
+          echo P251_P245_15_P246_30_P247_12_P249_26_P251_32=PASS
+          python3 -B host_candidate/p251_method_relation/p251_method_relation.py | tee "$RUNNER_TEMP/p251-not-attested.log"
+          grep -Fxq 'P251_SOURCE_ONLY=PASS' "$RUNNER_TEMP/p251-not-attested.log"
+          grep -Fxq 'P251_REAL_METHOD_RELATION=NOT_ATTESTED' "$RUNNER_TEMP/p251-not-attested.log"
+          grep -Fxq 'P251_LEGAL_RELOCATION=NOT_ATTESTED' "$RUNNER_TEMP/p251-not-attested.log"
+          grep -Fxq 'P251_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p251-not-attested.log"
+          test -z "$(git status --porcelain)"
+          echo P251_NO_APK_BUILD_ADB_EMULATOR_OR_RELEASE=YES

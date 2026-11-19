@@ -1,0 +1,86 @@
+name: P135 real Android35 isolated UID rejects translated ARM64 guest (no Node)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p135_android_isolated_kernel_proof/**'
+      - 'host_candidate/p134_real_arm64_gate/**'
+      - '.github/workflows/p135-android-nativebridge-isolated-negative.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: p135-android-uid-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  x86-nativebridge-isolated-negative:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build disposable permissionless isolated Android app and P134 authentic guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p135_android_isolated_kernel_proof/run_emulator.sh
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -f "$sdk/platforms/android-35/android.jar"
+          bt="$sdk/build-tools/35.0.0"
+          test -x "$bt/aapt" && test -x "$bt/d8" && test -x "$bt/apksigner"
+          mkdir -p "$RUNNER_TEMP/p135classes" "$RUNNER_TEMP/p135dex"
+          javac --release 8 -cp "$sdk/platforms/android-35/android.jar" -d "$RUNNER_TEMP/p135classes" \
+            host_candidate/p134_real_arm64_gate/src/com/dsh/android/p134/P134RealArm64Gate.java \
+            host_candidate/p135_android_isolated_kernel_proof/src/com/dsh/p135/P135IsolatedWorker.java \
+            host_candidate/p135_android_isolated_kernel_proof/src/com/dsh/p135/P135HostActivity.java
+          jar cf "$RUNNER_TEMP/p135.jar" -C "$RUNNER_TEMP/p135classes" .
+          "$bt/d8" --min-api 34 --lib "$sdk/platforms/android-35/android.jar" --output "$RUNNER_TEMP/p135dex" "$RUNNER_TEMP/p135.jar"
+          "$bt/aapt" package -f -M host_candidate/p135_android_isolated_kernel_proof/AndroidManifest.xml -I "$sdk/platforms/android-35/android.jar" -F "$RUNNER_TEMP/p135-unsigned.apk"
+          (cd "$RUNNER_TEMP/p135dex" && zip -q -j "$RUNNER_TEMP/p135-unsigned.apk" classes.dex)
+          "$bt/zipalign" -f 4 "$RUNNER_TEMP/p135-unsigned.apk" "$RUNNER_TEMP/p135-aligned.apk"
+          python3 - <<'PY'
+          import pathlib,xml.etree.ElementTree as ET
+          f=pathlib.Path('host_candidate/p135_android_isolated_kernel_proof/AndroidManifest.xml')
+          root=ET.parse(f).getroot()
+          A='{http://schemas.android.com/apk/res/android}'
+          assert root.attrib.get('package') == 'com.dsh.p135'
+          assert not root.findall('uses-permission')
+          app=root.find('application')
+          s=app.find('service')
+          assert s.attrib[A+'isolatedProcess']=='true'
+          assert s.attrib[A+'exported']=='false'
+          assert s.attrib[A+'process']==':isolated'
+          assert not any('INTERNET' in x for x in f.read_text().splitlines() if '<uses-permission' in x)
+          print('P135_STANDALONE_APP_NO_PERMISSIONS_ISOLATED_NONEXPORTED=PASS')
+          PY
+          pass="$(openssl rand -hex 20)"
+          keytool -genkeypair -alias disposable -keyalg RSA -keysize 3072 -validity 1 -storetype PKCS12 -dname "CN=P135 DISPOSABLE ANDROID NEGATIVE GATE ONLY" -keystore "$RUNNER_TEMP/p135-ci.p12" -storepass "$pass" -keypass "$pass" -noprompt >/dev/null 2>&1
+          "$bt/apksigner" sign --ks "$RUNNER_TEMP/p135-ci.p12" --ks-key-alias disposable --ks-pass "pass:$pass" --key-pass "pass:$pass" --out "$RUNNER_TEMP/p135-disposable.apk" "$RUNNER_TEMP/p135-aligned.apk"
+          "$bt/apksigner" verify "$RUNNER_TEMP/p135-disposable.apk"
+          echo P135_DISPOSABLE_EPHEMERAL_SIGNED_TEST_APP=PASS >> "$GITHUB_STEP_SUMMARY"
+      - name: Enable disposable emulator KVM
+        run: if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Real Android isolated Binder witness x86 guest-arm64 negative
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p135_android_isolated_kernel_proof/run_emulator.sh
+      - name: Always remove ephemeral APK, signer and classfiles
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/p135classes" "$RUNNER_TEMP/p135dex" "$RUNNER_TEMP/p135-ci.p12" "$RUNNER_TEMP/p135-disposable.apk" "$RUNNER_TEMP/p135-unsigned.apk" "$RUNNER_TEMP/p135-aligned.apk" "$RUNNER_TEMP/p135.jar"
+          echo P135_ACTUAL_ARM64_ANDROID_ISOLATED_UID=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P135_ORIGINAL_V138_NODE_VERSION=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P135_ENGINE_MANAGER_LIFECYCLE=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P135_P109_NATIVE_TOOL_AUTHORITY=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P135_FORMAL_V139=BLOCKED >> "$GITHUB_STEP_SUMMARY"

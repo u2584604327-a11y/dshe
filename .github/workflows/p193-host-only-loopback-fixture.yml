@@ -1,0 +1,63 @@
+name: P193 host-owned IPv4 loopback and simulated Binder guard (Java8 only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p193_host_loopback/**'
+      - '.github/workflows/p193-host-only-loopback-fixture.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p193-fixed-branch
+  cancel-in-progress: true
+jobs:
+  java8-host-only-fixture:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Verify pinned scope, boundaries and no-release markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'P193 TEST-ONLY host-owned 127.0.0.1 listener' host_candidate/p193_host_loopback/src/com/dsh/android/p193/P193HostLoopbackFixture.java
+          grep -Fq 'receiveSimulatedFrameworkReply' host_candidate/p193_host_loopback/src/com/dsh/android/p193/P193HostLoopbackFixture.java
+          grep -Fq 'P193_REAL_ANDROID_FRAMEWORK_UID=NOT_TESTED' host_candidate/p193_host_loopback/test/com/dsh/android/p193/P193HostLoopbackFixtureTest.java
+          grep -Fq 'P193_ORIGINAL_ENGINE_HTTP_TOKEN_READY=NOT_WIRED' host_candidate/p193_host_loopback/test/com/dsh/android/p193/P193HostLoopbackFixtureTest.java
+          grep -Fq 'BIND_EACCES' host_candidate/p193_host_loopback/README.md
+          test -f THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -f REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+          echo P193_SAFE_SINGLE_SCOPE_SOURCE_REVIEW=PASS
+      - name: Run actual Java8 localhost fixture with safety negatives
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash host_candidate/p193_host_loopback/run_java8.sh | tee "$RUNNER_TEMP/p193.log"
+          grep -Fxq 'P193_HOST_IPV4_LOOPBACK_ONLY_AND_SINGLE_USE=PASS' "$RUNNER_TEMP/p193.log"
+          grep -Fxq 'P193_HTTP_FIXED_ENDPOINT_AUTH_AND_BOUNDS=PASS' "$RUNNER_TEMP/p193.log"
+          grep -Fxq 'P193_SIMULATED_BINDER_UID_SESSION_DIGEST_EPOCH_NONCE_REPLAY=PASS' "$RUNNER_TEMP/p193.log"
+          grep -Fq 'P193_JAVA8_OFFLINE_TEST=PASS checks=' "$RUNNER_TEMP/p193.log"
+          grep -Fxq 'P193_REAL_ANDROID_FRAMEWORK_UID=NOT_TESTED' "$RUNNER_TEMP/p193.log"
+          grep -Fxq 'P193_ORIGINAL_ENGINE_HTTP_TOKEN_READY=NOT_WIRED' "$RUNNER_TEMP/p193.log"
+      - name: Explicitly deny production claim
+        if: always()
+        shell: bash
+        run: |
+          echo P193_REAL_ANDROID_BINDER_UID=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P193_REAL_ISOLATED_TCP_BIND=P192_BLOCKED_EACCES >> "$GITHUB_STEP_SUMMARY"
+          echo P193_ORIGINAL_ENGINE_NODE_HTTP=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P193_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P193_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P193_GS_SCREENSHOT=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P193_APK_SIGNING_DEPLOYMENT=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P193_FORMAL_V139=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"

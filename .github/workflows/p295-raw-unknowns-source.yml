@@ -1,0 +1,49 @@
+# P295 read-only source validation: never assemble, install or publish an APK.
+name: P295 source-only raw DEX unknown triage, immutable original gates
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p295_raw_unknowns/**'
+      - '.github/workflows/p295-raw-unknowns-source.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p295-source-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p295-source:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: P295 source syntax, adversarial suite, immutable verifier source
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          for p in (Path('host_candidate/p295_raw_unknowns/p295_raw_unknowns.py'),
+                    Path('host_candidate/p295_raw_unknowns/test_p295_raw_unknowns.py')):
+              compile(p.read_text(encoding='utf-8'),str(p),'exec')
+          print('P295_SOURCE_SYNTAX=PASS')
+          PY
+          test "$(git hash-object host_candidate/p245_build_only_probe/p245_build_only_probe.py)" = 06f62f4d8c8ee141b6b2030ee6556c9a43d9e499
+          python3 -B host_candidate/p295_raw_unknowns/test_p295_raw_unknowns.py 2>&1 | tee "$RUNNER_TEMP/p295-tests.log"
+          grep -Eq '^Ran 30 tests in' "$RUNNER_TEMP/p295-tests.log"
+          grep -Fxq 'OK' "$RUNNER_TEMP/p295-tests.log"
+          python3 -B host_candidate/p295_raw_unknowns/p295_raw_unknowns.py | tee "$RUNNER_TEMP/p295-diagnostic.log"
+          grep -Fxq P295_REAL_RAW_METHOD_CENSUS=NOT_ATTESTED "$RUNNER_TEMP/p295-diagnostic.log"
+          grep -Fxq P295_NO_APK_ADB_SIGN_INSTALL_OR_RELEASE=YES "$RUNNER_TEMP/p295-diagnostic.log"
+          echo P295_SYNTHETIC_30_OF_30=PASS
+          echo P295_ORIGINAL_P245_BLOB=BYTE_EXACT
+          echo P295_RELEASE=DENY
+          echo P295_V139=STRUCTURAL_BLOCKED

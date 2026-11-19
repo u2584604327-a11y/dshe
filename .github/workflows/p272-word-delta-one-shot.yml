@@ -1,0 +1,372 @@
+name: P272 one-shot original 35c/3rc word delta with immutable P245 DENY
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '.github/workflows/p272-word-delta-one-shot.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p272-one-shot-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p272-operand-shape:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      P49_NODE_STAGE: '0'
+      P51_SIDE_BY_SIDE: '0'
+      P208_CI_METHOD_ENTRY_ONLY: '1'
+      P209_FINAL_DENY_ONLY: '1'
+      P74_FIXTURE_ENGINE_BRIDGE: '0'
+      P75_RENDEZVOUS_FIXTURE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Python source syntax and 15 fail-closed tests
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          for n in ('p245_build_only_probe.py','test_p245_build_only_probe.py'):
+            p=Path('host_candidate/p245_build_only_probe')/n
+            compile(p.read_text(),str(p),'exec')
+          print('P245_SOURCE_SYNTAX=PASS')
+          PY
+          python3 -B host_candidate/p245_build_only_probe/test_p245_build_only_probe.py 2>&1 | tee "$RUNNER_TEMP/p245-unit.log"
+          grep -Eq '^Ran 15 tests in' "$RUNNER_TEMP/p245-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p245-unit.log"
+          python3 -B host_candidate/p246_exception_semantics/test_p246_exception_semantics.py > "$RUNNER_TEMP/p272-p246-test.log" 2>&1
+          grep -Eq '^Ran 30 tests in' "$RUNNER_TEMP/p272-p246-test.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p246-test.log"
+          python3 -B host_candidate/p246_exception_semantics/test_p247_classifier_contract.py > "$RUNNER_TEMP/p272-p247-test.log" 2>&1
+          grep -Eq '^Ran 12 tests in' "$RUNNER_TEMP/p272-p247-test.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p247-test.log"
+          python3 -B host_candidate/p249_dual_diff/test_p249_dual_diff.py > "$RUNNER_TEMP/p272-p249-unit.log" 2>&1
+          grep -Eq '^Ran 26 tests in' "$RUNNER_TEMP/p272-p249-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p249-unit.log"
+          test "$(git hash-object host_candidate/p251_method_relation/p251_method_relation.py)" = 136289c3d270d130270ce0b648070996df73b14a
+          python3 -B host_candidate/p251_method_relation/test_p251_method_relation.py > "$RUNNER_TEMP/p272-p251-fixture.log" 2>&1
+          grep -Eq '^Ran 32 tests in' "$RUNNER_TEMP/p272-p251-fixture.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p251-fixture.log"
+          test "$(git hash-object host_candidate/p253_cfg_ordinal/p253_cfg_ordinal.py)" = 9ff606e656fce61eb11c83e3dd4b2ab93385f7e0
+          python3 -B host_candidate/p253_cfg_ordinal/test_p253_cfg_ordinal.py > "$RUNNER_TEMP/p272-p253-fixtures.log" 2>&1
+          grep -Eq '^Ran 30 tests in' "$RUNNER_TEMP/p272-p253-fixtures.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p253-fixtures.log"
+          test "$(git hash-object host_candidate/p255_branch_separation/p255_branch_separation.py)" = 5b19da4d967ca79ea77f26c6e463fb39c0a6fae1
+          python3 -B host_candidate/p255_branch_separation/test_p255_branch_separation.py > "$RUNNER_TEMP/p272-p255-unit.log" 2>&1
+          grep -Eq '^Ran 22 tests in' "$RUNNER_TEMP/p272-p255-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p255-unit.log"
+          test "$(git hash-object host_candidate/p257_opcode_family/p257_opcode_family.py)" = 5afdef13bd3999744be931c457d3b514fd1459e2
+          python3 -B host_candidate/p257_opcode_family/test_p257_opcode_family.py > "$RUNNER_TEMP/p272-p257-fixtures.log" 2>&1
+          grep -Eq '^Ran 36 tests in' "$RUNNER_TEMP/p272-p257-fixtures.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p257-fixtures.log"
+          test "$(git hash-object host_candidate/p259_all_operands/p259_all_operands.py)" = f4b383766a10a4c14795bc3f3d4c5f2a2a52a099
+          python3 -B host_candidate/p259_all_operands/test_p259_all_operands.py > "$RUNNER_TEMP/p272-p259-fixtures.log" 2>&1
+          grep -Eq '^Ran 38 tests in' "$RUNNER_TEMP/p272-p259-fixtures.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p259-fixtures.log"
+          test "$(git hash-object host_candidate/p261_all_method_census/p261_all_method_census.py)" = d4724ef5045857b6583a27251171ea4e3f1413e9
+          python3 -B host_candidate/p261_all_method_census/test_p261_all_method_census.py > "$RUNNER_TEMP/p272-p261-unit.log" 2>&1
+          grep -Eq '^Ran 36 tests in' "$RUNNER_TEMP/p272-p261-unit.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p261-unit.log"
+          test "$(git hash-object host_candidate/p263_operand_correlation/p263_operand_correlation.py)" = 6ce541aa73300795b5866fabd3b469d7655a1ed0
+          python3 -B host_candidate/p263_operand_correlation/test_p263_operand_correlation.py > "$RUNNER_TEMP/p272-p263-fixtures.log" 2>&1
+          grep -Eq '^Ran 26 tests in' "$RUNNER_TEMP/p272-p263-fixtures.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p263-fixtures.log"
+          test "$(git hash-object host_candidate/p265_operand_shape/p265_operand_shape.py)" = c73d09ab7efa2503a542c0a0a21bbbe33c95a360
+          python3 -B host_candidate/p265_operand_shape/test_p265_operand_shape.py > "$RUNNER_TEMP/p272-p265-fixtures.log" 2>&1
+          grep -Eq '^Ran 28 tests in' "$RUNNER_TEMP/p272-p265-fixtures.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p265-fixtures.log"
+          test "$(git hash-object host_candidate/p267_invoke_words/p267_invoke_words.py)" = 36b295a65ef1063f9a68a1b2e8ca60c0fddf98f1
+          python3 -B host_candidate/p267_invoke_words/test_p267_invoke_words.py > "$RUNNER_TEMP/p272-p267-fixtures.log" 2>&1
+          grep -Eq '^Ran 31 tests in' "$RUNNER_TEMP/p272-p267-fixtures.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p267-fixtures.log"
+          test "$(git hash-object host_candidate/p269_method_pool/p269_method_pool.py)" = 5680d35aeb18f0869eeb368487105d54680fb748
+          python3 -B host_candidate/p269_method_pool/test_p269_method_pool.py > "$RUNNER_TEMP/p272-p269-fixtures.log" 2>&1
+          grep -Eq '^Ran 21 tests in' "$RUNNER_TEMP/p272-p269-fixtures.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p269-fixtures.log"
+          test "$(git hash-object host_candidate/p271_word_delta/p271_word_delta.py)" = 8c30641560d5e2c38c36ea7138f28319f7142200
+          python3 -B host_candidate/p271_word_delta/test_p271_word_delta.py > "$RUNNER_TEMP/p272-p271-fixtures.log" 2>&1
+          grep -Eq '^Ran 34 tests in' "$RUNNER_TEMP/p272-p271-fixtures.log"
+          grep -Fxq OK "$RUNNER_TEMP/p272-p271-fixtures.log"
+          echo P272_SYNTHETIC_417_OF_417=PASS
+          test "$(git hash-object host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java)" = 44cd38245dc87b9eff960b15dc520e60a2754c2c
+          test "$(git hash-object host_candidate/p43_original_service/build_embedded_emulator_apk.sh)" = 62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f
+      - name: Prepare existing P208 P209 temporary builder
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p208_original_start_coroutine/patch_ci_only.py --prepare-builder
+          python3 host_candidate/p209_original_p47_deny/patch_gate_ci_only.py --prepare
+          test -s .p209tmp/P47LaunchGate.java
+      - name: Prepare pinned Android35 build tools
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          python3 - <<'PY'
+          import importlib.metadata
+          assert importlib.metadata.version('androguard')=='4.1.4'
+          PY
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          test -s "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/d8"
+      - name: Build original-pinned disposable baseline without install
+        run: |
+          set -euo pipefail
+          mkdir -p .p208tmp .p245tmp
+          bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > .p208tmp/p245-build.log 2>&1 || { tail -n 20 .p208tmp/p245-build.log; exit 2; }
+          grep -Fxq 'P209_PC176_POST_THROWONFAILURE_ONLY_REVERSIBLE_MARKER=PASS' .p208tmp/p245-build.log
+          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p208tmp/p245-build.log
+          grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p208tmp/p245-build.log
+          python3 host_candidate/p209_original_p47_deny/verify_original_precall.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk > .p245tmp/p209.log
+          grep -Fxq 'P209_ALL_ORIGINAL_BRANCH_TARGETS_RELOCATED_EXACTLY=PASS' .p245tmp/p209.log
+          python3 -B host_candidate/p209_original_p47_deny/p244_signed_postreturn_slot_feasibility.py \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk > .p245tmp/p244.log
+          grep -Fxq 'P244_35C_TO_3RC_SAME_WIDTH_ENCODING_CANDIDATE=YES' .p245tmp/p244.log
+      - name: One-shot P245 replay and dual independent DENY verification
+        run: |
+          set -euo pipefail
+          # Never run ADB, install, start Android/Node, or persist an APK artifact.
+          trap 'python3 -B host_candidate/p245_build_only_probe/p245_build_only_probe.py --restore >/dev/null 2>&1 || true' EXIT
+          python3 -B host_candidate/p245_build_only_probe/p245_build_only_probe.py --patch
+          apktool b .p43tmp/decoded -o .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-assembly.log 2>&1
+          echo P272_IDENTICAL_P245_EPHEMERAL_SMALI_ASSEMBLY=PASS
+          python3 -B host_candidate/p245_build_only_probe/p245_build_only_probe.py --restore
+          trap - EXIT
+          python3 - <<'PY'
+          import zipfile
+          b='.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk'
+          c='.p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk'
+          with zipfile.ZipFile(b) as base,zipfile.ZipFile(c,'a') as candidate:
+            assert 'classes3.dex' not in candidate.namelist()
+            candidate.writestr('classes3.dex',base.read('classes3.dex'),compress_type=zipfile.ZIP_STORED)
+          print('P272_P245_VERBATIM_THIRD_DEX=PASS')
+          PY
+          # Both real checks MUST run. Always sanitize logs: only fixed deny
+          # categories may be sent to public CI, never app method names.
+          set +e
+          python3 -B host_candidate/p249_dual_diff/p249_dual_diff.py \
+            --signed-original .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --base .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            --candidate .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-first-diff.log 2>&1
+          classifier_rc=$?
+          python3 -B host_candidate/p245_build_only_probe/p245_build_only_probe.py \
+            --verify .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-original-gate.log 2>&1
+          p245_rc=$?
+          python3 -B host_candidate/p251_method_relation/p251_method_relation.py \
+            --signed-original .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --base .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            --candidate .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-method-identity.log 2>&1
+          p251_rc=$?
+          python3 -B host_candidate/p253_cfg_ordinal/p253_cfg_ordinal.py \
+            --signed-original .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --base .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            --candidate .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-cfg-first-size.log 2>&1
+          p253_rc=$?
+          python3 -B host_candidate/p255_branch_separation/p255_branch_separation.py \
+            --signed-original .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --base .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            --candidate .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-branch-signature.log 2>&1
+          p255_rc=$?
+          python3 -B host_candidate/p257_opcode_family/p257_opcode_family.py \
+            --signed-original .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --base .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            --candidate .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-opcode-operand.log 2>&1
+          p257_rc=$?
+          python3 -B host_candidate/p259_all_operands/p259_all_operands.py \
+            --signed-original .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --base .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            --candidate .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-all-operands.log 2>&1
+          p259_rc=$?
+          python3 -B host_candidate/p261_all_method_census/p261_all_method_census.py \
+            --signed-original .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --base .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            --candidate .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-all-methods.log 2>&1
+          p261_rc=$?
+          python3 -B host_candidate/p263_operand_correlation/p263_operand_correlation.py \
+            --signed-original .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --base .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            --candidate .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-divergence-correlation.log 2>&1
+          p263_rc=$?
+          python3 -B host_candidate/p265_operand_shape/p265_operand_shape.py \
+            --signed-original .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --base .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            --candidate .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-shape-reasons.log 2>&1
+          p265_rc=$?
+          python3 -B host_candidate/p267_invoke_words/p267_invoke_words.py \
+            --signed-original .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --base .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            --candidate .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-invoke-words.log 2>&1
+          p267_rc=$?
+          python3 -B host_candidate/p269_method_pool/p269_method_pool.py \
+            --signed-original .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --base .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            --candidate .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-method-pool.log 2>&1
+          p269_rc=$?
+          python3 -B host_candidate/p271_word_delta/p271_word_delta.py \
+            --signed-original .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --base .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
+            --candidate .p245tmp/P272-UNSIGNED-DO-NOT-INSTALL.apk > .p245tmp/p272-word-delta.log 2>&1
+          p271_rc=$?
+          set -e
+          echo "P272_CLASSIFIER_EXIT=$classifier_rc"
+          echo "P272_UNCHANGED_P245_VERIFIER_EXIT=$p245_rc"
+          echo "P272_P251_IDENTITY_CLASSIFIER_EXIT=$p251_rc"
+          echo "P272_P253_NORMAL_CFG_CLASSIFIER_EXIT=$p253_rc"
+          echo "P272_P255_EXPLICIT_BRANCH_CLASSIFIER_EXIT=$p255_rc"
+          echo "P272_P257_OPCODE_FAMILY_CLASSIFIER_EXIT=$p257_rc"
+          echo "P272_P259_ALL_OPERANDS_CLASSIFIER_EXIT=$p259_rc"
+          echo "P272_P261_ALL_METHODS_CLASSIFIER_EXIT=$p261_rc"
+          echo "P272_P263_DIVERGENCE_CLASSIFIER_EXIT=$p263_rc"
+          echo "P272_P265_SHAPE_CLASSIFIER_EXIT=$p265_rc"
+          echo "P272_P267_INVOKE_WORD_CLASSIFIER_EXIT=$p267_rc"
+          echo "P272_P269_METHOD_POOL_CLASSIFIER_EXIT=$p269_rc"
+          echo "P272_P271_WORD_DELTA_CLASSIFIER_EXIT=$p271_rc"
+          grep -E '^P271_(WORDS_(COUNT_CHANGED|SAME_COUNT_FIXED_NONCONTIGUOUS|SAME_COUNT_CONTIGUOUS_DIFFERENT|SAME_COUNT_WORD_SEQUENCE_MATCH|RAW_UNREADABLE|ENCODING_UNSUPPORTED)|METHOD_REF_(POOL_MATCH|POOL_DIFFER|POOL_UNREADABLE)|PROTOTYPE_(VALID_BOTH|INVALID_OR_UNKNOWN|NOT_APPLICABLE)|FRAME_(VALID_BOTH|DIFFERENT|INVALID_OR_UNKNOWN)|WIDE_(VALID_BOTH|INVALID_ANY|NOT_ATTESTED))=[0-9]{1,7}$' .p245tmp/p272-word-delta.log || true
+          grep -E '^P271_(P270_NONZERO_WORD_MISMATCHES|P270_REFERENCE_NOT_ATTESTED|UNVERIFIED_ORIGINAL_METHODS)=[0-9]{1,7}$' .p245tmp/p272-word-delta.log || true
+          grep -E '^P271_PRIVATE_METHODS_PCS_REGISTERS_AND_REFERENCES=WITHHELD$' .p245tmp/p272-word-delta.log || true
+          grep -E '^P271_LOCAL_ENCODING_CANDIDATE_ONLY=YES$' .p245tmp/p272-word-delta.log || true
+          grep -E '^P271_ART_SEMANTICS_AND_P245_FULL_PARITY=NOT_ATTESTED$' .p245tmp/p272-word-delta.log || true
+          grep -E '^P271_RELEASE=DENY$' .p245tmp/p272-word-delta.log || true
+          grep -E '^P271_V139=STRUCTURAL_BLOCKED$' .p245tmp/p272-word-delta.log || true
+          grep -E '^P271_DENY_[A-Z0-9_]+$' .p245tmp/p272-word-delta.log || true
+          grep -E '^P246_DENY_[A-Z0-9_]+$' .p245tmp/p272-word-delta.log || true
+          grep -E '^P269_(ZERO_WORD_35C_OMISSION_POOL_MATCH_CANDIDATE|ZERO_WORD_POOL_METHOD_DIFFER|ZERO_WORD_EXPECTED_ARGUMENTS_NONZERO|ZERO_WORD_NONSTATIC_RECEIVER_INVALID|NONZERO_METHOD_POOL_MATCH_CANDIDATE|NONZERO_METHOD_POOL_DIFFER|NONZERO_REGISTER_WORDS_DIFFER|NONZERO_WIDE_LAYOUT_INVALID|POOL_METHOD_REFERENCE_UNAVAILABLE|LIBRARY_REFERENCE_VIEW_NOT_RECONCILED|RAW_OR_ENCODING_UNVERIFIED|MULTIPLE_MISMATCHES_UNVERIFIED|OTHER_NOT_ATTESTED)=[0-9]{1,7}$' .p245tmp/p272-method-pool.log || true
+          grep -E '^P269_(PRIOR_REF_UNVERIFIED|PRIOR_UNVERIFIED_METHODS)=[0-9]{1,7}$' .p245tmp/p272-method-pool.log || true
+          grep -E '^P269_POOL_MATCH_IS_ONLY_CANDIDATE=YES$' .p245tmp/p272-method-pool.log || true
+          grep -E '^P269_ORIGINAL_METHOD_IDENTITIES_AND_PARAMETERS=WITHHELD$' .p245tmp/p272-method-pool.log || true
+          grep -E '^P269_RELEASE=DENY$' .p245tmp/p272-method-pool.log || true
+          grep -E '^P269_V139=STRUCTURAL_BLOCKED$' .p245tmp/p272-method-pool.log || true
+          grep -E '^P269_DENY_[A-Z0-9_]+$' .p245tmp/p272-method-pool.log || true
+          grep -E '^P246_DENY_[A-Z0-9_]+$' .p245tmp/p272-method-pool.log || true
+          grep -E '^P267_(INVOKE_WORD_SEQUENCE_MATCH_CANDIDATE|INVOKE_WORD_SEQUENCE_CHANGED|INVOKE_WORD_COUNT_CHANGED|INVOKE_METHOD_REFERENCE_CHANGED|INVOKE_REFERENCE_NOT_ATTESTED|INVOKE_DESCRIPTOR_NOT_ATTESTED|INVOKE_WIDE_WORD_LAYOUT_INVALID|INVOKE_REGISTER_FRAME_INVALID|INVOKE_DECODER_OPERANDS_UNATTESTED|INVOKE_RAW_FORMAT_UNATTESTED|OTHER_ENCODING_FAMILY_NOT_ATTESTED|MULTIPLE_INSTRUCTION_DIFFERENCES_NOT_ATTESTED)=[0-9]{1,7}$' .p245tmp/p272-invoke-words.log || true
+          grep -E '^P267_(NORMALIZED_ITEM_COUNT_METHODS|PREVIOUSLY_UNKNOWN_METHODS)=[0-9]{1,7}$' .p245tmp/p272-invoke-words.log || true
+          grep -E '^P267_PRIVATE_REGISTERS_AND_REFERENCES=WITHHELD$' .p245tmp/p272-invoke-words.log || true
+          grep -E '^P267_PARAMETER_WORD_SEQUENCE_IS_NOT_ART_EQUIVALENCE=YES$' .p245tmp/p272-invoke-words.log || true
+          grep -E '^P267_RELEASE=DENY$' .p245tmp/p272-invoke-words.log || true
+          grep -E '^P267_V139=STRUCTURAL_BLOCKED$' .p245tmp/p272-invoke-words.log || true
+          grep -E '^P267_DENY_[A-Z0-9_]+$' .p245tmp/p272-invoke-words.log || true
+          grep -E '^P246_DENY_[A-Z0-9_]+$' .p245tmp/p272-invoke-words.log || true
+          grep -E '^P265_SHAPE_(NORMALIZED_ITEM_COUNT|NORMALIZED_ITEM_KIND|RAW_ITEM_COUNT|RAW_TAG_ORDER|RAW_ITEM_ARITY|RAW_LAYOUT_SAME_UNATTESTED|ONE_SIDE_UNDECODABLE|BOTH_SIDES_UNDECODABLE|NORMALIZED_VALUES_CHANGED|OTHER_NOT_ATTESTED)=[0-9]{1,7}$' .p245tmp/p272-shape-reasons.log || true
+          grep -E '^P265_(SHAPE_METHODS|DIVERGENT_METHODS|UNKNOWN_METHODS)=[0-9]{1,7}$' .p245tmp/p272-shape-reasons.log || true
+          grep -E '^P265_IDENTITIES_AND_OPERAND_VALUES=WITHHELD$' .p245tmp/p272-shape-reasons.log || true
+          grep -E '^P265_(ENCODING_REPRESENTATION_EQUIVALENCE|ALL_UNKNOWN_METHODS|UNCHANGED_P245_GATE|ART_AND_PROCESS_OWNER)=NOT_ATTESTED$' .p245tmp/p272-shape-reasons.log || true
+          grep -E '^P265_RELEASE=DENY$' .p245tmp/p272-shape-reasons.log || true
+          grep -E '^P265_DENY_[A-Z0-9_]+$' .p245tmp/p272-shape-reasons.log || true
+          grep -E '^P246_DENY_[A-Z0-9_]+$' .p245tmp/p272-shape-reasons.log || true
+          grep -E '^P263_(DIVERGENT_SIZE_CHANGED|DIVERGENT_SIZE_STABLE|DIVERGENT_OPCODE_UNCHANGED|DIVERGENT_OPCODE_ENCODING|DIVERGENT_OPCODE_KIND|DIVERGENT_REGISTER|DIVERGENT_LITERAL|DIVERGENT_RESOLVED_REFERENCE|DIVERGENT_OPERAND_SHAPE|DIVERGENT_MULTIPLE_TYPES|UNKNOWN_PAYLOAD|UNKNOWN_INSTRUCTION_COUNT|UNKNOWN_OPERAND_FORMAT|UNKNOWN_OTHER)=[0-9]{1,7}$' .p245tmp/p272-divergence-correlation.log || true
+          grep -E '^P263_SCOPE=ALL_ORIGINAL_PRIMARY_METHODS$' .p245tmp/p272-divergence-correlation.log || true
+          grep -E '^P263_IDENTITY_AND_OPERANDS=WITHHELD$' .p245tmp/p272-divergence-correlation.log || true
+          grep -E '^P263_(COMPLETE_SEMANTIC_PARITY|UNCHANGED_P245_GATE|ART_PROCESS_OWNER)=NOT_ATTESTED$' .p245tmp/p272-divergence-correlation.log || true
+          grep -E '^P263_RELEASE=DENY$' .p245tmp/p272-divergence-correlation.log || true
+          grep -E '^P263_V139=STRUCTURAL_BLOCKED$' .p245tmp/p272-divergence-correlation.log || true
+          grep -E '^P263_DENY_[A-Z0-9_]+$' .p245tmp/p272-divergence-correlation.log || true
+          grep -E '^P246_DENY_[A-Z0-9_]+$' .p245tmp/p272-divergence-correlation.log || true
+          grep -E '^P261_(ORIGINAL_CODE_METHODS|CODE_SIZE_CHANGED|RAW_EXCEPTION_CHANGED|EXCEPTION_ORDINAL_CHANGED|OPCODE_COUNT_CHANGED|OPCODE_ENCODING_CANDIDATE_ONLY|OPCODE_OPERATION_KIND_CHANGED|UNSUPPORTED_PAYLOAD_METHODS|BRANCH_SIGNATURE_CHANGED|FRAME_CHANGED|FRAME_NOT_ATTESTED|OPERANDS_STRUCTURED_MATCH|OPERANDS_STRUCTURED_DIFFER|OPERANDS_NOT_ATTESTED)=[0-9]{1,7}$' .p245tmp/p272-all-methods.log || true
+          grep -E '^P261_SCOPE=ALL_ORIGINAL_CODE_METHODS$' .p245tmp/p272-all-methods.log || true
+          grep -E '^P261_UNKNOWN_SWITCH_AND_PAYLOAD=COUNTED_NOT_IGNORED$' .p245tmp/p272-all-methods.log || true
+          grep -E '^P261_(SUPPORTED_OPERANDS|COMPLETE_ART_SEMANTICS|ORIGINAL_P245_FULL_GATE|NODE_CHILD_ISOLATION_AND_P192_EGRESS)=(STRUCTURAL_ONLY|NOT_ATTESTED)$' .p245tmp/p272-all-methods.log || true
+          grep -E '^P261_RELEASE=DENY$' .p245tmp/p272-all-methods.log || true
+          grep -E '^P261_V139=STRUCTURAL_BLOCKED$' .p245tmp/p272-all-methods.log || true
+          grep -E '^P261_DENY_[A-Z0-9_]+$' .p245tmp/p272-all-methods.log || true
+          grep -E '^P246_DENY_[A-Z0-9_]+$' .p245tmp/p272-all-methods.log || true
+          grep -E '^P259_FIRST_SIZE_GROUP=(NONE|START_COROUTINE|OTHER_PRIMARY)$' .p245tmp/p272-all-operands.log || true
+          grep -E '^P259_FIRST_SIZE_LAYOUT=(NONE|SAME_LAYOUT|WIDTH_ONLY|OPCODE_CHANGED|COUNT_CHANGED)$' .p245tmp/p272-all-operands.log || true
+          grep -E '^P259_ALL_OPCODE_FAMILIES=(NONE|COUNT_CHANGED|ONLY_ENCODING_CANDIDATES|HAS_OPERATION_KIND_CHANGE)$' .p245tmp/p272-all-operands.log || true
+          grep -E '^P259_(ALL_INSTRUCTION_OPERANDS|UNCHANGED_OPCODE_OPERANDS|CHANGED_OPCODE_OPERANDS)=(NOT_APPLICABLE|STRUCTURED_MATCH|STRUCTURED_DIFFER|NOT_ATTESTED|COUNT_CHANGED)$' .p245tmp/p272-all-operands.log || true
+          grep -E '^P259_REGISTER_FRAME=(MATCH|DIFFER|NOT_ATTESTED)$' .p245tmp/p272-all-operands.log || true
+          grep -E '^P259_EXPLICIT_IF_GOTO_ORDINALS=(NONE|ORDINALS_MATCH_ONLY|ORDINALS_DIFFER)$' .p245tmp/p272-all-operands.log || true
+          grep -E '^P259_EXCEPTION_EDGE_ORDINALS=(NONE|ORDINALS_MATCH_ONLY|ORDINALS_DIFFER)$' .p245tmp/p272-all-operands.log || true
+          grep -E '^P259_SCOPE=FIRST_SIZE_METHOD_ONLY$' .p245tmp/p272-all-operands.log || true
+          grep -E '^P259_(ALL_OTHER_ORIGINAL_METHODS|OPCODE_SEMANTIC_EQUIVALENCE|LEGAL_RELOCATION|UNCHANGED_P245_FULL_GATE|ART_AND_PROCESS_OWNER)=NOT_ATTESTED$' .p245tmp/p272-all-operands.log || true
+          grep -E '^P259_DENY_[A-Z0-9_]+$' .p245tmp/p272-all-operands.log || true
+          grep -E '^P246_DENY_[A-Z0-9_]+$' .p245tmp/p272-all-operands.log || true
+          grep -E '^P257_FIRST_SIZE_GROUP=(NONE|START_COROUTINE|OTHER_PRIMARY)$' .p245tmp/p272-opcode-operand.log || true
+          grep -E '^P257_FIRST_SIZE_LAYOUT=(NONE|SAME_LAYOUT|WIDTH_ONLY|OPCODE_CHANGED|COUNT_CHANGED)$' .p245tmp/p272-opcode-operand.log || true
+          grep -E '^P257_FIRST_OPCODE_PAIR_CLASS=(NONE|COUNT_CHANGED|ENCODING_FAMILY_CANDIDATE|OPERATION_KIND_CHANGED)$' .p245tmp/p272-opcode-operand.log || true
+          grep -E '^P257_ALL_OPCODE_CHANGES_CLASS=(NONE|COUNT_CHANGED|ONLY_ENCODING_CANDIDATES|HAS_OPERATION_KIND_CHANGE)$' .p245tmp/p272-opcode-operand.log || true
+          grep -E '^P257_FIRST_PAIR_OPERANDS=(NOT_APPLICABLE|NOT_ATTESTED|STRUCTURED_MATCH|STRUCTURED_DIFFER|BRANCH_TARGETS_DELEGATED)$' .p245tmp/p272-opcode-operand.log || true
+          grep -E '^P257_REGISTER_FRAME=(MATCH|DIFFER|NOT_ATTESTED)$' .p245tmp/p272-opcode-operand.log || true
+          grep -E '^P257_EXPLICIT_IF_GOTO_ORDINALS=(NONE|ORDINALS_MATCH_ONLY|ORDINALS_DIFFER)$' .p245tmp/p272-opcode-operand.log || true
+          grep -E '^P257_EXCEPTION_EDGE_ORDINALS=(NONE|ORDINALS_MATCH_ONLY|ORDINALS_DIFFER)$' .p245tmp/p272-opcode-operand.log || true
+          grep -E '^P257_(ALL_INSTRUCTION_OPERANDS|OPCODE_SEMANTIC_EQUIVALENCE|LEGAL_RELOCATION|UNCHANGED_P245_FULL_GATE|ART_AND_PROCESS_OWNER)=NOT_ATTESTED$' .p245tmp/p272-opcode-operand.log || true
+          grep -E '^P257_DENY_[A-Z0-9_]+$' .p245tmp/p272-opcode-operand.log || true
+          grep -E '^P246_DENY_[A-Z0-9_]+$' .p245tmp/p272-opcode-operand.log || true
+          grep -E '^P255_FIRST_SIZE_GROUP=(NONE|START_COROUTINE|OTHER_PRIMARY)$' .p245tmp/p272-branch-signature.log || true
+          grep -E '^P255_FIRST_SIZE_LAYOUT=(NONE|SAME_LAYOUT|WIDTH_ONLY|OPCODE_CHANGED|COUNT_CHANGED)$' .p245tmp/p272-branch-signature.log || true
+          grep -E '^P255_EXPLICIT_IF_GOTO_SIGNATURE=(NONE|ORDINALS_MATCH_ONLY|ORDINALS_DIFFER)$' .p245tmp/p272-branch-signature.log || true
+          grep -E '^P255_P253_BRANCH_LABEL_CONFLATED=(YES|NO)$' .p245tmp/p272-branch-signature.log || true
+          grep -E '^P255_EXCEPTION_TARGET_ORDINALS=(NONE|ORDINALS_MATCH_ONLY|ORDINALS_DIFFER)$' .p245tmp/p272-branch-signature.log || true
+          grep -E '^P255_(COMPLETE_NORMAL_CFG|OPERAND_SEMANTICS|LEGAL_RELOCATION|UNCHANGED_P245_GATE|ART_PROCESS_ISOLATION)=NOT_ATTESTED$' .p245tmp/p272-branch-signature.log || true
+          grep -E '^P255_DENY_[A-Z0-9_]+$' .p245tmp/p272-branch-signature.log || true
+          grep -E '^P246_DENY_[A-Z0-9_]+$' .p245tmp/p272-branch-signature.log || true
+          grep -E '^P253_FIRST_SIZE_GROUP=(NONE|START_COROUTINE|OTHER_PRIMARY)$' .p245tmp/p272-cfg-first-size.log || true
+          grep -E '^P253_FIRST_SIZE_LAYOUT_CLASS=(NONE|SAME_LAYOUT|WIDTH_ONLY|OPCODE_CHANGED|COUNT_CHANGED)$' .p245tmp/p272-cfg-first-size.log || true
+          grep -E '^P253_FIRST_SIZE_NORMAL_BRANCH_ORDINALS=(NONE|ORDINALS_MATCH_ONLY|ORDINALS_DIFFER)$' .p245tmp/p272-cfg-first-size.log || true
+          grep -E '^P253_FIRST_SIZE_EXCEPTION_ORDINALS=(NONE|ORDINALS_MATCH_ONLY|ORDINALS_DIFFER)$' .p245tmp/p272-cfg-first-size.log || true
+          grep -E '^P253_FIRST_SIZE_VS_EXCEPTION_METHOD=(NOT_APPLICABLE|SAME_METHOD|DIFFERENT_METHOD)$' .p245tmp/p272-cfg-first-size.log || true
+          grep -E '^P253_(NORMAL_OPERANDS_AND_PAYLOADS|LEGAL_RELOCATION|ORIGINAL_P245_FULL_STATIC|ANDROID_ART_AND_PROCESS_OWNER)=NOT_ATTESTED$' .p245tmp/p272-cfg-first-size.log || true
+          grep -E '^P253_DENY_[A-Z0-9_]+$' .p245tmp/p272-cfg-first-size.log || true
+          grep -E '^P246_DENY_[A-Z0-9_]+$' .p245tmp/p272-cfg-first-size.log || true
+          grep -E '^P251_METHOD_RELATION=(SAME_METHOD|DIFFERENT_METHOD|NOT_APPLICABLE)$' .p245tmp/p272-method-identity.log || true
+          grep -E '^P251_HANDLER_ORDINAL_ALIGNMENT=(ORDINALS_MATCH_ONLY|ORDINALS_DIFFER|NOT_APPLICABLE)$' .p245tmp/p272-method-identity.log || true
+          grep -E '^P251_FIRST_EXCEPTION_CATEGORY=(NONE|TRY_COUNT|TRY_ORDER|TRY_SPAN|TYPED_COUNT|HANDLER_ORDER|TYPE_DESCRIPTOR|TYPED_TARGET|CATCHALL_PRESENCE|CATCHALL_TARGET|UNCLASSIFIED_DENY)$' .p245tmp/p272-method-identity.log || true
+          grep -E '^P251_(CODE_GATE|EXCEPTION_GATE)=(DENY|PARITY)$' .p245tmp/p272-method-identity.log || true
+          grep -E '^P251_(LEGAL_RELOCATION|NORMAL_CFG_AND_OPERANDS|FULL_P245_GATE|ART_AND_PROCESS_OWNER)=NOT_ATTESTED$' .p245tmp/p272-method-identity.log || true
+          grep -E '^P251_DENY_[A-Z0-9_]+$' .p245tmp/p272-method-identity.log || true
+          grep -E '^P246_DENY_[A-Z0-9_]+$' .p245tmp/p272-method-identity.log || true
+          grep -E '^P249_FIRST_CODE_SIZE_GROUP=(NONE|START_COROUTINE|OTHER_PRIMARY)$' .p245tmp/p272-first-diff.log || true
+          grep -E '^P249_FIRST_EXCEPTION_GROUP=(NONE|START_COROUTINE|OTHER_PRIMARY)$' .p245tmp/p272-first-diff.log || true
+          grep -E '^P249_FIRST_CODE_SIZE_CATEGORY=(NONE|CODE_SIZE)$' .p245tmp/p272-first-diff.log || true
+          grep -E '^P249_FIRST_EXCEPTION_CATEGORY=(NONE|TRY_COUNT|TRY_ORDER|TRY_SPAN|TYPED_COUNT|HANDLER_ORDER|TYPE_DESCRIPTOR|TYPED_TARGET|CATCHALL_PRESENCE|CATCHALL_TARGET|UNCLASSIFIED_DENY)$' .p245tmp/p272-first-diff.log || true
+          grep -E '^P249_(CODE_SIZE_GATE|EXCEPTION_GATE)=(DENY|PARITY)$' .p245tmp/p272-first-diff.log || true
+          grep -E '^P246_DENY_[A-Z0-9_]+$' .p245tmp/p272-first-diff.log || true
+          grep -E '^P249_DENY_[A-Z0-9_]+$' .p245tmp/p272-first-diff.log || true
+          grep -E '^P245_BUILD_ONLY_DENY_CODE=[A-Z0-9_]+$' .p245tmp/p272-original-gate.log || true
+          if test "$classifier_rc" -eq 0 && test "$p245_rc" -eq 0 && test "$p251_rc" -eq 0 && test "$p253_rc" -eq 0 && test "$p255_rc" -eq 0 && test "$p257_rc" -eq 0 && test "$p259_rc" -eq 0 && test "$p261_rc" -eq 0 && test "$p263_rc" -eq 0 && test "$p265_rc" -eq 0 && test "$p267_rc" -eq 0 && test "$p269_rc" -eq 0 && test "$p271_rc" -eq 0; then
+            grep -Fxq 'P249_CODE_SIZE_GATE=PARITY' .p245tmp/p272-first-diff.log
+            grep -Fxq 'P249_EXCEPTION_GATE=PARITY' .p245tmp/p272-first-diff.log
+            grep -Fxq 'P251_CODE_GATE=PARITY' .p245tmp/p272-method-identity.log
+            grep -Fxq 'P251_EXCEPTION_GATE=PARITY' .p245tmp/p272-method-identity.log
+            grep -Fxq 'P253_FIRST_SIZE_GROUP=NONE' .p245tmp/p272-cfg-first-size.log
+            grep -Fxq 'P255_FIRST_SIZE_GROUP=NONE' .p245tmp/p272-branch-signature.log
+            grep -Fxq 'P257_FIRST_SIZE_GROUP=NONE' .p245tmp/p272-opcode-operand.log
+            grep -Fxq 'P259_FIRST_SIZE_GROUP=NONE' .p245tmp/p272-all-operands.log
+            grep -Fxq 'P261_RELEASE=DENY' .p245tmp/p272-all-methods.log
+            grep -Fxq 'P263_RELEASE=DENY' .p245tmp/p272-divergence-correlation.log
+            grep -Fxq 'P265_RELEASE=DENY' .p245tmp/p272-shape-reasons.log
+            grep -Fxq 'P245_STATIC_BUILD_ONLY=PASS' .p245tmp/p272-original-gate.log
+            echo P272_FULL_STATIC_PARITY=PASS
+          else
+            echo P272_FULL_STATIC_PARITY=DENY
+            echo P272_KEEP_PREVIOUS_P245_FAILURE_HARD_STOP=YES
+            exit 2
+          fi
+          echo P272_ART_VERIFIER_AND_PROCESS_STATE=NOT_ATTESTED
+          echo P272_V139=STRUCTURAL_BLOCKED
+      - name: Destroy all temporary files with no persisted APK
+        if: always()
+        run: |
+          rm -rf .p43tmp .p208tmp .p209tmp .p245tmp
+          echo P272_NO_ADB_NODE_EMULATOR_OR_USER_PHONE=YES
+          echo P272_NO_APK_ZIP_ARTIFACT_PUBLICATION=YES
+          echo P272_V139_STRUCTURAL_BLOCKED=YES

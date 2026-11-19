@@ -5,3 +5,11 @@ P74 verified source-derived original MAIN-DEX P40ProcessBridge returning identic
 The simulation uses a dedicated background thread that invokes original MAIN DEX P40 bridge via reflection with **only** the sidecar fixed /system/bin/id -u command. It blocks until real P68/P53 authenticated CHILD_STARTED on the main Binder callback delivers the P37 instance; the returned Process must be *identical*. Wrong UID, session, replay, early child, unrelated thread, pre-arm, timeout/cancel and arbitrary Node/production argv fail closed. No host ProcessBuilder fallback. The scratch P47 gate is patched under P51_SIDE_BY_SIDE=1 and P74_FIXTURE_ENGINE_BRIDGE=1 and P75_RENDEZVOUS_FIXTURE=1 only, with the source original P47 deny gate unchanged.
 
 Do not infer original EngineManager coroutine executed: the P75 caller is a carefully controlled stand-in thread. Actual original coroutine command/env/cwd and complete Node JS import tree (including native addons), parser READY, exit/cancel parity, and provider tool-results remain unproven. No fixed-signed update, no user phone changes, no real webpage or model calls.
+
+P171 secures the same test-only rendezvous against competing claims:
+a Pending lease binds exactly one actual Java Thread identity, not multiple
+threads sharing a session string. The positive/negative JVM test holds a
+valid engine claimant, proves a second claimant is denied, and then proves
+the first claimant still receives exactly its authenticated P37 proxy.
+This is not a production coroutine, Android app integration or permission
+to broaden the fixed `/system/bin/id -u` fixture.

@@ -1,0 +1,154 @@
+name: P199 passive original MainActivity and EngineManager runtime source observation (no Node)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p199_passive_original/**'
+      - '.github/workflows/p199-original-activity-passive-android35.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p199-original-passive-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  real-original-launcher-and-passive-bounded-observation:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 58
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      P49_NODE_STAGE: '0'
+      P51_SIDE_BY_SIDE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Source-only deny bounds, fixed SHA P43/P150/P151 and exact P199 Intent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P181_THREE_ORIGINAL_START_DENY" = 1
+          test "$P49_NODE_STAGE" = 0
+          test "$P51_SIDE_BY_SIDE" = 0
+          bash -n host_candidate/p199_passive_original/run_android35_passive.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("host_candidate/p199_passive_original/patch_p43_in_ci.py").read_text()
+          compile(s,"p199_patcher","exec")
+          j=Path("host_candidate/p199_passive_original/android/com/dsh/android/p199/P199PassiveOriginalWitness.java").read_text()
+          assert "EngineManager.start(" not in j
+          assert "ProcessBuilder.start(" not in j
+          assert "P199_REAL_ORIGINAL_COROUTINE_OS_PROVENANCE=NOT_ATTESTED" in Path("host_candidate/p199_passive_original/run_android35_passive.sh").read_text()
+          assert "P199_ORIGINAL_NODE_HTTP_TOKEN_READY=NOT_WIRED" in j
+          print("P199_NO_NODE_OR_ORIGINAL_ENGINE_START_IN_PROBE=PASS")
+          PY
+          test "$(git hash-object host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java)" = 8a83ef4c53c8e527f604023ab5eec2be8f2e12a9
+          test "$(git hash-object host_candidate/p43_original_service/build_embedded_emulator_apk.sh)" = 62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f
+          test "$(git hash-object host_candidate/p150_original_coroutine/src/com/dsh/android/p150/P150OriginalCoroutineObserver.java)" = eb28cea66a80700af523921fb12f8011dba6729b
+          test "$(git hash-object host_candidate/p151_original_state_probe/src/com/dsh/android/p151/P151OriginalEngineStateSampler.java)" = 646e267c457d699604cda6b68a1f45bc21145dc6
+          test "$(git hash-object host_candidate/p47_no_fallback/p47_gate.py)" = 49f0d5d07cf7e8fa1e0323c945ddbb1eed946065
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          test -s REFERENCE_PROJECTS_AND_VM_DISCLAIMER.md
+          test -s host_candidate/p198_original_source/BROWSER_PRIVACY_QA.md
+          echo P199_FIXED_ORIGINAL_TEST_SCOPE_AND_SOURCE_HASHES=PASS
+      - name: Patch only disposable P43 Activity early passive dispatch and builder
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p199_passive_original/patch_p43_in_ci.py --ci
+          git diff --name-only | sort > .p199_actual
+          printf '%s\n' \
+            host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java \
+            host_candidate/p43_original_service/build_embedded_emulator_apk.sh | sort > .p199_expected
+          cmp .p199_actual .p199_expected
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("host_candidate/p43_original_service/android/com/dsh/android/p43/P43ProbeActivity.java").read_text()
+          assert s.count('getBooleanExtra("p199_passive_original",false)')==1
+          assert s.count('P199PassiveOriginalWitness.start(this)')==1
+          assert s.index('P199PassiveOriginalWitness.start(this)')<s.index('if(!assertExactBridgeFailClosed())')
+          run=Path("host_candidate/p199_passive_original/run_android35_passive.sh").read_text()
+          assert run.count("--ez p199_passive_original true")==1
+          print("P199_EARLY_PASSIVE_DISPATCH_BEFORE_SYNTHETIC_P40=PASS")
+          PY
+          echo P199_ONLY_TWO_SHA_PINNED_CI_TEST_FILES_CHANGED=PASS
+      - name: Provision disposable Android35 original APK build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/d8"
+      - name: Build exact-v138-derived no-exec APK and verify P199 class plus original resource hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > .p199_build.log 2>&1;then
+            echo P199_ORIGINAL_DERIVED_DENY_ONLY_APK_BUILD=DENY
+            exit 2
+          fi
+          test -s .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          grep -Fxq 'P43_ORIGINAL_ASSETS_LIBRARIES_AND_SECONDARY_DEX=PASS_SHA' .p199_build.log
+          grep -Fxq 'P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS' .p199_build.log
+          grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p199_build.log
+          grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p199_build.log
+          python3 - <<'PY'
+          import zipfile
+          from androguard.core.dex import DEX
+          p=".p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
+          with zipfile.ZipFile(p) as z:
+              original=DEX(z.read("classes3.dex"))
+              names={c.get_name() for c in original.get_classes()}
+          assert "Lcom/dsh/android/p199/P199PassiveOriginalWitness;" in names
+          assert "Lcom/dsh/android/p199/P199PassiveOriginalWitness$Probe;" in names
+          assert "Lcom/dsh/android/p150/P150OriginalCoroutineObserver;" in names
+          assert "Lcom/dsh/android/p151/P151OriginalEngineStateSampler;" in names
+          print("P199_REAL_DERIVED_APK_PASSIVE_CLASSES=PASS")
+          PY
+          echo P199_EXACT_ORIGINAL_V138_DENY_ONLY_PASSIVE_BUILD=PASS
+      - name: Enable disposable Android35 emulator KVM
+        shell: bash
+        run: if test -c /dev/kvm;then sudo chmod 666 /dev/kvm;fi
+      - name: Actual Android35 preserved original launcher natural startup and passive samples
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p199_passive_original/run_android35_passive.sh
+      - name: Erase all test APKs and keep original Node and user device blocked
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp .p199_build.log .p199_actual .p199_expected
+          echo P199_ORIGINAL_LAUNCHER_NATURAL_START=CHECK_ACTUAL_ANDROID35_STEP >> "$GITHUB_STEP_SUMMARY"
+          echo P199_FOUR_PASSIVE_OBSERVATIONS=CHECK_ACTUAL_ANDROID35_STEP >> "$GITHUB_STEP_SUMMARY"
+          echo P199_ORIGINAL_COROUTINE_OS_PROVENANCE=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P199_NATIVE_PROCESS_READER_LATCH_PARITY=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P199_ORIGINAL_ARM64_NODE_HTTP_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P199_NATIVE_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P199_ALL_P47_HOST_EXEC_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P199_GS_SCREENSHOT=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo P199_EXTERNAL_FINGERPRINT_SITES_AUTO_REQUESTS=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P199_RELEASE_SIGN_OR_OWNER_PHONE_INSTALL=NEVER >> "$GITHUB_STEP_SUMMARY"
+          echo P199_V139_RELEASE=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"

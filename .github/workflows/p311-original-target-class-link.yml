@@ -1,0 +1,102 @@
+name: P311 target EngineManager coroutine ART class load without initialization (CI-only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p311_art_target/**'
+      - '.github/workflows/p311-original-target-class-link.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p311-art-class-link-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  original-v138-target-class:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 58
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      P47_NO_HOST_FALLBACK: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      P49_NODE_STAGE: '0'
+      P51_SIDE_BY_SIDE: '0'
+      P208_CI_METHOD_ENTRY_ONLY: '1'
+      P209_FINAL_DENY_ONLY: '1'
+      P74_FIXTURE_ENGINE_BRIDGE: '0'
+      P75_RENDEZVOUS_FIXTURE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate fixed original gate and P311 syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$P47_NO_HOST_FALLBACK" = 1
+          test "$P181_THREE_ORIGINAL_START_DENY" = 1
+          test "$P49_NODE_STAGE" = 0
+          test "$P51_SIDE_BY_SIDE" = 0
+          bash -n host_candidate/p310_art_verify/prepare_candidate.sh
+          bash -n host_candidate/p311_art_target/prepare_probe.sh
+          bash -n host_candidate/p311_art_target/run_android35.sh
+          test -f .github/workflows/p311-original-target-class-link.yml
+          grep -Fq 'Class.forName(TARGET, false, loader)' host_candidate/p311_art_target/TargetClassProbe.java
+          grep -Fq 'getDeclaredMethod("invokeSuspend", Object.class)' host_candidate/p311_art_target/TargetClassProbe.java
+          if grep -Eq '\.invoke\(|newInstance\(|\.start\(' host_candidate/p311_art_target/TargetClassProbe.java;then
+            echo P311_FORBIDDEN_TARGET_INVOCATION=DENY;exit 2
+          fi
+          echo P311_SOURCE_SCOPE_AND_STATIC_JAVA_BOUNDARY=PASS
+      - name: Provision existing pinned P310 build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          python3 - <<'PY'
+          import importlib.metadata
+          assert importlib.metadata.version('androguard')=='4.1.4'
+          PY
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          test -x "$ANDROID_HOME/build-tools/35.0.0/d8"
+          test -s "$ANDROID_HOME/platforms/android-35/android.jar"
+      - name: Reproduce P310 original-v138 strict temporary candidate with P245 still DENY
+        shell: bash
+        run: bash host_candidate/p310_art_verify/prepare_candidate.sh
+      - name: Build separate Java-only P311 ART loader probe, no app code
+        shell: bash
+        run: bash host_candidate/p311_art_target/prepare_probe.sh
+      - name: Enable ephemeral Android35 KVM
+        shell: bash
+        run: if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Real Android35 target class load and signature only, no invocation
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p311_art_target/run_android35.sh
+      - name: Destroy throwaway signed APK key jar and logs, keep release blocked
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp .p208tmp .p209tmp .p245tmp .p279tmp .p291tmp .p310tmp .p311tmp
+          echo P311_APP_AND_PROBE_TEMP_MATERIAL=DESTROYED >> "$GITHUB_STEP_SUMMARY"
+          echo P311_ORIGINAL_PROCESS_AND_NODE=NOT_AUTHORIZED >> "$GITHUB_STEP_SUMMARY"
+          echo P311_ARM64_ORIGINAL_NODE_AND_PRODUCTION_ART=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P311_ORIGINAL_P245_P192_B3_B4=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo P311_FORMAL_V139=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"

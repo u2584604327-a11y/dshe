@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""P47: only change the exact P40 generated *main* DEX trampoline.
-Original unmodified EngineManager probeBoot and runDumpConfig are untouched.
-Never produces a release or modifies the signed owner APK.
+"""P47/P181/P182: exact v138 DEX three-site, typed, DENY-only routing.
+The signed baseline and user device remain unchanged. No Node/Broker launch.
 """
 import argparse
+import os
 import pathlib
 import re
 import zipfile
@@ -15,10 +15,70 @@ from p40_exact_trampoline import find_methods, TARGET, CLASS, ORIGINAL, TRAMPOLI
 BRIDGE_SOURCE = "invoke-virtual {p0}, Ljava/lang/ProcessBuilder;->start()Ljava/lang/Process;"
 DENY = "Lcom/dsh/android/p47/P47LaunchGate;->startOrDeny(Ljava/lang/ProcessBuilder;)"
 BRIDGE_REPLACEMENT = "invoke-static {p0}, " + DENY + "Ljava/lang/Process;"
+P182_TYPED = {
+    "probeBoot": ("probeOrDeny", "probeOrDeny"),
+    "runDumpConfig": ("configOrDeny", "configOrDeny"),
+}
+def p182_trampoline(name):
+    return CLASS + "->" + name + "(Ljava/lang/ProcessBuilder;)"
+def p182_bridge_method(name, gate):
+    return ("""
+.method public static %s(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;
+    .registers 2
+    .param p0, "builder"  # Ljava/lang/ProcessBuilder;
+
+    invoke-static {p0}, Lcom/dsh/android/p47/P47LaunchGate;->%s(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;
+    move-result-object v0
+    return-object v0
+.end method
+""" % (name, gate))
 
 def need(ok,label):
     if not ok:
         raise RuntimeError("P47_BLOCKED_" + label)
+
+
+# P181: this is a binary-level DENY-only convergence for the exact v138 DEX.
+# It does not start Node, inject a real Broker, or authorize original services.
+# The pinned v138 EngineManager.smali contains exactly one probeBoot and
+# runDumpConfig ProcessBuilder.start; main was already redirected by P40.
+P181_CALL=re.compile(
+    r"(?m)^([ \t]*)invoke-virtual[ \t]+\{([vp][0-9]+)\},[ \t]+"
+    r"Ljava/lang/ProcessBuilder;->start\(\)Ljava/lang/Process;[ \t]*$")
+def p181_secondary_denial(root):
+    require=os.environ.get("P181_THREE_ORIGINAL_START_DENY")=="1"
+    if not require:return
+    need(os.environ.get("P47_NO_HOST_FALLBACK")=="1" and
+         os.environ.get("P51_SIDE_BY_SIDE","0")=="0",
+         "P181_REQUIRES_EXACT_ORIGINAL_WITH_P47")
+    path=root / "smali/com/dsh/android/EngineManager.smali"
+    need(path.is_file() and not path.is_symlink(),"P181_REAL_MAIN_DEX_ENGINE_REQUIRED")
+    text=path.read_text(encoding="utf8")
+    need(len(P181_CALL.findall(text))==2,"P181_EXACT_TWO_UNPROTECTED_SITES")
+    for name, (bridge_name, _) in P182_TYPED.items():
+        starts=list(re.finditer(r"(?m)^\.method[^\n]*\b"+name+r"\([^\n]*$",text))
+        need(len(starts)==1,"P181_ONE_METHOD_"+name)
+        begin=starts[0].start()
+        ending=text.find(".end method",starts[0].end())
+        need(ending>=0,"P181_METHOD_END_"+name)
+        ending+=len(".end method")
+        section=text[begin:ending]
+        need(len(P181_CALL.findall(section))==1,"P181_EXACT_ONE_START_"+name)
+        changed=P181_CALL.sub(
+            lambda m:m.group(1)+"invoke-static {"+m.group(2)+"}, "+
+            p182_trampoline(bridge_name)+"Ljava/lang/Process;",section,count=1)
+        need(changed!=section and not P181_CALL.search(changed),
+             "P181_SITE_NOT_REWRITTEN_"+name)
+        text=text[:begin]+changed+text[ending:]
+    need(not P181_CALL.search(text) and
+         all(text.count(p182_trampoline(entry[0]))==1
+             for entry in P182_TYPED.values()) and
+         TRAMPOLINE not in text,
+         "P182_SECONDARY_TYPED_LAUNCH_DRIFT")
+    path.write_text(text,encoding="utf8")
+    print("P181_ORIGINAL_V138_PROBE_CONFIG_REDIRECTED_TO_P47_DENY=PASS")
+    print("P182_ORIGINAL_V138_PROBE_CONFIG_TYPED_CALLSITES=PASS")
+    print("P181_ORIGINAL_NODE_READY_AND_THREE_TYPED_BROKER=NOT_WIRED")
 
 def patch(decoded):
     root=pathlib.Path(decoded)
@@ -29,10 +89,24 @@ def patch(decoded):
     need("P47LaunchGate" not in data,"BRIDGE_ALREADY_MODIFIED")
     modified=data.replace(BRIDGE_SOURCE,BRIDGE_REPLACEMENT)
     need(modified.count(BRIDGE_REPLACEMENT)==1,"DENY_NOT_UNIQUE")
+    if os.environ.get("P181_THREE_ORIGINAL_START_DENY")=="1":
+        need(modified.count(".method ")==1 and
+             modified.count(".end method")==1 and
+             modified.rstrip().endswith(".end method"),
+             "P182_PINNED_P40_METHOD_DRIFT")
+        for method_name, gate in P182_TYPED.values():
+            modified+=p182_bridge_method(method_name,gate)
+        need(modified.count(".method ")==3 and
+             modified.count(".end method")==3,
+             "P182_THREE_DISTINCT_BRIDGES_REQUIRED")
     file.write_text(modified,encoding="utf-8")
+    p181_secondary_denial(root)
     print("P47_EXACT_ORIGINAL_BRIDGE_INTERPOSED=PASS_STATIC")
     print("P47_DIRECT_HOST_PROCESSBUILDER_START=REMOVED_FROM_MAIN_ENGINE_BRIDGE")
-    print("P47_OTHER_ORIGINAL_ENGINE_START_SITES=UNCHANGED")
+    if os.environ.get("P181_THREE_ORIGINAL_START_DENY")=="1":
+        print("P182_P40_THREE_INDEPENDENT_MODE_ENTRYPOINTS=PASS_STATIC")
+    else:
+        print("P47_OTHER_ORIGINAL_ENGINE_START_SITES=UNCHANGED")
     print("P47_REAL_PRODUCTION_NODE_ENGINE_ISOLATED=NO")
 
 def verify(apk):
@@ -53,11 +127,22 @@ def verify(apk):
          "BRIDGE_CALLSITE_NOT_EXACT_NO_FALLBACK")
     need(("invoke-virtual",ORIGINAL) not in m[target]["calls"],
          "PRIMARY_STILL_SPAWNS_HOST")
-    for x in (probe,dump):
-        need(m[x]["calls"].count(("invoke-virtual",ORIGINAL))==1,
-             "NON_TARGET_ORIGINAL_PROBE_CHANGED")
-    need(sum(row["calls"].count(("invoke-virtual",ORIGINAL))
-             for row in m.values())==2,"ORIGINAL_HOST_START_COUNT_DRIFT")
+    if os.environ.get("P181_THREE_ORIGINAL_START_DENY")=="1":
+        for x, name in ((probe,"probeOrDeny"),(dump,"configOrDeny")):
+            need(m[x]["calls"].count(
+                     ("invoke-static",p182_trampoline(name)))==1
+                 and ("invoke-virtual",ORIGINAL) not in m[x]["calls"]
+                 and ("invoke-static",TRAMPOLINE) not in m[x]["calls"],
+                 "P182_SECONDARY_ORIGINAL_MODE_ROUTE_MISSING")
+        need(sum(row["calls"].count(("invoke-virtual",ORIGINAL))
+                 for row in m.values())==0,
+             "P181_REAL_ENGINE_HOST_DIRECT_START_REMAINS")
+    else:
+        for x in (probe,dump):
+            need(m[x]["calls"].count(("invoke-virtual",ORIGINAL))==1,
+                 "NON_TARGET_ORIGINAL_PROBE_CHANGED")
+        need(sum(row["calls"].count(("invoke-virtual",ORIGINAL))
+                 for row in m.values())==2,"ORIGINAL_HOST_START_COUNT_DRIFT")
     with zipfile.ZipFile(apk) as z:
         main_dex=DEX(z.read("classes.dex"))
         exact_bridge_methods=[
@@ -77,6 +162,21 @@ def verify(apk):
              "BRIDGE_NOT_EXACTLY_NO_FALLBACK")
         need(not any("Ljava/lang/ProcessBuilder;->start(" in value
                      for _,value in bridge_invokes),"BRIDGE_HOST_START_PRESENT")
+        if os.environ.get("P181_THREE_ORIGINAL_START_DENY")=="1":
+            for name, gate_method in P182_TYPED.values():
+                exact=[method for cls in main_dex.get_classes()
+                       if cls.get_name()==CLASS
+                       for method in cls.get_methods()
+                       if method.get_name()==name]
+                need(len(exact)==1,"P182_BRIDGE_METHOD_MISSING_"+name)
+                invokes=[(insn.get_name(),insn.get_output())
+                         for _,insn in exact[0].get_instructions_idx()
+                         if insn.get_name().startswith("invoke-")]
+                target_ref="Lcom/dsh/android/p47/P47LaunchGate;->"+gate_method+"(Ljava/lang/ProcessBuilder;)"
+                need(len(invokes)==1 and invokes[0][0]=="invoke-static"
+                     and target_ref in invokes[0][1] and
+                     "Ljava/lang/ProcessBuilder;->start(" not in invokes[0][1],
+                     "P182_BRIDGE_WRONG_MODE_OR_HOST_EXEC_"+name)
         need("classes3.dex" in z.namelist(),"P47_GATE_DEX_MISSING")
         d=DEX(z.read("classes3.dex"))
         classes={c.get_name():c for c in d.get_classes()}
@@ -92,8 +192,20 @@ def verify(apk):
             refs.append(inst.get_output())
         need(not any("Ljava/lang/ProcessBuilder;->start(" in i for i in refs),
              "GATE_CALLS_HOST_START")
+        if os.environ.get("P181_THREE_ORIGINAL_START_DENY")=="1":
+            for _,gate_method in P182_TYPED.values():
+                exact=[method for method in classes[gate].get_methods()
+                       if method.get_name()==gate_method]
+                need(len(exact)==1,"P182_TYPED_GATE_METHOD_MISSING_"+gate_method)
+                need(not any("Ljava/lang/ProcessBuilder;->start(" in insn.get_output()
+                             for _,insn in exact[0].get_instructions_idx()),
+                     "P182_TYPED_GATE_MUST_NOT_HOST_EXEC")
     print("P47_REBUILT_ORIGINAL_PRIMARY_ENGINE_BRIDGE_NO_HOST_START=PASS")
-    print("P47_OTHER_ORIGINAL_PROBEBOOT_AND_DUMPCONFIG_PRESERVED=PASS")
+    if os.environ.get("P181_THREE_ORIGINAL_START_DENY")=="1":
+        print("P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS")
+        print("P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS")
+    else:
+        print("P47_OTHER_ORIGINAL_PROBEBOOT_AND_DUMPCONFIG_PRESERVED=PASS")
     print("P47_GATE_SOURCE_COMPILED_TO_CLASSES3_DEX=PASS")
     print("P47_ALLOW_PRODUCTION_RELEASE=NO")
 

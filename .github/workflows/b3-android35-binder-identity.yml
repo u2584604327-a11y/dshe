@@ -1,0 +1,108 @@
+name: B3 Android35 real Binder transaction identity and slot gate
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/browser_isolation_audit/slot_command_gate/**'
+      - 'host_candidate/browser_isolation_audit/b3_android_probe/**'
+      - 'host_candidate/browser_isolation_audit/b3_attacker/**'
+      - 'host_candidate/browser_isolation_audit/run_b3_android35.sh'
+      - '.github/workflows/b3-android35-binder-identity.yml'
+permissions:
+  contents: read
+concurrency:
+  group: b3-real-binder-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  b3-actual-binder-identity:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Fail-closed disposable source inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=host_candidate/browser_isolation_audit
+          test -s "$p/b3_android_probe/src/main/java/com/dsh/b3probe/HostProbe.java"
+          test -s "$p/b3_android_probe/src/main/java/com/dsh/b3probe/SlotService.java"
+          test -s "$p/b3_attacker/src/main/java/com/dsh/b3attacker/AttackerProbe.java"
+          test -s "$p/slot_command_gate/B3SlotCommandGate.java"
+          grep -Fq 'WRONG_SENDER_PROCESS' "$p/b3_android_probe/src/main/java/com/dsh/b3probe/HostProbe.java"
+          grep -Fq 'Binder.getCallingUidOrThrow()' "$p/b3_android_probe/src/main/java/com/dsh/b3probe/HostProbe.java"
+          grep -Fq 'SystemClock.elapsedRealtime()' "$p/b3_android_probe/src/main/java/com/dsh/b3probe/HostProbe.java"
+          grep -Fq 'data.dataAvail()' "$p/b3_android_probe/src/main/java/com/dsh/b3probe/HostProbe.java"
+          grep -Fq 'android:exported="false"' "$p/b3_android_probe/src/main/AndroidManifest.xml"
+          grep -Fq 'android:allowBackup="false"' "$p/b3_attacker/src/main/AndroidManifest.xml"
+          ! grep -RqE '<uses-permission|sharedUserId|android.permission.INTERNET|addJavascriptInterface|ProcessBuilder' "$p/b3_android_probe/src" "$p/b3_attacker/src"
+          bash -n "$p/run_b3_android35.sh"
+          test -s THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          echo B3_NO_NETWORK_NO_ORIGINAL_DATA_NO_WEBVIEW=PASS
+      - name: Build exactly two offline debug-only APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          p=host_candidate/browser_isolation_audit
+          gradle -p "$p/b3_android_probe" --no-daemon assembleDebug > "$RUNNER_TEMP/b3-host-build.log" 2>&1 || {
+            echo B3_HOST_BUILD=DENY
+            tail -n 50 "$RUNNER_TEMP/b3-host-build.log"
+            exit 2
+          }
+          gradle -p "$p/b3_attacker" --no-daemon assembleDebug > "$RUNNER_TEMP/b3-attacker-build.log" 2>&1 || {
+            echo B3_ATTACKER_BUILD=DENY
+            tail -n 50 "$RUNNER_TEMP/b3-attacker-build.log"
+            exit 2
+          }
+          for item in 'b3_android_probe com.dsh.b3probe host' 'b3_attacker com.dsh.b3attacker attacker';do
+            read -r project package label <<< "$item"
+            apkdir="$p/$project/build/outputs/apk/debug"
+            test "$(find "$apkdir" -maxdepth 1 -name '*.apk' -type f | wc -l)" -eq 1
+            apk="$(find "$apkdir" -maxdepth 1 -name '*.apk' -type f | head -n1)"
+            test -s "$apk"
+            badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk")"
+            [[ "$badging" == *"package: name='$package'"* ]]
+            [[ "$badging" != *"uses-permission:"* ]]
+            cp "$apk" "$p/$project/.b3-$label-disposable.apk"
+          done
+          echo B3_TWO_DISPOSABLE_NO_INTERNET_APKS=PASS
+      - name: Prepare KVM for CI-only emulator
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_3a
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/browser_isolation_audit/run_b3_android35.sh
+      - name: Preserve explicit non-production boundary
+        if: always()
+        shell: bash
+        run: |
+          echo B3_ACTUAL_BINDER_IDENTITY=SEE_REAL_EMULATOR_LOG >> "$GITHUB_STEP_SUMMARY"
+          echo B3_SAME_UID_HOSTILE_PROCESS_ISOLATION=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo B3_WORK_PROFILE_AVF_PVM=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo B3_PRODUCTION_BROWSERBRIDGE=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo B3_ORIGINAL_DSH_DATA_TOUCHED=NO >> "$GITHUB_STEP_SUMMARY"
+          echo B3_P47_HOST_PROCESSBUILDER_FALLBACK=DENY >> "$GITHUB_STEP_SUMMARY"
+          echo B3_GS_CAPTURE=OFF >> "$GITHUB_STEP_SUMMARY"
+          echo B3_V139_RELEASE=STRUCTURAL_BLOCKED >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,70 @@
+name: P127 Google APIs ARM64 Native Bridge original Node version probe (offline)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p127_google_apis_nativebridge_original_node_stage.py'
+      - 'host_candidate/p127_google_apis_nativebridge_node_probe.sh'
+      - '.github/workflows/p127-google-apis-arm64-node-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: p127-android-google-apis-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native-bridge-original-node-version:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fail-closed static preflight and stage exact signed v138 Node only
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p127_google_apis_nativebridge_node_probe.sh
+          python3 -m py_compile host_candidate/p127_google_apis_nativebridge_original_node_stage.py host_candidate/p123_original_node_elf_isolation_preflight.py
+          mkdir -p "$RUNNER_TEMP/p127-input"
+          gh release download dsh-baseline-v135dsh-baseline-v135 --repo "$GH_REPO" \
+            --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk --dir "$RUNNER_TEMP/p127-input"
+          printf '%s  %s\n' \
+            3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 \
+            "$RUNNER_TEMP/p127-input/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk" | sha256sum -c -
+          python3 host_candidate/p127_google_apis_nativebridge_original_node_stage.py \
+            "$RUNNER_TEMP/p127-input/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk" \
+            "$RUNNER_TEMP/p127-node-stage"
+          echo "P127_NODE_STAGE=$RUNNER_TEMP/p127-node-stage" >> "$GITHUB_ENV"
+          echo 'P127_SIGNED_V138_AND_ORIGINAL_NODE_ASSET_PROVENANCE=PASS' >> "$GITHUB_STEP_SUMMARY"
+      - name: Prepare Ubuntu KVM access for disposable x86_64 Google APIs system image
+        shell: bash
+        run: |
+          if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Read Native Bridge and conditionally run original ARM64 Node --version
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/p127_google_apis_nativebridge_node_probe.sh "$P127_NODE_STAGE"
+      - name: Permanently classify nonproduction boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo 'P127_SHELL_UID_ONLY=NO_PROOF_OF_ORIGINAL_HOST_ISOLATED_UID'
+            echo 'P127_ORIGINAL_ENGINEMANAGER_AND_AGENTLOOP=NOT_WIRED'
+            echo 'P127_P109_NATIVE_TOOL_GATE=DENY_ALL'
+            echo 'P127_PRODUCTION_V139_RELEASE=BLOCKED'
+          } >> "$GITHUB_STEP_SUMMARY"
+          rm -rf "$RUNNER_TEMP/p127-input" "$RUNNER_TEMP/p127-node-stage"
