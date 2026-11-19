@@ -49,10 +49,16 @@ echo P311_APP_AND_SHELL_UID_IPV4_IPV6=DENY
 adb -s "$SERIAL" shell am force-stop com.dsh.android >/dev/null
 adb -s "$SERIAL" push "$PROBE" "$PROBE_PATH" >.p311tmp/push.log 2>&1
 adb -s "$SERIAL" shell chmod 444 "$PROBE_PATH"
-# Deliberately DROP root; actual class load must execute as shell UID (2000).
-adb -s "$SERIAL" unroot >/dev/null
-adb -s "$SERIAL" wait-for-device
-adb -s "$SERIAL" shell id | grep -Eq 'uid=2000\('
+# Never unroot adbd with an OUTPUT reject on shell UID 2000: adb itself
+# can lose guest transport. Keep root adbd solely for transport/firewall,
+# execute only the two test dalvikvm CHILDREN as non-root UID 2000 using su.
+# If the isolated emulator lacks su-to-shell, fail closed; do not remove
+# shell firewall or silently run target class loading under root.
+adb -s "$SERIAL" shell command -v su >/dev/null
+if ! adb -s "$SERIAL" shell su 2000 id -u 2>/dev/null | tr -d '\r' | grep -Fxq 2000;then
+ echo P311_SHELL_CHILD_IDENTITY=DENY;exit 2
+fi
+echo P311_SHELL_CHILD_UID2000_ROOT_ADBD_SEPARATED=PASS
 adb -s "$SERIAL" shell command -v dalvikvm >/dev/null
 rawpath="$(adb -s "$SERIAL" shell pm path com.dsh.android | tr -d '\r' | sed -n 's/^package://p' | grep -F '/base.apk' | head -n1)"
 [[ "$rawpath" =~ ^/data/app/[A-Za-z0-9._+~=/\-]+/base\.apk$ ]] || {
@@ -60,10 +66,10 @@ rawpath="$(adb -s "$SERIAL" shell pm path com.dsh.android | tr -d '\r' | sed -n 
 }
 # -Xverify:all and negative unknown-name control. No method invocation.
 set +e
-adb -s "$SERIAL" shell dalvikvm -Xverify:all -cp "$PROBE_PATH" \
+adb -s "$SERIAL" shell su 2000 dalvikvm -Xverify:all -cp "$PROBE_PATH" \
   com.dsh.p311.TargetClassProbe missing "$rawpath" > .p311tmp/negative.log 2>&1
 neg=$?
-adb -s "$SERIAL" shell dalvikvm -Xverify:all -cp "$PROBE_PATH" \
+adb -s "$SERIAL" shell su 2000 dalvikvm -Xverify:all -cp "$PROBE_PATH" \
   com.dsh.p311.TargetClassProbe target "$rawpath" > .p311tmp/target.log 2>&1
 pos=$?
 set -e

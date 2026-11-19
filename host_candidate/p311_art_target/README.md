@@ -7,9 +7,10 @@ Sign only with a one-day unrelated ephemeral CI signing certificate.
 
 In disposable Android35 x86_64 emulator, install candidate but never
 launch any app Activity or EngineManager. Create a distinct Java-only ART
-probe with a negative missing-class control. Drop root to shell UID 2000,
-deny IPv4/IPv6 for both shell and app UID, and execute `dalvikvm
--Xverify:all` with a probe class loader. Resolve exact
+probe with a negative missing-class control. Keep root adbd for isolated emulator transport/firewall only, but
+run `dalvikvm -Xverify:all` CHILDREN as non-root UID 2000 through
+`su 2000`; deny IPv4/IPv6 for both shell and app UID. Absence of
+su-to-shell is a hard DENY rather than privileged class loading. Resolve exact
 `com.dsh.android.EngineManager$start$2` via `Class.forName(false)`
 and reflectively find `invokeSuspend(Object):Object`; NEVER instantiate
 the target, invoke that method or original Node. Require no app process.
