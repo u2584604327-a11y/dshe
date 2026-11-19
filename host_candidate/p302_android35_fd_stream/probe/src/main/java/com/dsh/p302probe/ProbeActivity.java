@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.content.pm.ActivityInfo;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
@@ -157,7 +158,62 @@ public final class ProbeActivity extends Activity {
     Log.i(TAG,"P302_LIFECYCLE_STOP=OBSERVED");
     super.onStop();
   }
+  // P305 diagnostic only: identify *categories* of configuration changes.
+  // No raw Configuration, mask, process identifiers or locale values are logged.
+  private void logConfigChangeClasses() {
+    final int mask=getChangingConfigurations();
+    final int[] bits=new int[]{
+      ActivityInfo.CONFIG_FONT_SCALE,
+      ActivityInfo.CONFIG_MCC,
+      ActivityInfo.CONFIG_MNC,
+      ActivityInfo.CONFIG_LOCALE,
+      ActivityInfo.CONFIG_TOUCHSCREEN,
+      ActivityInfo.CONFIG_KEYBOARD,
+      ActivityInfo.CONFIG_KEYBOARD_HIDDEN,
+      ActivityInfo.CONFIG_NAVIGATION,
+      ActivityInfo.CONFIG_ORIENTATION,
+      ActivityInfo.CONFIG_SCREEN_LAYOUT,
+      ActivityInfo.CONFIG_UI_MODE,
+      ActivityInfo.CONFIG_SCREEN_SIZE,
+      ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE,
+      ActivityInfo.CONFIG_DENSITY,
+      ActivityInfo.CONFIG_LAYOUT_DIRECTION,
+      ActivityInfo.CONFIG_COLOR_MODE,
+      ActivityInfo.CONFIG_GRAMMATICAL_GENDER,
+      ActivityInfo.CONFIG_ASSETS_PATHS
+    };
+    final String[] names=new String[]{
+      "FONT_SCALE",
+      "MCC",
+      "MNC",
+      "LOCALE",
+      "TOUCHSCREEN",
+      "KEYBOARD",
+      "KEYBOARD_HIDDEN",
+      "NAVIGATION",
+      "ORIENTATION",
+      "SCREEN_LAYOUT",
+      "UI_MODE",
+      "SCREEN_SIZE",
+      "SMALLEST_SCREEN_SIZE",
+      "DENSITY",
+      "LAYOUT_DIRECTION",
+      "COLOR_MODE",
+      "GRAMMATICAL_GENDER",
+      "ASSETS_PATHS"
+    };
+    int seen=0;
+    for(int i=0;i<bits.length;i++) {
+      if((mask & bits[i])!=0) {
+        Log.i(TAG,"P305_CONFIG_CHANGE_"+names[i]+"=OBSERVED");
+        seen |= bits[i];
+      }
+    }
+    if(mask==0)Log.i(TAG,"P305_CONFIG_CHANGE_ZERO=OBSERVED");
+    if((mask & ~seen)!=0)Log.i(TAG,"P305_CONFIG_CHANGE_OTHER=OBSERVED");
+  }
   @Override public void onDestroy(){
+    if(isChangingConfigurations())logConfigChangeClasses();
     Log.i(TAG,isChangingConfigurations() ? "P302_LIFECYCLE_DESTROY_CONFIG=OBSERVED" :
         (isFinishing() ? "P302_LIFECYCLE_DESTROY_FINISH=OBSERVED" : "P302_LIFECYCLE_DESTROY_OTHER=OBSERVED"));
     // Process/activity recreation and cancellation must not leak a host FD.

@@ -55,6 +55,12 @@ for _ in $(seq 1 35);do
           echo "$witness=PASS"
         fi
       done
+      # P305 fixed config categories only; never raw device configuration.
+      for config_class in FONT_SCALE MCC MNC LOCALE TOUCHSCREEN KEYBOARD KEYBOARD_HIDDEN NAVIGATION ORIENTATION SCREEN_LAYOUT UI_MODE SCREEN_SIZE SMALLEST_SCREEN_SIZE DENSITY LAYOUT_DIRECTION COLOR_MODE GRAMMATICAL_GENDER ASSETS_PATHS ZERO OTHER;do
+        if [[ "$selected" == *"P305_CONFIG_CHANGE_${config_class}=OBSERVED"* ]];then
+          echo "P305_CONFIG_CHANGE_${config_class}=OBSERVED"
+        fi
+      done
       # Only bounded fixed lifecycle categories and integer counts are emitted;
       # no raw Logcat, config values, PIDs, paths, account data, or stack traces.
       for lifecycle in \
