@@ -3,6 +3,7 @@ package com.dsh.p302probe;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
@@ -143,6 +144,10 @@ public final class ProbeActivity extends Activity {
     if(state!=null){deny("RESTORED_STATE");return;}
     bound=bindService(new Intent(this,IsolatedPipeService.class),conn,Context.BIND_AUTO_CREATE);
     if(!bound)deny("BIND_SERVICE");
+  }
+  @Override public void onConfigurationChanged(Configuration newConfig){
+    super.onConfigurationChanged(newConfig);
+    Log.i(TAG,"P302_LIFECYCLE_CONFIG_HANDLED=OBSERVED");
   }
   @Override protected void onSaveInstanceState(Bundle outState){
     Log.i(TAG,"P302_LIFECYCLE_SAVE_STATE=OBSERVED");

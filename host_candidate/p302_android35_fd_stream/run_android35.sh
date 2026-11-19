@@ -61,9 +61,9 @@ for _ in $(seq 1 35);do
         P302_LIFECYCLE_CREATE_FRESH P302_LIFECYCLE_CREATE_RESTORED \
         P302_LIFECYCLE_SERVICE_CONNECTED P302_LIFECYCLE_STREAM_WRITE_BEGIN \
         P302_LIFECYCLE_STREAM_WRITE_END P302_LIFECYCLE_SAVE_STATE \
-        P302_LIFECYCLE_STOP P302_LIFECYCLE_DESTROY_CONFIG \
+        P302_LIFECYCLE_STOP P302_LIFECYCLE_CONFIG_HANDLED P302_LIFECYCLE_DESTROY_CONFIG \
         P302_LIFECYCLE_DESTROY_FINISH P302_LIFECYCLE_DESTROY_OTHER;do
-        count="$(printf '%s\\n' "$selected" | grep -Fc "$lifecycle=OBSERVED" || true)"
+        count="$(printf '%s\n' "$selected" | grep -Fc "$lifecycle=OBSERVED" || true)"
         echo "${lifecycle}_COUNT=$count"
       done
       exit 2
@@ -102,6 +102,10 @@ printf '%s\n' "$selected" | awk '
 END{if(!(a>0&&b>a&&c>b&&d>c&&e>d&&f>e&&g>f&&h>0&&h<g&&j>g&&k>0&&l>j&&i>l))exit 2}' || {
   echo P302_REQUIRED_ORDER=DENY;exit 2;
 }
+fresh_count="$(printf '%s\n' "$selected" | grep -Fc 'P302_LIFECYCLE_CREATE_FRESH=OBSERVED' || true)"
+[[ "$fresh_count" == 1 ]] || { echo P302_DIAG_INVALID_FRESH_CREATE_COUNT=DENY;exit 2; }
+config_handled_count="$(printf '%s\n' "$selected" | grep -Fc 'P302_LIFECYCLE_CONFIG_HANDLED=OBSERVED' || true)"
+echo "P302_CONFIG_HANDLED_COUNT=$config_handled_count"
 echo P302_ANDROID35_HOST_TO_ISOLATED_FD=PASS
 echo P302_REAL_ANDROID_FRAMEWORK_UID_CHECK=PASS
 echo P302_SYNTHETIC_PIPE_READ_AND_CLEAN_EOF=PASS
