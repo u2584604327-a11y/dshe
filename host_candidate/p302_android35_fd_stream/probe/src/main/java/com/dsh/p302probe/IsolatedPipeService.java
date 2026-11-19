@@ -26,7 +26,7 @@ public final class IsolatedPipeService extends Service {
   private static final byte[] EXPECTED=createExpected();
   private static byte[] createExpected() {
     byte[] data=new byte[65536];
-    for(int i=0;i<data.length;i++)data[i]=(byte)((i*31+7)&255);
+    for(int i=0;i<data.length;i++)data[i]=(byte)((i*31+7+(i>>>8)*17+(i>>>12)*53)&255);
     return data;
   }
   public static final Set<String> FAILURES=Collections.unmodifiableSet(new HashSet<>(

@@ -25,7 +25,7 @@ public final class ProbeActivity extends Activity {
   private static final byte[] PAYLOAD=createPayload();
   private static byte[] createPayload() {
     byte[] data=new byte[65536];
-    for(int i=0;i<data.length;i++)data[i]=(byte)((i*31+7)&255);
+    for(int i=0;i<data.length;i++)data[i]=(byte)((i*31+7+(i>>>8)*17+(i>>>12)*53)&255);
     return data;
   }
   private Messenger remote;

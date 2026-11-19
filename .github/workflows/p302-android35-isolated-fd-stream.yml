@@ -54,6 +54,7 @@ jobs:
           ! grep -RqE '<uses-permission|sharedUserId|android.permission.INTERNET|addJavascriptInterface|ProcessBuilder|ServerSocket|ServerSocketChannel|java.net' "$s"
           ! grep -RqE 'https?://|download|model|credential|cookie' "$s/main/java"
           bash -n "$p/run_android35.sh"
+          python3 "$p/verify_payload.py"
           grep -Fq 'getprop ro.kernel.qemu' "$p/run_android35.sh"
           grep -Fq 'getprop ro.build.version.sdk' "$p/run_android35.sh"
           echo P302_SOURCE_PERMISSION_AND_NETWORK_DENY=PASS
