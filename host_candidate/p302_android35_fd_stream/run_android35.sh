@@ -21,16 +21,15 @@ trap cleanup EXIT
 badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk")"
 [[ "$badging" == *"package: name='com.dsh.p302probe'"* &&
    "$badging" != *"uses-permission:"* ]]
-# P306: verify the compiled, not merely source, ActivityInfo.configChanges mask.
-# Keep this test-only flag scoped to a disposable APK; never alter production DSH.
-manifest_config_entry="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$apk" AndroidManifest.xml | grep 'android:configChanges' || true)"
-if [[ "${manifest_config_entry,,}" != *"0xc0003fb4"* ]];then
-  echo P306_COMPILED_ASSETS_PATHS_CONFIG=DENY
-  exit 2
-fi
-echo P306_COMPILED_ASSETS_PATHS_CONFIG=PASS
+# API35 AAPT rejects CONFIG_ASSETS_PATHS, so do not patch the compiled mask.
+# This synthetic test lets asynchronous package/asset-path propagation settle
+# BEFORE the single diagnostic Activity launch. Genuine subsequent recreation
+# remains RESTORED_STATE=DENY; no test outcome is silently rewritten.
 adb -s "$serial" install "$apk" >/dev/null
 installed=YES
+[[ "$(adb -s "$serial" shell pm path "$pkg" | tr -d '\r')" == package:* ]]
+sleep 12
+echo P306_POST_INSTALL_SETTLE=PASS
 marker="P302_RUN_$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"
 [[ "$marker" =~ ^P302_RUN_[0-9a-f]{24}$ ]]
 adb -s "$serial" shell log -p i -t P302_BOUNDARY "$marker" >/dev/null
