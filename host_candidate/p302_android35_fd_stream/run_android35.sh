@@ -21,6 +21,14 @@ trap cleanup EXIT
 badging="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk")"
 [[ "$badging" == *"package: name='com.dsh.p302probe'"* &&
    "$badging" != *"uses-permission:"* ]]
+# P306: verify the compiled, not merely source, ActivityInfo.configChanges mask.
+# Keep this test-only flag scoped to a disposable APK; never alter production DSH.
+manifest_config_entry="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$apk" AndroidManifest.xml | grep 'android:configChanges' || true)"
+if [[ "${manifest_config_entry,,}" != *"0xc0003fb4"* ]];then
+  echo P306_COMPILED_ASSETS_PATHS_CONFIG=DENY
+  exit 2
+fi
+echo P306_COMPILED_ASSETS_PATHS_CONFIG=PASS
 adb -s "$serial" install "$apk" >/dev/null
 installed=YES
 marker="P302_RUN_$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')"

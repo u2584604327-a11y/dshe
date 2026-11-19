@@ -2,7 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <application android:label="P302 disposable FD diagnostic" android:allowBackup="false" android:usesCleartextTraffic="false">
     <activity android:name=".ProbeActivity" android:exported="true"
-      android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|keyboard|uiMode|density|fontScale|locale|layoutDirection">
+      <!-- P306 synthetic one-shot: original flags 0x40003fb4 plus ASSETS_PATHS 0x80000000.
+           Android35 SDK lacks symbolic assetsPaths; keep the exact composite mask.
+           RESTORED_STATE remains fail-closed in ProbeActivity. -->
+      android:configChanges="0xC0003FB4">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
     </activity>
     <service android:name=".IsolatedPipeService" android:process=":fd_isolated" android:isolatedProcess="true" android:exported="false"/>
