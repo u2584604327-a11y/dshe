@@ -179,7 +179,11 @@ public final class ProbeActivity extends Activity {
       ActivityInfo.CONFIG_DENSITY,
       ActivityInfo.CONFIG_LAYOUT_DIRECTION,
       ActivityInfo.CONFIG_COLOR_MODE,
-      ActivityInfo.CONFIG_GRAMMATICAL_GENDER
+      ActivityInfo.CONFIG_GRAMMATICAL_GENDER,
+      // Android framework-defined high bits; classified only, never altered.
+      0x80000000, // CONFIG_ASSETS_PATHS
+      0x20000000, // CONFIG_WINDOW_CONFIGURATION (framework-internal)
+      0x10000000  // CONFIG_FONT_WEIGHT_ADJUSTMENT
     };
     final String[] names=new String[]{
       "FONT_SCALE",
@@ -198,7 +202,10 @@ public final class ProbeActivity extends Activity {
       "DENSITY",
       "LAYOUT_DIRECTION",
       "COLOR_MODE",
-      "GRAMMATICAL_GENDER"
+      "GRAMMATICAL_GENDER",
+      "ASSETS_PATHS",
+      "WINDOW_CONFIGURATION",
+      "FONT_WEIGHT_ADJUSTMENT"
     };
     int seen=0;
     for(int i=0;i<bits.length;i++) {
