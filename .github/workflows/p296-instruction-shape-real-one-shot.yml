@@ -144,7 +144,7 @@ jobs:
           python3 -B host_candidate/p289_strict_gate_proposal/test_p289_strict_gate_proposal.py > "$RUNNER_TEMP/p294-p289-fixtures.log" 2>&1
           grep -Eq '^Ran 34 tests in' "$RUNNER_TEMP/p294-p289-fixtures.log"
           grep -Fxq 'OK' "$RUNNER_TEMP/p294-p289-fixtures.log"
-          test "$(git hash-object host_candidate/p291_candidate_gate/p291_candidate_gate.py)" = acb87884e8ec0649caecead9cde655f472d3df48
+          test "$(git hash-object host_candidate/p291_candidate_gate/p291_candidate_gate.py)" = 8a8e6a75846f5d6416db1cd724eabed2d5ac29c9
           python3 -B host_candidate/p291_candidate_gate/test_p291_candidate_gate.py > "$RUNNER_TEMP/p294-p291-fixtures.log" 2>&1
           grep -Eq '^Ran 41 tests in' "$RUNNER_TEMP/p294-p291-fixtures.log"
           grep -Fxq 'OK' "$RUNNER_TEMP/p294-p291-fixtures.log"
