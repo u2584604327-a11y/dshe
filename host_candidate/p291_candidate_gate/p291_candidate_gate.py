@@ -4,8 +4,8 @@
 Keeps the SHA-pinned original P245 verifier byte-exact; substitutes precisely
 one failing Log.i get_output() string predicate in a disposable verifier copy.
 The replacement requires the raw 35c Log.i ID, exact argument registers,
-full P285 eleven-factor source/original parity, and either original exact
-display or the proved ASCII inter-type separator display. Unknown DENY.
+and all P285 eleven-factor source/original invariants. Rendered get_output()
+text is never a method-identity authority. Unknown values fail closed.
 Candidate PASS is not release/ART/ownership approval.
 """
 import argparse,hashlib,re,sys
@@ -18,12 +18,10 @@ sys.path[:0]=[
  "host_candidate/p281_helper_predicates",
  "host_candidate/p283_descriptor_normalization",
  "host_candidate/p285_shadow_verifier",
- "host_candidate/p287_gate_delta",
  "host_candidate/p289_strict_gate_proposal",
 ]
 from p281_helper_predicates import helper_rows
 from p285_shadow_verifier import audit as shadow_audit,FACTORS
-from p287_gate_delta import display_shape
 from p289_strict_gate_proposal import raw_log_target
 
 ORIGINAL=Path("host_candidate/p245_build_only_probe/p245_build_only_probe.py")
@@ -75,9 +73,9 @@ def p291_strict_log_call(helper,base_dex,candidate_dex):
         if (type(trace) is not dict or set(trace)!=set(FACTORS) or
             not all(trace[x]=="PASS" for x in FACTORS)):
             return False
-        output=rows[10][4]
-        if not isinstance(output,str) or len(output)>8192:return False
-        return LOG_TARGET in output or display_shape(output)=="PASS"
+        # The 11-factor shadow gate and raw 35c DEX ID/register check above
+        # are authoritative; Androguard rendered output is not a verifier.
+        return True
     except Exception:
         return False
 

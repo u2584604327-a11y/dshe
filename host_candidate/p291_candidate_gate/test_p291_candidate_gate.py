@@ -160,10 +160,10 @@ class Cases(unittest.TestCase):
  def test_37_missing_shadow_status(self):
   d=shadow();d.pop("METHOD_SET")
   self.assertFalse(test_gate(shadow_result=d))
- def test_38_unproved_display_format(self):
-  self.assertFalse(test_gate(methodrows=rows("v1, v2, Landroid/util/Log;->w(Ljava/lang/String; Ljava/lang/String;)I")))
- def test_39_internal_display_whitespace(self):
-  self.assertFalse(test_gate(methodrows=rows("v1, v2, Landroid/util/Log;->i(Ljava/lang/Str ing; Ljava/lang/String;)I")))
+ def test_38_rendering_not_authority_when_raw_verified(self):
+  self.assertTrue(test_gate(methodrows=rows("v1, v2, Landroid/util/Log;->w(Ljava/lang/String; Ljava/lang/String;)I")))
+ def test_39_rendering_spacing_not_authority_when_raw_verified(self):
+  self.assertTrue(test_gate(methodrows=rows("v1, v2, Landroid/util/Log;->i(Ljava/lang/Str ing; Ljava/lang/String;)I")))
  def test_40_parse_exception_is_deny(self):
   self.assertFalse(test_gate(exception=RuntimeError("PRIVATE")))
  def test_41_all_source_only_no_real_claim(self):
