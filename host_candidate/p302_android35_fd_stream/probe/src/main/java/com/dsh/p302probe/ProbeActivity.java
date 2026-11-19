@@ -179,8 +179,7 @@ public final class ProbeActivity extends Activity {
       ActivityInfo.CONFIG_DENSITY,
       ActivityInfo.CONFIG_LAYOUT_DIRECTION,
       ActivityInfo.CONFIG_COLOR_MODE,
-      ActivityInfo.CONFIG_GRAMMATICAL_GENDER,
-      ActivityInfo.CONFIG_ASSETS_PATHS
+      ActivityInfo.CONFIG_GRAMMATICAL_GENDER
     };
     final String[] names=new String[]{
       "FONT_SCALE",
@@ -199,8 +198,7 @@ public final class ProbeActivity extends Activity {
       "DENSITY",
       "LAYOUT_DIRECTION",
       "COLOR_MODE",
-      "GRAMMATICAL_GENDER",
-      "ASSETS_PATHS"
+      "GRAMMATICAL_GENDER"
     };
     int seen=0;
     for(int i=0;i<bits.length;i++) {
