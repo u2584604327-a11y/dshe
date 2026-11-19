@@ -21,7 +21,7 @@ python3 - "$DIR/P311-PROBE-ANDROID35-TEST-ONLY.jar" <<'PY'
 import sys,zipfile
 with zipfile.ZipFile(sys.argv[1]) as z:
  assert z.namelist()==["classes.dex"]
- assert z.read("classes.dex").startswith(b"dex\\n")
+ assert z.read("classes.dex").startswith(bytes((100,101,120,10)))
 print("P311_JAVA_ONLY_TEST_HARNESS_DEX=PASS")
 PY
 echo P311_PREVIOUS_P310_CANDIDATE_REUSED=YES
