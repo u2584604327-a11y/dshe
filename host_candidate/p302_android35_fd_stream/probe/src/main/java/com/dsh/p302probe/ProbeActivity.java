@@ -92,6 +92,7 @@ public final class ProbeActivity extends Activity {
   private final ServiceConnection conn=new ServiceConnection() {
     @Override public void onServiceConnected(ComponentName component, IBinder binder) {
       if(terminated)return;
+      Log.i(TAG,"P302_LIFECYCLE_SERVICE_CONNECTED=OBSERVED");
       remote=new Messenger(binder);
       Message m=Message.obtain(null,IsolatedPipeService.REQUEST);
       m.replyTo=inbox;
@@ -120,12 +121,14 @@ public final class ProbeActivity extends Activity {
       heldLocalReader=pipe[0];
       pipe[0]=null;
       Log.i(TAG,"P302_HOST_READER_RETAINED=PASS");
+      Log.i(TAG,"P302_LIFECYCLE_STREAM_WRITE_BEGIN=OBSERVED");
       try(ParcelFileDescriptor.AutoCloseOutputStream out =
           new ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])) {
         out.write(PAYLOAD);
         out.flush();
       }
       pipe[1]=null;
+      Log.i(TAG,"P302_LIFECYCLE_STREAM_WRITE_END=OBSERVED");
       Log.i(TAG,"P302_HOST_WRITE_COMPLETE=PASS");
     } catch(Exception ex) { deny("HOST_PIPE_IO"); }
     finally {
@@ -136,11 +139,22 @@ public final class ProbeActivity extends Activity {
   }
   @Override public void onCreate(Bundle state){
     super.onCreate(state);
+    Log.i(TAG,state==null ? "P302_LIFECYCLE_CREATE_FRESH=OBSERVED" : "P302_LIFECYCLE_CREATE_RESTORED=OBSERVED");
     if(state!=null){deny("RESTORED_STATE");return;}
     bound=bindService(new Intent(this,IsolatedPipeService.class),conn,Context.BIND_AUTO_CREATE);
     if(!bound)deny("BIND_SERVICE");
   }
+  @Override protected void onSaveInstanceState(Bundle outState){
+    Log.i(TAG,"P302_LIFECYCLE_SAVE_STATE=OBSERVED");
+    super.onSaveInstanceState(outState);
+  }
+  @Override protected void onStop(){
+    Log.i(TAG,"P302_LIFECYCLE_STOP=OBSERVED");
+    super.onStop();
+  }
   @Override public void onDestroy(){
+    Log.i(TAG,isChangingConfigurations() ? "P302_LIFECYCLE_DESTROY_CONFIG=OBSERVED" :
+        (isFinishing() ? "P302_LIFECYCLE_DESTROY_FINISH=OBSERVED" : "P302_LIFECYCLE_DESTROY_OTHER=OBSERVED"));
     // Process/activity recreation and cancellation must not leak a host FD.
     releaseHeldReader();
     if(bound){unbindService(conn);bound=false;}

@@ -55,6 +55,17 @@ for _ in $(seq 1 35);do
           echo "$witness=PASS"
         fi
       done
+      # Only bounded fixed lifecycle categories and integer counts are emitted;
+      # no raw Logcat, config values, PIDs, paths, account data, or stack traces.
+      for lifecycle in \
+        P302_LIFECYCLE_CREATE_FRESH P302_LIFECYCLE_CREATE_RESTORED \
+        P302_LIFECYCLE_SERVICE_CONNECTED P302_LIFECYCLE_STREAM_WRITE_BEGIN \
+        P302_LIFECYCLE_STREAM_WRITE_END P302_LIFECYCLE_SAVE_STATE \
+        P302_LIFECYCLE_STOP P302_LIFECYCLE_DESTROY_CONFIG \
+        P302_LIFECYCLE_DESTROY_FINISH P302_LIFECYCLE_DESTROY_OTHER;do
+        count="$(printf '%s\\n' "$selected" | grep -Fc "$lifecycle=OBSERVED" || true)"
+        echo "${lifecycle}_COUNT=$count"
+      done
       exit 2
     fi
   done
