@@ -9,7 +9,7 @@ import java.io.Closeable;
 import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Source-only, host-side Java Process facade for a remote isolated Android Node.
@@ -29,7 +29,8 @@ public final class P37RemoteProcess extends Process {
     private final InputStream output;
     private final InputStream error;
     private final boolean merged;
-    private final AtomicBoolean closed = new AtomicBoolean();
+    // Fresh endpoints can be claimed by one Process, then closed once.
+    private final AtomicInteger ownership = new AtomicInteger();
 
     private Stdio(OutputStream input, InputStream output, InputStream error,
         boolean merged) {
@@ -48,7 +49,7 @@ public final class P37RemoteProcess extends Process {
       return new Stdio(input, output, new ByteArrayInputStream(new byte[0]), true);
     }
     @Override public void close() throws IOException {
-      if (!closed.compareAndSet(false, true)) return;
+      if (ownership.getAndSet(2) == 2) return;
       IOException failure = null;
       for (Closeable stream : new Closeable[] {input, output, error}) {
         try { stream.close(); }
@@ -126,6 +127,8 @@ public final class P37RemoteProcess extends Process {
         !verifier.isIsolatedUid(authenticatedWorkerUid)) {
       throw new IllegalArgumentException("trusted isolated session required");
     }
+    if (streams != null && !streams.ownership.compareAndSet(0, 1))
+      throw new IllegalArgumentException("unused owned pipe endpoints required");
     boundUid = authenticatedWorkerUid;
     session = hostSession;
     uidVerifier = verifier;

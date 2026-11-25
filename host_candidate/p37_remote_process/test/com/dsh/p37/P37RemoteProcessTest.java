@@ -423,6 +423,10 @@ public final class P37RemoteProcessTest {
       Port port = new Port();
       P37RemoteProcess process = new P37RemoteProcess(UID, S, uid -> uid == UID, port, pipes.stdio);
       ok(process.getErrorStream().read() == -1, "merged pipe stderr is immediate EOF");
+      boolean reused=false;
+      try {new P37RemoteProcess(UID,S,uid->uid==UID,new Port(),pipes.stdio);}
+      catch(IllegalArgumentException denied){reused=true;}
+      ok(reused,"owned endpoints cannot be handed to a second Process");
       process.getInputStream().close();
       ok(process.isAlive() && port.kill == 0, "local pipe reader close keeps child alive");
       process.onTransportLost();
@@ -438,6 +442,13 @@ public final class P37RemoteProcessTest {
       ok(!process.onAuthenticatedStdout(UID, S, b("mixed")), "pipe mode rejects Binder data frames");
       ok(process.waitFor() == 125 && port.kill == 1, "mixed transport revokes pipe process");
       ok(!process.onAuthenticatedExit(UID, S, 0), "revoked pipe process rejects late clean exit");
+    }
+    try (NativePipes pipes = new NativePipes(false)) {
+      pipes.stdio.close();
+      boolean rejected=false;
+      try {new P37RemoteProcess(UID,S,uid->uid==UID,new Port(),pipes.stdio);}
+      catch(IllegalArgumentException denied){rejected=true;}
+      ok(rejected,"closed endpoints cannot create a live Process");
     }
     System.out.println("P37_NATIVE_PIPE_REVOCATION_AND_MERGED_EOF=PASS");
   }
