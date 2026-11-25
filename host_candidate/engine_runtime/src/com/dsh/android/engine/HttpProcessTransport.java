@@ -129,7 +129,7 @@ final class HttpProcessTransport extends Process implements Closeable {
         }
         if(type==LOG){if(id>1||length==0)throw new IOException("LOG_SHAPE");log(id).accept(data,id,true);continue;}
         if(type==APP_ACK){if(id!=0)throw new IOException("STDIN_CREDIT_ID");credit(appCredit,data);continue;}
-        if(type==STOP){if(id!=0||length!=0||!listenSeen)throw new IOException("STOP_SHAPE");stopListener();continue;}
+        if(type==STOP){if(id!=0||length!=0)throw new IOException("STOP_SHAPE");stopListener();continue;}
         if(type!=RESPONSE&&type!=RESPONSE_END&&type!=RESPONSE_CLOSE&&type!=REQUEST_ACK)throw new IOException("FRAME_TYPE");
         if(!listenSeen||id==0||id>allocated.get())throw new IOException("CONNECTION_ID");
         Peer peer=peers.get(id);if(peer==null)continue; // late traffic for a closed, never-reused id
@@ -257,7 +257,7 @@ final class HttpProcessTransport extends Process implements Closeable {
     @Override public void close()throws IOException{synchronized(appInputLock){if(stdinOpen.compareAndSet(true,false)&&!closed.get()){appCredit.revoke();send(APP_END,0,new byte[0]);}}}
   };
   private void stopListener(){
-    accepting.set(false);try{listener.close();}catch(IOException ignored){}
+    stopping.set(true);accepting.set(false);try{listener.close();}catch(IOException ignored){}
     for(Peer peer:peers.values())peer.close(false);
   }
   private void fail(String category){failure=category;close();}

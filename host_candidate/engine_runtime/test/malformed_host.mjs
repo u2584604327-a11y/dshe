@@ -2,4 +2,6 @@
 import http from 'node:http';
 import {pathToFileURL} from 'node:url';
 const {installHttpTransport}=await import(pathToFileURL(process.argv[2]));
-await installHttpTransport();http.createServer().listen(0,'127.0.0.1');
+const transport=await installHttpTransport();
+if(process.argv[3]==='early-exit'){process.stderr.write('ORIGINAL_STARTUP_EXIT_BEFORE_LISTEN\n');process.exitCode=7;await transport.close();}
+else http.createServer().listen(0,'127.0.0.1');

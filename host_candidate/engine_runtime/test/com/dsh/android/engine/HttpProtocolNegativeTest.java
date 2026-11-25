@@ -41,7 +41,19 @@ public final class HttpProtocolNegativeTest {
    yes(fixed.contains("DSH_RUNTIME_TRANSPORT_DENY="+expected),"bad_host_reason_"+mode);
   }finally{child.destroyForcibly();child.waitFor();}
  }
+ static void startupExit(String node,String fixture,String source)throws Exception{
+  Process child=new ProcessBuilder(node,"--permission","--allow-fs-read="+fixture,"--allow-fs-read="+source,fixture,source,"early-exit").start();
+  HttpProcessTransport process=new HttpProcessTransport(child,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",1,0);
+  try{
+   yes(process.waitFor(5,TimeUnit.SECONDS),"startup_exit_deadline");yes(process.exitValue()==7,"startup_exit_code_preserved");
+   ByteArrayOutputStream bytes=new ByteArrayOutputStream();byte[] b=new byte[1024];int n;
+   while((n=process.getErrorStream().read(b))!=-1)bytes.write(b,0,n);
+   yes(bytes.toString("US-ASCII").equals("ORIGINAL_STARTUP_EXIT_BEFORE_LISTEN\n"),"startup_stderr_preserved");
+   yes(process.failure().equals("NONE/NONE"),"startup_exit_not_supervisor_failure");
+  }finally{process.close();}
+ }
  public static void main(String[] a)throws Exception{
+  startupExit(a[0],a[2],a[3]);
   for(String mode:new String[]{"BAD_MAC","OLD_SESSION","REPLAY","OVERSIZE","UNSOLICITED","DUP_LISTEN","CREDIT","RESERVED_CREDIT"})
    hostRejects(a[0],a[1],mode,mode.equals("BAD_MAC")||mode.equals("OLD_SESSION")?"FRAME_AUTH":
        mode.equals("REPLAY")||mode.equals("OVERSIZE")?"FRAME_SHAPE":mode.equals("UNSOLICITED")?"CONNECTION_ID":

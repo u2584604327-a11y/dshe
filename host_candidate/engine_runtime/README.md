@@ -94,7 +94,8 @@ backpressure/cancel and same-port graceful restart. Stream routes are explicit
 test fixtures behind the original Connection admission; they are not claimed
 as model/chat functionality. The before/after cookie test and existing
 credential-file byte comparison remain required. Both protocol directions
-also reject malformed frames and invented credits.
+also reject malformed frames and invented credits. A child failure before HTTP listen preserves its real
+exit code and stderr instead of being misclassified as a supervisor kill.
 
 These are host integration results. Android Binder ownership and ARM64 original
 Node HTTP execution still need independent validation. The full DSH main
@@ -122,3 +123,12 @@ real isolated Node in the **sidecar's fresh Context**, as reported by the user.
 It does not initialize the installed DSH singleton, invoke the main start
 coroutine or establish HTTP READY. Historical P151 missing-singleton statuses
 remain consistent with this boundary. No original DSH data was read or changed.
+
+A separate bounded full-main probe (not a READY test) now reaches original
+`collectInstallationScopePackages()` / `packageDirFromAnchor()` and exits 1
+with `ERR_ACCESS_DENIED` / `FileSystemRead` when Node's native installation
+lookup probes an ancestor package.json outside the leased resource/profile
+roots. No permission was broadened. The isolated production bootstrap must
+route these lookups through the sealed resource namespace, then support the
+required profile/file operations with owner-scoped durability. This full-main
+probe is not substituted for the successful real-service component checks.
