@@ -7,12 +7,13 @@ const context = {repo: {owner: 'u2584604327-a11y', repo: 'dshe'}, runId: 99,
     number: 80, head: {sha: head, ref: branch, repo: {full_name: 'u2584604327-a11y/dshe'}}}}};
 function run(id, filename, extra = {}) {return {id, path: '.github/workflows/' + filename,
   head_sha: head, head_branch: branch, event: 'pull_request', status: 'queued', pull_requests: [{number: 80}], ...extra};}
-async function check(changed, runs, event = context, current = head) {
+async function check(changed, runs, event = context, current = head, cancelEffect = () => {}) {
   const cancelled = [];
   const github = {rest: {pulls: {get: async () => ({data: {head: {sha: current}}})},
     repos: {compareCommitsWithBasehead: async () => ({data: {status: 'ahead', files: changed.map(filename => ({filename}))}})},
     actions: {listWorkflowRunsForRepo() {}, cancelWorkflowRun: async request => {
       assert.equal(request.owner, 'u2584604327-a11y');assert.equal(request.repo, 'dshe');cancelled.push(request.run_id);
+      assert.equal(request.request.timeout,2500);assert.equal(request.request.retries,0);await cancelEffect();
     }}}, paginate: async () => runs};
   const core = {info() {}, warning() {}, summary: {addRaw() {return this;}, async write() {}}};
   const result = await select({github, context: event, core});return {cancelled, result};
@@ -32,5 +33,14 @@ async function check(changed, runs, event = context, current = head) {
   const other = structuredClone(context);other.payload.pull_request.number = 81;
   assert.deepEqual((await check(['README.md'], runs, other)).cancelled, []);
   assert.equal((await check(['.github/workflows/p139-p51-arm64-sidecar-test-apk-artifact.yml'], [])).result.artifactNeeded, true);
+  const realNow=Date.now;let now=0;
+  try{
+    Date.now=()=>now;
+    const limited=await check(['README.md'],[run(10,filename),run(11,filename)],context,head,()=>{
+      now+=61000;throw Object.assign(new Error('fixed Actions service failure'),{status:500});
+    });
+    assert.deepEqual(limited.cancelled,[10]);assert.equal(limited.result.artifactNeeded,true);
+  }finally{Date.now=realNow;}
+  console.log('PR80_OPTIONAL_CANCEL_HTTP500_BUDGET_PRESERVES_REQUIRED_BUILD=PASS');
   console.log('PR80_CI_SELECTOR_FOREIGN_PR_SHA_CRITICAL_GATE_AND_ARTIFACT_SCOPE=PASS');
 })().catch(error => {console.error(error);process.exitCode = 1;});
