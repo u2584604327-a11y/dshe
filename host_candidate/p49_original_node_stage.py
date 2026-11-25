@@ -131,8 +131,8 @@ def verify(original,apk,original_default_config=False):
             bootstrap="assets/p50-original-modules.mjs"
             fail(bootstrap not in base and bootstrap in allnames,"MODULE_BOOTSTRAP_MISSING")
             payload=derived.read(bootstrap)
-            fail(len(payload)==18261 and hash_bytes(payload)==
-                 "bf8557d829df6b4a3ce1137b5fa29dfe52563baa04c5693accae1a159d1a8807",
+            fail(len(payload)==18501 and hash_bytes(payload)==
+                 "bc0c4c874e617016de0bd909c7c665795a7d6ff728e8245677f4e71074bbf140",
                  "MODULE_BOOTSTRAP_SHA_OR_LENGTH")
             allowed_assets.add(bootstrap)
         fail({x for x in allnames if x.startswith(("lib/","assets/")) and

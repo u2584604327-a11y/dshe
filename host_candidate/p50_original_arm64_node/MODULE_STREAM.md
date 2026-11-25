@@ -19,7 +19,7 @@ Only fresh in-memory `/dsh-home/profiles/web` state is writable, bounded to 64
 files and 2 MiB. Original resources cannot be changed. This state is discarded
 with the child; it neither reads nor persists account data. Unsupported file
 descriptor APIs are denied. This narrow filesystem/resolver adapter has been
-validated for default-config only and is not approved for general engine use.
+validated for the two fixed fresh-profile config modes only and is not approved for general engine use.
 
 Local reproducible check (JDK 17 and a host Node 26.4.0 required):
 
@@ -37,7 +37,7 @@ changed content must reject before any config output. These host checks do not
 prove Android ARM64 execution.
 
 P139's disposable build pins and patches only the existing probe Activity,
-worker and build script. The normal worker does not accept this mode. The APK
+worker, build script and typed-denial patcher. The normal worker does not accept this mode. The APK
 keeps the established permissionless `com.dsh.p51.isolatedprobe` test identity
 and a separate temporary certificate. It cannot upgrade `com.dsh.android`.
 The original Node and native dependency provenance checks remain required.
@@ -47,7 +47,8 @@ acknowledgment, owner epoch and one-use receipt before obtaining P37. It streams
 resources through P37 stdin, verifies stdout/stderr/EOF and authenticated exit,
 and cancels on Binder death or deadline. The child checks a real ARM64 kernel
 before exec and pins the bootstrap asset. No raw configuration is displayed.
-The repaired phone route remains unverified; the 2c88fcc failure is recorded below.
+The user-reported 7686479 default-config success is recorded below. The new
+original-method handoff still requires a separate phone result.
 
 November 25 input/exit repair
 ----------------------------
@@ -105,3 +106,30 @@ AOSP API36 implementation reviewed: ParcelFileDescriptor.writeToParcel uses
 Status.SILENCE for PARCELABLE_WRITE_RETURN_VALUE; checkError continues to throw
 on non-OK statuses. Source:
 https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-16.0.0_r1/core/java/android/os/ParcelFileDescriptor.java
+
+
+The next disposable P51 build invokes the actual original private
+`EngineManager.runDumpConfig()` in a fresh test-owned Context. It stages only the
+verified original Node and CLI entry for the original file guards, then hands
+its typed P47 config call the exact authenticated P37 Process. The original
+reader threads, 30-second wait and DumpResult run unchanged. A receipt is burned
+once and the handoff checks the original frame, exact thread, all argv/env/cwd
+values and PIPE modes. Missing, stale, replayed or changed requests cannot start
+a host process. The two other EngineManager launch seams remain DENY.
+
+The original production P47 Java source still rejects every launch. The CI-only
+config delegation is explicit in `patch_config_gate.py`; it cannot initialize
+or authorize the installed DSH singleton. The temporary files belong to a new
+P51 cache directory and only that invocation's fixed files and empty directories
+are cleaned. Existing user profiles are not brokered or represented as empty.
+`fresh-config` really selects original `--profile web --dump-config`, independently
+compared with the original CLI using Node's normal resolver. This is a bounded
+fresh-profile integration, not parity for user configuration or main startup.
+
+User-reported vivo result for commit
+768647992573d74fd3254520423b123b5059f12b: original default-config CLI executed
+69 original modules and returned 44,560 bytes with SHA256
+87eec7a72bd7a19225983090ee7f595f4a0c645259598b64f8d072879fa159b5.
+This is a user report from the independent P51 test app, not an independently
+observed production EngineManager/HTTP READY result. The new original-method
+handoff still needs its own ARM64 device result. No formal v139 is available.

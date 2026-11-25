@@ -54,6 +54,7 @@ public final class P50OriginalNodeFixedChild {
   private long sequence=0;
   private boolean started;
   private WorkerPipes modulePipes;
+  private boolean freshConfig;
 
   // Fixed supervisor diagnostics, never authority, paths or exception text.
   public static String failureStageName(int stage) {
@@ -77,6 +78,13 @@ public final class P50OriginalNodeFixedChild {
     P50OriginalNodeFixedChild result=new P50OriginalNodeFixedChild(context,authenticatedHost,session);
     result.modulePipes=authenticatedPipes;
     return result;
+  }
+
+  /** Fresh-profile runDumpConfig parity only. No production profile capability. */
+  public static P50OriginalNodeFixedChild originalFreshConfig(Context context,
+      Messenger authenticatedHost,String session,WorkerPipes pipes) {
+    P50OriginalNodeFixedChild result=originalDefaultConfig(context,authenticatedHost,session,pipes);
+    result.freshConfig=true;return result;
   }
 
   public P50OriginalNodeFixedChild(Context context, Messenger host, String session) {
@@ -226,7 +234,9 @@ public final class P50OriginalNodeFixedChild {
       env.clear();
       env.put("PATH","/system/bin");
       env.put("HOME",modulePipes==null?"/":"/dsh-home");
-      if(modulePipes!=null)env.put("DSH_HOME","/dsh-home");
+      if(modulePipes!=null){env.put("DSH_HOME","/dsh-home");
+        env.put("DSH_ORIGINAL_CONFIG_MODE",freshConfig?"fresh-config":"default");
+        env.put("NODE_OPTIONS","--max-old-space-size=1024");}
       env.put("LD_LIBRARY_PATH",dir.getAbsolutePath());
       env.put("LD_PRELOAD",preloadsEnv.toString());
       failureStage=3;
@@ -291,5 +301,5 @@ public final class P50OriginalNodeFixedChild {
       throw new SecurityException("P50_BOOTSTRAP_HASH_MISMATCH");
     return new String(bytes,StandardCharsets.UTF_8);
   }
-  private static final String MODULE_BOOTSTRAP_SHA="bf8557d829df6b4a3ce1137b5fa29dfe52563baa04c5693accae1a159d1a8807";
+  private static final String MODULE_BOOTSTRAP_SHA="bc0c4c874e617016de0bd909c7c665795a7d6ff728e8245677f4e71074bbf140";
 }

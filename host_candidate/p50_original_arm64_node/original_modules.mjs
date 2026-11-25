@@ -416,7 +416,11 @@ async function run() {
       return {format: formatOf(filename), source, shortCircuit: true};
     },
   });
-  process.argv = [process.execPath, ENTRY, '--dump-default-config', '--profile', 'web'];
+  const mode = process.env.DSH_ORIGINAL_CONFIG_MODE ?? 'default';
+  if (mode !== 'default' && mode !== 'fresh-config') fail('E_DSH_CONFIG_MODE');
+  process.argv = mode === 'default' ?
+    [process.execPath, ENTRY, '--dump-default-config', '--profile', 'web'] :
+    [process.execPath, ENTRY, '--profile', 'web', '--dump-config'];
   const entry = await import(pathToFileURL(ENTRY).href);
   if (typeof entry.runCli !== 'function') fail('E_DSH_ORIGINAL_ENTRY_EXPORT');
   await entry.runCli();

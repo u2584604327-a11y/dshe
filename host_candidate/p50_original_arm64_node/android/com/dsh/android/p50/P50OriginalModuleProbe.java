@@ -27,6 +27,7 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
   private P68AndroidBinderIntake intake;
   private P37RemoteProcess process;
   private boolean started,handedOut;
+  private P50OriginalEngineConfig originalEngine;
   private final AtomicReference<String> sourceState=new AtomicReference<>("NOT_STARTED");
   private final long epoch=SystemClock.elapsedRealtimeNanos();
   private final android.os.IBinder.DeathRecipient workerDied=()->main.post(()->deny("BINDER_DEATH"));
@@ -55,12 +56,10 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
           handedOut=true;
           process=(P37RemoteProcess)intake.processAfterAuthenticatedChildStart();
           P184ChildStartReceipt receipt=intake.takeVerifiedChildStartReceipt();
-          if(process==null||receipt==null||!receipt.consume(process,session,epoch)||
-             receipt.consume(process,session,epoch)){
+          if(process==null||receipt==null){
             deny("START_RECEIPT");return;
           }
-          report("ORIGINAL_CONFIG_AUTHENTICATED_CHILD_AND_ONE_USE_RECEIPT=PASS");
-          runOriginal(process);
+          runOriginal(process,receipt);
         }
       }catch(RuntimeException invalid){deny("INVALID_BINDER_FRAME");}
     }
@@ -76,6 +75,15 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
   public void start(){
     if(started||closed.get())throw new IllegalStateException("P50_ONE_USE_PROBE");
     started=true;
+    Thread prepare=new Thread(()->{
+      try{
+        originalEngine=P50OriginalEngineConfig.prepare(host,session);
+        main.post(()->{if(!closed.get())startTransport();else originalEngine.close();});
+      }catch(Exception denied){main.post(()->deny("ORIGINAL_ENGINE_PREPARATION"));}
+    },"dsh-original-config-prepare");
+    prepare.setDaemon(true);prepare.start();
+  }
+  private void startTransport(){
     try{
       worker.getBinder().linkToDeath(workerDied,0);deathLinked=true;
       pipes=P68AndroidBinderIntake.HostPipes.create();
@@ -85,7 +93,7 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
       },pipes,epoch);
       Message start=Message.obtain(null,P48FixedIsolatedChild.START);
       Bundle data=new Bundle();data.putString("session",session);
-      data.putString("p50_mode","p50-original-default-config");
+      data.putString("p50_mode","p50-original-fresh-config");
       data.putBundle("process_pipes",pipes.workerBundle());
       start.setData(data);start.replyTo=inbox;worker.send(start);
       main.postDelayed(()->{if(!closed.get())deny("DEADLINE");},100000);
@@ -100,72 +108,46 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
     data.putString("session",session);message.setData(data);
     try{worker.send(message);}catch(RemoteException ignored){}
   }
-  private void runOriginal(P37RemoteProcess child){
-    CountDownLatch finished=new CountDownLatch(3);
+  private void runOriginal(P37RemoteProcess child,P184ChildStartReceipt receipt){
     AtomicReference<String> failure=new AtomicReference<>();
-    ByteArrayOutputStream output=new ByteArrayOutputStream(),error=new ByteArrayOutputStream();
+    CountDownLatch inputDone=new CountDownLatch(1);
     Thread input=new Thread(()->{
       sourceState.set("STREAMING");
       try(InputStream original=host.getAssets().open("engine.bin");OutputStream stdin=child.getOutputStream()){
-        P50ModuleStream.writeOriginal(original,stdin);
-        sourceState.set("VERIFIED_COMPLETE");
-      }catch(Exception denied){
-        sourceState.set("FAILED");failure.compareAndSet(null,"MODULE_TRANSFER");
-        // Closing stdin sends EOF. Let the authenticated child report its
-        // actual error/exit and stderr; the existing deadline still cancels it.
-      }
-      finally{finished.countDown();}
+        P50ModuleStream.writeOriginal(original,stdin);sourceState.set("VERIFIED_COMPLETE");
+      }catch(Exception denied){sourceState.set("FAILED");failure.compareAndSet(null,"MODULE_TRANSFER");}
+      finally{inputDone.countDown();}
     },"dsh-original-module-stream");
-    Thread stdout=reader(child.getInputStream(),output,1024*1024,finished,failure,child);
-    Thread stderr=reader(child.getErrorStream(),error,8192,finished,failure,child);
-    input.setDaemon(true);input.start();stdout.start();stderr.start();
-    Thread verify=new Thread(()->{
+    input.setDaemon(true);input.start();
+    Thread invoke=new Thread(()->{
       try{
-        if(!child.waitFor(95,TimeUnit.SECONDS)||!finished.await(5,TimeUnit.SECONDS)){
-          main.post(()->deny("CHILD_OR_STREAM_TIMEOUT"));return;
-        }
-        String sha=hash(output.toByteArray());
-        String diagnostics=new String(error.toByteArray(),StandardCharsets.UTF_8);
-        boolean valid=failure.get()==null&&child.exitValue()==0&&
+        // Original runDumpConfig creates its own two reader threads, performs
+        // its own timed wait, and constructs its own original DumpResult.
+        Object result=originalEngine.invoke(child,receipt,epoch);
+        int exit=(Integer)P50OriginalEngineConfig.value(result,"getExitCode");
+        byte[] output=((String)P50OriginalEngineConfig.value(result,"getStdout")).getBytes(StandardCharsets.UTF_8);
+        String error=(String)P50OriginalEngineConfig.value(result,"getStderr");
+        String sha=hash(output);
+        boolean valid=inputDone.await(5,TimeUnit.SECONDS)&&failure.get()==null&&exit==0&&
             child.terminalReason()==P37RemoteProcess.TerminalReason.REMOTE_EXIT&&
-            output.size()==44560&&
-            "87eec7a72bd7a19225983090ee7f595f4a0c645259598b64f8d072879fa159b5".equals(sha)&&
-            diagnostics.equals("DSH_ORIGINAL_CONFIG_MODULES=69\n");
+            output.length==44560&&"87eec7a72bd7a19225983090ee7f595f4a0c645259598b64f8d072879fa159b5".equals(sha)&&
+            error.equals("DSH_ORIGINAL_CONFIG_MODULES=69\n");
         main.post(()->{
           if(closed.get())return;
+          report("ORIGINAL_ENGINE_RUN_DUMP_CONFIG=INVOKED");
+          report("ORIGINAL_ENGINE_CONFIG_CHILD_EXIT="+exit);
+          report("ORIGINAL_ENGINE_CONFIG_SHA256="+sha+" bytes="+output.length);
           if(valid){
-            report("ORIGINAL_CONFIG_ARM64_NODE_PRODUCTION_MODULES=PASS modules=69 bytes=44560");
-            report("ORIGINAL_CONFIG_SHA256="+sha);
-            report("ORIGINAL_CONFIG_ENGINE_MANAGER_AND_HTTP_READY=NOT_WIRED");
-            close();
-          }else{
-            report("ORIGINAL_CONFIG_MODULE_SOURCE="+sourceState.get());
-            report("ORIGINAL_CONFIG_CHILD_EXIT="+child.exitValue());
-            report("ORIGINAL_CONFIG_STDERR_BYTES="+error.size());
-            report("ORIGINAL_CONFIG_OBSERVED_SHA256="+sha+" bytes="+output.size());
-            String prefix="DSH_ORIGINAL_CONFIG_ERROR=";
-            for(String line:diagnostics.split("\n"))if(line.startsWith(prefix)&&
-                line.substring(prefix.length()).matches("[A-Z0-9_]{1,100}"))report(line);
-            deny("ORIGINAL_CONFIG_NOT_VERIFIED");
-          }
+            report("ORIGINAL_ENGINE_CONFIG_P47_AUTHENTICATED_P37_HANDOFF=PASS");
+            report("ORIGINAL_ENGINE_CONFIG_ORIGINAL_READERS_WAIT_AND_RESULT=PASS");
+            report("ORIGINAL_ENGINE_CONFIG_FRESH_PROFILE_ONLY=YES");
+            report("ORIGINAL_ENGINE_CONFIG_SIDECAR_NOT_PRODUCTION=YES");
+            report("ORIGINAL_CONFIG_ENGINE_MANAGER_AND_HTTP_READY=NOT_WIRED");close();
+          }else{report("ORIGINAL_CONFIG_MODULE_SOURCE="+sourceState.get());deny("ORIGINAL_ENGINE_RESULT");}
         });
-      }catch(Exception denied){main.post(()->deny("PROCESS_LIFECYCLE"));}
-    },"dsh-original-module-verify");
-    verify.setDaemon(true);verify.start();
-  }
-  private static Thread reader(InputStream input,ByteArrayOutputStream sink,int limit,
-      CountDownLatch finished,AtomicReference<String> failure,P37RemoteProcess child){
-    Thread thread=new Thread(()->{
-      try(InputStream stream=input){
-        byte[] bytes=new byte[8192];int n;
-        while((n=stream.read(bytes))!=-1){
-          if(n>limit-sink.size())throw new IOException("OUTPUT_BOUND");
-          sink.write(bytes,0,n);
-        }
-      }catch(Exception denied){failure.compareAndSet(null,"STREAM_READ");child.destroyForcibly();}
-      finally{finished.countDown();}
-    },"dsh-original-config-reader");
-    thread.setDaemon(true);return thread;
+      }catch(Exception denied){main.post(()->deny("ORIGINAL_ENGINE_INVOCATION"));}
+    },"dsh-original-engine-runDumpConfig");
+    invoke.setDaemon(true);invoke.start();
   }
   private static String hash(byte[] value)throws Exception{
     StringBuilder out=new StringBuilder(64);
@@ -180,6 +162,7 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
   }
   @Override public void close(){
     if(!closed.compareAndSet(false,true))return;
+    if(originalEngine!=null)originalEngine.close();
     if(intake!=null)intake.disconnected();
     if(process!=null&&process.isAlive())process.destroyForcibly();
     if(pipes!=null)pipes.close();

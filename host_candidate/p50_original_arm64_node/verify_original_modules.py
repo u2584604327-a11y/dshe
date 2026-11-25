@@ -78,6 +78,18 @@ def main():
         work = Path(directory)
         if args.module_apk:
             verify_asset_allowlist(args.apk.resolve(), args.module_apk.resolve(), work)
+        if args.android_jar:
+            handoff_classes = work / 'handoff-jvm'
+            handoff_classes.mkdir()
+            test_root = ROOT / 'host_candidate/p50_original_arm64_node/test'
+            roots = [str(p) for pattern in ('*/src', '*/android')
+                     for p in (ROOT / 'host_candidate').glob(pattern) if p.is_dir()]
+            subprocess.run(['javac', '--release', '8', '-cp', str(args.android_jar),
+                            '-sourcepath', os.pathsep.join(roots), '-d', str(handoff_classes),
+                            str(test_root / 'fixtures/EngineManager.java'),
+                            str(test_root / 'com/dsh/android/p68/ConfigHandoffTest.java')], check=True)
+            subprocess.run(['java', '-cp', str(handoff_classes) + os.pathsep + str(args.android_jar),
+                            'com.dsh.android.p68.ConfigHandoffTest'], check=True, timeout=20)
         source = work / 'ModuleStreamMain.java'
         source.write_text('''import com.dsh.android.p50.P50ModuleStream;
 import java.io.*;import java.util.zip.*;
@@ -106,7 +118,7 @@ public final class ModuleStreamMain {
         subprocess.run(['java', '-cp', str(work), 'ModuleStreamMain',
                         str(args.apk.resolve()), str(wire)], check=True)
         environment = {'PATH': os.environ.get('PATH', ''), 'HOME': '/dsh-home', 'DSH_HOME': '/dsh-home'}
-        def execute(payload, nonblocking=False, bootstrap=BOOTSTRAP, expect_early_rejection=False):
+        def execute(payload, nonblocking=False, bootstrap=BOOTSTRAP, expect_early_rejection=False, config_mode=None):
             command = [node, '--permission', '--allow-worker', '--allow-fs-read=' + str(bootstrap), str(bootstrap)]
             failures = []
             with (work / 'stdout').open('wb') as stdout, (work / 'stderr').open('wb') as stderr:
@@ -116,7 +128,9 @@ public final class ModuleStreamMain {
                     os.set_blocking(read_fd, False)
                 try:
                     process = subprocess.Popen(command, stdin=read_fd if nonblocking else subprocess.PIPE,
-                                               stdout=stdout, stderr=stderr, env=environment, cwd=work)
+                                               stdout=stdout, stderr=stderr,
+                                               env=(dict(environment, DSH_ORIGINAL_CONFIG_MODE=config_mode)
+                                                    if config_mode is not None else environment), cwd=work)
                 except BaseException:
                     if write_fd is not None:
                         os.close(write_fd)
@@ -216,6 +230,26 @@ public final class ModuleStreamMain {
         print('ORIGINAL_MODULE_NONBLOCKING_STDIN_AND_DELAYED_CHUNKS=PASS modules=69')
         print('ORIGINAL_MODULE_STREAM_DEFAULT_CONFIG=PASS modules=69 bytes=44560')
         print('ORIGINAL_CONFIG_NATIVE_NODE_RESOLVER_COMPARISON=PASS sha256=' + CONFIG_SHA)
+
+        status, fresh, diagnostics = execute(wire, config_mode='fresh-config')
+        require(status == 0 and b'DSH_ORIGINAL_CONFIG_MODULES=69\n' in diagnostics,
+                'FRESH_DUMP_CONFIG_FAILED')
+        fresh_home = work / 'fresh-config-reference'
+        fresh_home.mkdir()
+        result = subprocess.run([node, '--permission', '--allow-fs-read=' + str(reference),
+                                 '--allow-fs-read=' + str(fresh_home), '--allow-fs-write=' + str(fresh_home),
+                                 str(reference / 'node_modules/@deepseek-ai/dsh/lib/bin.js'),
+                                 '--profile', 'web', '--dump-config'],
+                                env=dict(environment, HOME=str(fresh_home), DSH_HOME=str(fresh_home)),
+                                cwd=work, capture_output=True, timeout=60)
+        require(result.returncode == 0 and result.stdout == fresh == output,
+                'FRESH_DUMP_CONFIG_DIFFERS_FROM_ORIGINAL_RESOLVER')
+        require(list(fresh_home.rglob('*')), 'ORIGINAL_PROFILE_INITIALIZATION_NOT_EXERCISED')
+        print('ORIGINAL_FRESH_DUMP_CONFIG_NATIVE_RESOLVER_COMPARISON=PASS bytes=44560')
+        status, invalid, diagnostics = execute(wire, config_mode='main-engine')
+        require(status == 125 and invalid == b'' and b'E_DSH_CONFIG_MODE' in diagnostics,
+                'UNSUPPORTED_ENGINE_MODE_ACCEPTED')
+        print('ORIGINAL_CONFIG_UNSUPPORTED_MAIN_ENGINE_MODE=DENY')
 
         negative = work / 'negative.modules'
         for label, contents in (

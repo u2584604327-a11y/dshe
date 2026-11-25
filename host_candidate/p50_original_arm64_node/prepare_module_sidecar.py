@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wire the real original default-config route only into a disposable P51 APK."""
+"""Wire original EngineManager fresh-config only into a disposable P51 APK."""
 import hashlib
 import json
 import os
@@ -13,9 +13,11 @@ ACTIVITY = BASE + 'android/com/dsh/android/p43/P43ProbeActivity.java'
 WORKER = BASE + 'android/com/dsh/android/p43/P43IsolatedWorker.java'
 BUILDER = BASE + 'build_embedded_emulator_apk.sh'
 MODULE = 'host_candidate/p50_original_arm64_node/'
+GUARD = 'host_candidate/p47_no_fallback/p47_gate.py'
 PINS = {ACTIVITY: '8a83ef4c53c8e527f604023ab5eec2be8f2e12a9',
         WORKER: '62a616d07e65e71cb671a8171b4c02ce3faf96a7',
-        BUILDER: '62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f'}
+        BUILDER: '62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f',
+        GUARD: '49f0d5d07cf7e8fa1e0323c945ddbb1eed946065'}
 
 
 def once(source, old, new):
@@ -33,7 +35,7 @@ def patches(sources):
         originalModules=new com.dsh.android.p50.P50OriginalModuleProbe(
             P43ProbeActivity.this,remote,session,line->log(line));
         originalModules.start();
-        return; // Default config only: no original UI, P47 or HTTP authorization.
+        return; // Fresh config only: original method, private test profile; no HTTP authorization.
       }
       if(remote!=null && p48==null) {''')
     for callback, code in [('onServiceDisconnected', 'SERVICE_DISCONNECTED'),
@@ -45,33 +47,49 @@ def patches(sources):
     activity = once(activity, '  @Override protected void onDestroy(){',
                     '  @Override protected void onDestroy(){\n'
                     '    if(originalModules!=null)originalModules.close();')
-    worker = once(sources[WORKER], '        if("p50-exact-original-node".equals(mode)) {', '''        if("p50-original-default-config".equals(mode)) {
+    worker = once(sources[WORKER], '        if("p50-exact-original-node".equals(mode)) {', '''        if("p50-original-fresh-config".equals(mode)) {
           if(!"com.dsh.p51.isolatedprobe".equals(getPackageName()))return;
           WorkerPipes pipes=null;
           try {
             pipes=WorkerPipes.receive(message.getData().getBundle("process_pipes"),
                 message.sendingUid,acceptedHostUid);
-            p50Child=P50OriginalNodeFixedChild.originalDefaultConfig(
+            p50Child=P50OriginalNodeFixedChild.originalFreshConfig(
                 P43IsolatedWorker.this,message.replyTo,acceptedSession,pipes);
             p50Child.start();
           }catch(IOException|RuntimeException denied){if(pipes!=null)pipes.close();}
         } else if("p50-exact-original-node".equals(mode)) {''')
-    builder = once(sources[BUILDER], 'apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"',
+    # Only the disposable build admits the P51 typed-denial routes. No
+    # production patcher/gate source is changed in the repository.
+    guard = once(sources[GUARD], 'os.environ.get("P51_SIDE_BY_SIDE","0")=="0",',
+                 '(os.environ.get("P51_SIDE_BY_SIDE","0")=="0" or\n'
+                 '          (os.environ.get("P51_SIDE_BY_SIDE")=="1" and\n'
+                 '           os.environ.get("P50_FRESH_CONFIG_SIDECAR")=="1" and\n'
+                 '           os.environ.get("GITHUB_ACTIONS")=="true")),')
+    builder = once(sources[BUILDER],
+                   'test "${P47_NO_HOST_FALLBACK:-0}" = 1 && test "${P51_SIDE_BY_SIDE:-0}" = 0 || {',
+                   'test "${P47_NO_HOST_FALLBACK:-0}" = 1 && { test "${P51_SIDE_BY_SIDE:-0}" = 0 ||\n'
+                   '    { test "${P51_SIDE_BY_SIDE:-0}" = 1 && test "${P50_FRESH_CONFIG_SIDECAR:-0}" = 1 && test "${GITHUB_ACTIONS:-false}" = true; }; } || {')
+    builder = once(builder, 'apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"',
                    'cp ' + MODULE + 'original_modules.mjs "$DIR/decoded/assets/p50-original-modules.mjs"\n'
                    'apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"')
     anchor = '  ' + MODULE + 'android/com/dsh/android/p50/P50OriginalNodeFixedChild.java \\\n'
     builder = once(builder, anchor, anchor + ''.join(
         '  ' + MODULE + 'android/com/dsh/android/p50/' + name + '.java \\\n'
-        for name in ('P50OriginalModuleProbe', 'P50ModuleStream')))
+        for name in ('P50OriginalModuleProbe', 'P50ModuleStream', 'P50OriginalEngineConfig')))
+    builder = once(builder, 'javac --release 8',
+                   'python ' + MODULE + 'patch_config_gate.py "$P74_P47_GATE_SOURCE" "$DIR/configsrc/com/dsh/android/p47/P47LaunchGate.java"\n'
+                   'P74_P47_GATE_SOURCE="$DIR/configsrc/com/dsh/android/p47/P47LaunchGate.java"\n'
+                   'javac --release 8')
     builder = once(builder, '    "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"\nfi\nif test "${P47_NO_HOST_FALLBACK:-0}" = 1;',
                    '    "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" --original-default-config\nfi\nif test "${P47_NO_HOST_FALLBACK:-0}" = 1;')
-    return {ACTIVITY: activity, WORKER: worker, BUILDER: builder}
+    return {ACTIVITY: activity, WORKER: worker, BUILDER: builder, GUARD: guard}
 
 
 def main():
     required = {'GITHUB_ACTIONS': 'true', 'GITHUB_REPOSITORY': REPO,
                 'GITHUB_EVENT_NAME': 'pull_request', 'P51_SIDE_BY_SIDE': '1',
-                'P47_NO_HOST_FALLBACK': '1', 'P49_NODE_STAGE': '1'}
+                'P47_NO_HOST_FALLBACK': '1', 'P49_NODE_STAGE': '1',
+                'P50_FRESH_CONFIG_SIDECAR': '1', 'P181_THREE_ORIGINAL_START_DENY': '1'}
     if any(os.environ.get(key) != value for key, value in required.items()):
         raise RuntimeError('ORIGINAL_MODULE_DISPOSABLE_CI_ONLY')
     event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())

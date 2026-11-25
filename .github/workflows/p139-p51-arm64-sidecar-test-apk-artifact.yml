@@ -1,4 +1,4 @@
-name: P139 P51 ARM64 original-module default-config TEST APK (1-day artifact)
+name: P139 P51 ARM64 original EngineManager fresh-config TEST APK (1-day artifact)
 on:
   pull_request:
     types: [opened, synchronize]
@@ -51,6 +51,8 @@ jobs:
       P47_NO_HOST_FALLBACK: '1'
       P49_NODE_STAGE: '1'
       P51_SIDE_BY_SIDE: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      P50_FRESH_CONFIG_SIDECAR: '1'
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v4
@@ -118,6 +120,7 @@ jobs:
           test -s "$original" && test -s "$apk"
           printf "%s  %s\n" 3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 "$original" | sha256sum -c -
           python3 host_candidate/p51_side_by_side/p51_manifest.py verify "$apk"
+          python3 host_candidate/p50_original_arm64_node/verify_config_dex.py "$original" "$apk" --negative-checks
           bt="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools/35.0.0"
           "$bt/apksigner" verify "$apk"
           "$bt/aapt" dump badging "$apk" | grep -Fq "package: name='com.dsh.p51.isolatedprobe'"
@@ -130,7 +133,7 @@ jobs:
           unzip -p "$apk" classes3.dex | strings | grep -Fq "Lcom/dsh/android/p50/P50OriginalNodeFixedChild;"
           echo P139_SEPARATE_PACKAGE_PERMISSIONLESS_DIFFERENT_SIGNER=PASS
           echo P139_P134_REAL_KERNEL_GUARD_INSIDE_P51_DEX=PASS
-      - name: Compare original default-config with unmodified Node resolver and reject malicious streams
+      - name: Compare both original config modes and reject handoff and module mutations
         shell: bash
         run: |
           set -euo pipefail
@@ -160,7 +163,7 @@ jobs:
           "$bt/apksigner" verify --print-certs "$to" > "$RUNNER_TEMP/p139delivery/TEST-ONLY-SIGNATURE.txt"
           printf 'TEST-ONLY; not v139; not an upgrade to com.dsh.android.\nCommit: %s\n' "$(git rev-parse HEAD)" > "$RUNNER_TEMP/p139delivery/SOURCE.txt"
           echo "P139_ORIGINAL_NODE_ARM64_RUNTIME=NOT_TESTED" >> "$GITHUB_STEP_SUMMARY"
-          echo "P139_REAL_MODULE_RUNCLI_DEFAULT_CONFIG_PHONE_RESULT=PENDING" >> "$GITHUB_STEP_SUMMARY"
+          echo "P139_ORIGINAL_ENGINE_RUN_DUMP_CONFIG_PHONE_RESULT=PENDING" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload single short-lived download ZIP containing test-only APK and checksum
         uses: actions/upload-artifact@v4
         with:
