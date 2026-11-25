@@ -5,8 +5,9 @@ import javax.crypto.Mac;import javax.crypto.spec.SecretKeySpec;
 public final class HttpProtocolNegativeTest {
  static int checks;static void yes(boolean b,String n){checks++;if(!b)throw new AssertionError(n);}
  static byte[] zeros=new byte[32];
+ static Process start(ProcessBuilder builder)throws IOException{builder.environment().clear();return builder.start();}
  static void hostRejects(String node,String peer,String mode,String expected)throws Exception{
-  Process child=new ProcessBuilder(node,"--permission","--allow-fs-read="+peer,peer,mode).start();
+  Process child=start(new ProcessBuilder(node,"--permission","--allow-fs-read="+peer,peer,mode));
   HttpProcessTransport transport=new HttpProcessTransport(child,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",1,0);
   int port=transport.port();Socket held=null;
   try{
@@ -24,7 +25,7 @@ public final class HttpProtocolNegativeTest {
   return ByteBuffer.allocate(53+data.length).put(header).put(signature).put(data).array();
  }
  static void nodeRejects(String node,String fixture,String source,String mode,String expected)throws Exception{
-  Process child=new ProcessBuilder(node,"--permission","--allow-fs-read="+fixture,"--allow-fs-read="+source,fixture,source).start();
+  Process child=start(new ProcessBuilder(node,"--permission","--allow-fs-read="+fixture,"--allow-fs-read="+source,fixture,source));
   try{
    DataOutputStream out=new DataOutputStream(child.getOutputStream());out.writeBytes("DSHHTTP1");out.write(zeros);out.write(zeros);out.writeLong(1);out.writeInt(0);out.writeInt(10000);out.flush();
    DataInputStream in=new DataInputStream(child.getInputStream());byte[] head=new byte[53];in.readFully(head);yes(head[4]==16,"node_original_http_listen");in.readFully(new byte[4]);
@@ -42,7 +43,7 @@ public final class HttpProtocolNegativeTest {
   }finally{child.destroyForcibly();child.waitFor();}
  }
  static void startupExit(String node,String fixture,String source)throws Exception{
-  Process child=new ProcessBuilder(node,"--permission","--allow-fs-read="+fixture,"--allow-fs-read="+source,fixture,source,"early-exit").start();
+  Process child=start(new ProcessBuilder(node,"--permission","--allow-fs-read="+fixture,"--allow-fs-read="+source,fixture,source,"early-exit"));
   HttpProcessTransport process=new HttpProcessTransport(child,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",1,0);
   try{
    yes(process.waitFor(5,TimeUnit.SECONDS),"startup_exit_deadline");yes(process.exitValue()==7,"startup_exit_code_preserved");

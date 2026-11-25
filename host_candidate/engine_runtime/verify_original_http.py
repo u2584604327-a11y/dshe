@@ -6,6 +6,7 @@ import argparse
 import hashlib
 from pathlib import Path
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -23,12 +24,13 @@ def require(value, code):
         raise RuntimeError(code)
 
 
-def reference(apk, destination):
+def reference(apk, destination, wire):
     with apk.open('rb') as source:
         require(hashlib.file_digest(source, 'sha256').hexdigest() == APK_SHA, 'ORIGINAL_APK_SHA')
     tree = hashlib.sha256(b'P54_IMMUTABLE_ENGINE_TREE_V1\0')
     names = set()
     total = addons = 0
+    wire.write(b'DSHMOD02')
     with zipfile.ZipFile(apk) as archive:
         with tarfile.open(fileobj=archive.open('assets/engine.bin'), mode='r|gz') as tar:
             for member in tar:
@@ -42,7 +44,9 @@ def reference(apk, destination):
                 directory = member.isdir()
                 require(not directory or member.size == 0, 'ORIGINAL_DIRECTORY_SIZE')
                 encoded = name.encode('utf-8')
-                tree.update(struct.pack('>I', len(encoded)) + encoded + bytes([directory]) + struct.pack('>Q', member.size))
+                metadata=struct.pack('>I',len(encoded))+encoded+bytes([directory])+struct.pack('>Q',member.size)
+                tree.update(metadata)
+                wire.write(metadata)
                 digest = hashlib.sha256()
                 target = destination / name
                 require(target.resolve().is_relative_to(destination.resolve()), 'ORIGINAL_EXTRACTION_PATH')
@@ -57,12 +61,14 @@ def reference(apk, destination):
                             require(copied <= member.size, 'ORIGINAL_FILE_OVERRUN')
                             digest.update(block)
                             out.write(block)
+                            wire.write(block)
                         require(copied == member.size, 'ORIGINAL_FILE_LENGTH')
                     total += member.size
                     addons += name.endswith('.node')
                 tree.update(digest.digest())
     require(len(names) == 30411 and total == 262498938 and addons == 9 and
             tree.hexdigest() == TREE_SHA, 'ORIGINAL_COMPLETE_CLOSURE_SHA')
+    wire.write(bytes(4));wire.flush()
     print('HTTP_TEST_ORIGINAL_COMPLETE_RESOURCE_CLOSURE=PASS members=30411 bytes=262498938')
 
 
@@ -84,15 +90,35 @@ def main():
         work = Path(folder)
         original = work / 'original'
         original.mkdir()
-        reference(args.apk.resolve(), original)
+        module_stream=work/'original.modules'
+        with module_stream.open('wb') as stream:reference(args.apk.resolve(),original,stream)
         classes = work / 'classes'
         home = work / 'fresh-home'
         home.mkdir(mode=0o700)
         sources = list((ROOT / 'src').rglob('*.java')) + list((ROOT / 'test').rglob('*.java'))
         subprocess.run(['javac', '--release', '8', '-d', str(classes), *map(str, sources)], check=True)
-        subprocess.run(['java', '-cp', str(classes), 'com.dsh.android.engine.HttpProcessTransportTest', node,
+        ordinary = subprocess.run(['java', '-cp', str(classes), 'com.dsh.android.engine.HttpProcessTransportTest', node,
                         str(ROOT / 'test/original_http_services.mjs'), str(original),
-                        str(ROOT / 'http_transport.mjs'), str(home)], check=True, timeout=90)
+                        str(ROOT / 'http_transport.mjs'), str(home)], check=True, timeout=90, capture_output=True, text=True)
+        print(ordinary.stdout, end='')
+        matches=re.findall(r'^ORIGINAL_RENDERED_FRONTEND_SHA256=([a-f0-9]{64})$',ordinary.stdout,re.M)
+        require(len(matches)==1,'INDEPENDENT_ORIGINAL_FRONTEND_SHA')
+        require(not Path('/dsh-runtime').exists() and not Path('/dsh-home').exists(),'VIRTUAL_NAMESPACE_HAS_NATIVE_FILES')
+        from build_http_bootstrap import build
+        bootstrap=work/'sealed-original-http.mjs'
+        bootstrap.write_bytes(build())
+        command=['java','-cp',str(classes),'com.dsh.android.engine.ClosedResourceHttpTest',node,str(bootstrap)]
+        subprocess.run(command+[str(module_stream),matches[0]],check=True,timeout=90)
+        negative=work/'negative.modules'
+        for kind,code in [('LEGACY','E_DSH_MODULE_STREAM_VERSION'),('HASH','E_DSH_MODULE_TREE_SEAL'),('CONTINUATION','E_DSH_IPC_HELLO')]:
+            shutil.copyfile(module_stream,negative)
+            with negative.open('r+b') as changed:
+                if kind=='LEGACY':changed.write(b'DSHMOD01')
+                elif kind=='CONTINUATION':changed.seek(0,os.SEEK_END);changed.write(bytes(88))
+                else:
+                    changed.seek(-5,os.SEEK_END);value=changed.read(1);changed.seek(-1,os.SEEK_CUR);changed.write(bytes([value[0]^1]))
+            subprocess.run(command+[str(negative),matches[0],code],check=True,timeout=60)
+
         subprocess.run(['java', '-cp', str(classes), 'com.dsh.android.engine.HttpProtocolNegativeTest', node,
                         str(ROOT / 'test/malformed_peer.mjs'), str(ROOT / 'test/malformed_host.mjs'),
                         str(ROOT / 'http_transport.mjs')], check=True, timeout=60)

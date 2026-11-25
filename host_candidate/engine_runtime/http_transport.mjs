@@ -36,14 +36,18 @@ class Source {
  */
 export async function installHttpTransport({input = process.stdin, output = process.stdout} = {}) {
   const source = new Source(input);
-  const hello = await source.take(88);
-  if (hello.subarray(0, 8).toString('ascii') !== 'DSHHTTP1') throw error('E_DSH_IPC_HELLO');
+  let hello;
+  try { hello = await source.take(88); }
+  catch (cause) { input.destroy(); throw cause; }
+  if (hello.subarray(0, 8).toString('ascii') !== 'DSHHTTP1') {
+    hello.fill(0); input.destroy(); throw error('E_DSH_IPC_HELLO');
+  }
   const key = Buffer.from(hello.subarray(8, 40)), session = Buffer.from(hello.subarray(40, 72));
   const epoch = Buffer.from(hello.subarray(72, 80));
   const requestedPort = hello.readUInt32BE(80), port = hello.readUInt32BE(84);
   if (epoch.readBigUInt64BE() === 0n || epoch.readBigUInt64BE() > 0x7fffffffffffffffn ||
       requestedPort > 65535 || port < 1 || port > 65535 || (requestedPort !== 0 && requestedPort !== port)) {
-    throw error('E_DSH_IPC_LISTENER');
+    key.fill(0);hello.fill(0);input.destroy();throw error('E_DSH_IPC_LISTENER');
   }
   hello.fill(0); // retain only the independent key/session/epoch copies
   let sending = 0n, received = 0n, pending = 0, lastId = 0;

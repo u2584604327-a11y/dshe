@@ -13,6 +13,7 @@ import java.util.concurrent.*;
 public final class HttpProcessTransportTest {
   private static String node,fixture,reference,transport,home;
   private static int checks;
+  private static String renderedSha;
   private static void yes(boolean v,String label){checks++;if(!v)throw new AssertionError(label);}
   private static String sha(byte[] bytes)throws Exception{
     StringBuilder s=new StringBuilder();for(byte b:MessageDigest.getInstance("SHA-256").digest(bytes))s.append(String.format(Locale.ROOT,"%02x",b&255));return s.toString();
@@ -99,7 +100,7 @@ public final class HttpProcessTransportTest {
       yes(active.get("/api/transport-sse",null).status==401,"unauthenticated_api_rejected");
       yes(request(active.port,"/api/transport-sse",null,"evil.invalid",null).status==403,"host_fence_preserved");
       active.login();
-      Response frontend=active.get("/",active.cookie);yes(frontend.status==200&&sha(frontend.body).equals(active.indexSha),"actual_original_frontend_bytes");
+      Response frontend=active.get("/",active.cookie);renderedSha=sha(frontend.body);yes(frontend.status==200&&sha(frontend.body).equals(active.indexSha),"actual_original_frontend_bytes");
       String html=new String(frontend.body,StandardCharsets.UTF_8);
       java.util.regex.Matcher script=java.util.regex.Pattern.compile("src=\"([.]/assets/[^\"]+[.]js)\"").matcher(html);
       yes(script.find(),"real_frontend_script");String asset=script.group(1).substring(1);
@@ -145,6 +146,7 @@ public final class HttpProcessTransportTest {
     }
     yes(MessageDigest.isEqual(originalCredentialFile,Files.readAllBytes(Paths.get(home,".credentials.yaml"))),"existing_credential_file_byte_preserved");
     System.out.println("ORIGINAL_HTTP_FRONTEND_AUTH_STREAM_SSE_AND_GENERATION_REVOCATION=PASS checks="+checks);
+    System.out.println("ORIGINAL_RENDERED_FRONTEND_SHA256="+renderedSha);
     System.out.println("ANDROID_ARM64_MAIN_PROFILE_AND_ENGINE_READY=NOT_ATTESTED");
   }
 }

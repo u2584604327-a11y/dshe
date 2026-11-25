@@ -132,3 +132,28 @@ roots. No permission was broadened. The isolated production bootstrap must
 route these lookups through the sealed resource namespace, then support the
 required profile/file operations with owner-scoped durability. This full-main
 probe is not substituted for the successful real-service component checks.
+
+## Closed-resource service bootstrap
+
+`build_http_bootstrap.py` composes the SHA-pinned existing P50 module core with
+these HTTP/session adapters and a fixed five-service entry. The original
+config bootstrap is left byte-identical. Only the composed receiver changes
+its magic to `DSHMOD02` and replaces the final EOF check with a subsequent
+transport preface; the original whole-tree seal still happens before any
+original import. Legacy config wire and altered resource content reject.
+
+The additional integration test delivers the complete original resource tree
+through stdin, imports **193 actual original modules**, exchanges the real
+Connection token and serves the original frontend. Its rendered HTML SHA must
+match the independent original filesystem/resolver service run. Node gets no
+native read permission for the extracted modules or a real profile and no
+filesystem-write or network permission. The two permitted virtual read prefixes
+(`/dsh-runtime`, `/dsh-home`) must not exist on the host; they only satisfy Node's
+internal CJS permission checks for sources supplied by the sealed hooks.
+
+This composition validates original services, not `runCli()` main-profile
+startup. Its fresh credential namespace is intentionally empty. It is not an
+existing-user configuration broker or durable storage implementation. Before
+Android use, a verified worker must pin the composed bootstrap's exact bytes
+and original ELF closure, authenticate child creation, then transfer the owned
+pipes/receipt to this host adapter. That production registration remains absent.
