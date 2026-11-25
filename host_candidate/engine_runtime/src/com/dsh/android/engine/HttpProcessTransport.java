@@ -1,0 +1,289 @@
+package com.dsh.android.engine;
+
+import java.io.*;
+import java.net.*;
+import java.nio.ByteBuffer;
+import java.security.*;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+/** Host-owned loopback listener and bounded stdio transport for one already
+ * authenticated isolated Process. No launcher, destination URL, arbitrary
+ * forwarding, production authorization or READY assertion. Package-private
+ * construction until the production launch lease and owner are installed.
+ */
+final class HttpProcessTransport extends Process implements Closeable {
+  static final int CHUNK=16384, WINDOW=65536, MAX_CONNECTIONS=16;
+  static final int OPEN=1, DATA=2, END=3, CLOSE=4, ACK=5,
+      APP_DATA=6, APP_END=7, LOG_ACK=8, SHUTDOWN=9, LOG_CLOSE=10;
+  static final int LISTEN=16, RESPONSE=17, RESPONSE_END=18, RESPONSE_CLOSE=19,
+      REQUEST_ACK=20, LOG=21, STOP=22, APP_ACK=24;
+  private final Process child;
+  private final ServerSocket listener=new ServerSocket();
+  private final byte[] key=new byte[32],session,epochBytes;
+  private final DataInputStream input;
+  private final DataOutputStream output;
+  private final int requestedPort;
+  private final boolean mergedError;
+  private final Object appInputLock=new Object();
+  private final AtomicBoolean closed=new AtomicBoolean(),accepting=new AtomicBoolean();
+  private final AtomicBoolean stdinOpen=new AtomicBoolean(true);
+  private final AtomicInteger allocated=new AtomicInteger();
+  private final ConcurrentHashMap<Integer,Peer> peers=new ConcurrentHashMap<>();
+  private final ArrayBlockingQueue<Frame> writes=new ArrayBlockingQueue<>(256);
+  private final Credit appCredit=new Credit();
+  private final LogSink[] logs={new LogSink(0),new LogSink(1)};
+  private final ScheduledExecutorService deadlines=Executors.newSingleThreadScheduledExecutor(daemonFactory("dsh-http-deadline"));
+  private final CountDownLatch listened=new CountDownLatch(1),nativeErrorDone=new CountDownLatch(1);
+  private long sending,received;
+  private volatile String failure="NONE",peerFault="NONE";
+  private volatile boolean listenSeen;
+  private final AtomicBoolean stopping=new AtomicBoolean();
+  private static final class Frame {
+    final int type,id;final byte[] data;
+    Frame(int type,int id,byte[] data){this.type=type;this.id=id;this.data=data;}
+  }
+  private static ThreadFactory daemonFactory(String name){return task->{Thread t=new Thread(task,name);t.setDaemon(true);return t;};}
+  private static void thread(String name,Runnable task){daemonFactory(name).newThread(task).start();}
+  private static byte[] integer(int value){return ByteBuffer.allocate(4).putInt(value).array();}
+  private static int integer(byte[] data)throws IOException{
+    if(data.length!=4)throw new IOException("INVALID_CREDIT");return ByteBuffer.wrap(data).getInt();
+  }
+  HttpProcessTransport(Process authenticatedChild,String hostSession,long ownerEpoch,int requestedPort)throws IOException{
+    this(authenticatedChild,hostSession,ownerEpoch,requestedPort,false);
+  }
+  HttpProcessTransport(Process authenticatedChild,String hostSession,long ownerEpoch,int requestedPort,boolean mergedError)throws IOException{
+    if(authenticatedChild==null||!authenticatedChild.isAlive()||hostSession==null||
+       !hostSession.matches("[0-9a-f]{64}")||ownerEpoch<=0||requestedPort<0||requestedPort>65535)
+      throw new IOException("AUTHENTICATED_RUNTIME_REQUIRED");
+    child=authenticatedChild;this.requestedPort=requestedPort;this.mergedError=mergedError;
+    session=new byte[32];for(int i=0;i<32;i++)session[i]=(byte)Integer.parseInt(hostSession.substring(i*2,i*2+2),16);
+    epochBytes=ByteBuffer.allocate(8).putLong(ownerEpoch).array();
+    new SecureRandom().nextBytes(key);
+    input=new DataInputStream(child.getInputStream());output=new DataOutputStream(child.getOutputStream());
+    try{
+      // Honor the original launch plan. Port 0 asks the kernel; no hardcoded
+      // historical 3080 or fallback to a wildcard/remote listener.
+      listener.setReuseAddress(true);
+      listener.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[]{127,0,0,1}),requestedPort),16);
+      output.writeBytes("DSHHTTP1");output.write(key);output.write(session);output.write(epochBytes);
+      output.writeInt(requestedPort);output.writeInt(listener.getLocalPort());output.flush();
+      thread("dsh-app-stdout",()->logs[0].run());if(!mergedError)thread("dsh-app-stderr",()->logs[1].run());
+      thread("dsh-http-frame-writer",this::writeFrames);
+      thread("dsh-http-frame-reader",this::readFrames);
+      thread("dsh-http-child-stderr",()->{
+        try(InputStream err=child.getErrorStream()){
+          // Unframed native diagnostics are not application output or authority.
+          // Drain a bounded amount to avoid a startup deadlock, then revoke.
+          byte[] block=new byte[4096];int total=0,n;ByteArrayOutputStream diagnostic=new ByteArrayOutputStream();
+          while((n=err.read(block))!=-1){total+=n;if(total>65536)throw new IOException("NATIVE_STDERR_BOUND");diagnostic.write(block,0,n);log(1).accept(Arrays.copyOf(block,n),1,false);
+            String text=diagnostic.toString("US-ASCII");for(String line:text.split("\n"))if(line.matches("DSH_RUNTIME_TRANSPORT_DENY=[A-Z0-9_]{1,64}"))peerFault=line.substring(27);}
+        }catch(IOException bad){if(!closed.get()&&!log(1).discarded.get())fail("NATIVE_STDERR");}
+        finally{nativeErrorDone.countDown();}
+      });
+      thread("dsh-http-process-exit",()->{try{child.waitFor();stopListener();}catch(InterruptedException e){Thread.currentThread().interrupt();fail("WAIT_INTERRUPTED");}});
+      deadlines.schedule(()->{if(!listenSeen)fail("LISTEN_DEADLINE");},90,TimeUnit.SECONDS);
+      deadlines.scheduleWithFixedDelay(()->{
+        long now=System.nanoTime();for(Peer peer:peers.values())if(peer.writeStarted>0&&now-peer.writeStarted>TimeUnit.SECONDS.toNanos(60))peer.close(true);
+      },1,1,TimeUnit.SECONDS);
+    }catch(IOException|RuntimeException error){close();throw error;}
+  }
+  int port(){return listener.getLocalPort();}
+  String failure(){return failure+"/"+peerFault;}
+  boolean awaitListening(long timeout,TimeUnit unit)throws InterruptedException{return listened.await(timeout,unit)&&accepting.get()&&!closed.get();}
+  private byte[] mac(byte direction,byte[] header,byte[] data)throws GeneralSecurityException{
+    Mac mac=Mac.getInstance("HmacSHA256");mac.init(new SecretKeySpec(key,"HmacSHA256"));
+    mac.update(direction);mac.update(session);mac.update(epochBytes);mac.update(header);return mac.doFinal(data);
+  }
+  private void send(int type,int id,byte[] data)throws IOException{
+    if(closed.get()||data.length>CHUNK||!writes.offer(new Frame(type,id,data)))throw new IOException("TRANSPORT_CLOSED_OR_BOUND");
+  }
+  private void sendOrFail(int type,int id,byte[] data){try{send(type,id,data);}catch(IOException e){fail("WRITE_QUEUE");}}
+  private void writeFrames(){
+    try{
+      while(!closed.get()){
+        Frame frame=writes.poll(1,TimeUnit.SECONDS);if(frame==null)continue;
+        if(sending==Long.MAX_VALUE)throw new IOException("SEQUENCE_EXHAUSTED");
+        byte[] header=ByteBuffer.allocate(21).putInt(0x44484631).put((byte)frame.type).putLong(++sending).putInt(frame.id).putInt(frame.data.length).array();
+        output.write(header);output.write(mac((byte)'H',header,frame.data));output.write(frame.data);output.flush();
+      }
+    }catch(Exception error){if(!closed.get())fail("WRITE_TRANSPORT");}
+  }
+  private void readFrames(){
+    try{
+      while(!closed.get()){
+        byte[] header=new byte[21],signature=new byte[32];input.readFully(header);input.readFully(signature);
+        ByteBuffer fields=ByteBuffer.wrap(header);
+        if(fields.getInt()!=0x44484631)throw new IOException("FRAME_MAGIC");
+        int type=fields.get()&255;long seq=fields.getLong();int id=fields.getInt(),length=fields.getInt();
+        if(seq<=0||seq!=received+1||received==Long.MAX_VALUE||id<0||length<0||length>CHUNK)throw new IOException("FRAME_SHAPE");
+        byte[] data=new byte[length];input.readFully(data);
+        if(!MessageDigest.isEqual(signature,mac((byte)'N',header,data)))throw new IOException("FRAME_AUTH");
+        received=seq;
+        if(type==LISTEN){
+          if(id!=0||length!=4||integer(data)!=port()||listenSeen||stopping.get()||!accepting.compareAndSet(false,true))throw new IOException("LISTEN_REPLAY");
+          listenSeen=true;listened.countDown();thread("dsh-http-accept",this::accept);continue;
+        }
+        if(type==LOG){if(id>1||length==0)throw new IOException("LOG_SHAPE");log(id).accept(data,id,true);continue;}
+        if(type==APP_ACK){if(id!=0)throw new IOException("STDIN_CREDIT_ID");credit(appCredit,data);continue;}
+        if(type==STOP){if(id!=0||length!=0||!listenSeen)throw new IOException("STOP_SHAPE");stopListener();continue;}
+        if(type!=RESPONSE&&type!=RESPONSE_END&&type!=RESPONSE_CLOSE&&type!=REQUEST_ACK)throw new IOException("FRAME_TYPE");
+        if(!listenSeen||id==0||id>allocated.get())throw new IOException("CONNECTION_ID");
+        Peer peer=peers.get(id);if(peer==null)continue; // late traffic for a closed, never-reused id
+        if(type==RESPONSE)peer.receive(data);
+        else if(type==REQUEST_ACK)credit(peer.credit,data);
+        else {if(length!=0)throw new IOException("TERMINAL_PAYLOAD");if(type==RESPONSE_END)peer.end();else if(!peer.ending)peer.close(false);}
+      }
+    }catch(EOFException ended){
+      try{if(child.waitFor(2,TimeUnit.SECONDS)){nativeErrorDone.await(2,TimeUnit.SECONDS);close();}else fail("PREMATURE_EOF");}
+      catch(InterruptedException interrupted){Thread.currentThread().interrupt();fail("WAIT_INTERRUPTED");}
+    }catch(Exception error){if(!closed.get())fail(error instanceof IOException&&error.getMessage()!=null&&error.getMessage().matches("[A-Z_]{1,64}")?error.getMessage():"READ_PROTOCOL");}
+  }
+  /** Count only bytes actually submitted, not a reservation for a blocked
+   * socket read. A compromised peer cannot manufacture credit for unsent data. */
+  private static final class Credit {
+    int available=WINDOW,outstanding;boolean revoked;
+    synchronized void reserve(int n)throws IOException,InterruptedException{
+      while(!revoked&&available<n)wait();if(revoked)throw new IOException("CREDIT_REVOKED");available-=n;
+    }
+    synchronized void submitted(int reservation,int bytes)throws IOException{
+      if(bytes<0||bytes>reservation||outstanding>WINDOW-bytes)throw new IOException("CREDIT_ACCOUNTING");
+      available+=reservation-bytes;outstanding+=bytes;notifyAll();
+    }
+    synchronized void acknowledge(int n)throws IOException{
+      if(n<=0||n>outstanding)throw new IOException("CREDIT_OVERFLOW");outstanding-=n;available+=n;notifyAll();
+    }
+    synchronized void revoke(){revoked=true;notifyAll();}
+  }
+  private static void credit(Credit credit,byte[] data)throws IOException{credit.acknowledge(integer(data));}
+  private void accept(){
+    try{
+      while(!closed.get()){
+        Socket socket=listener.accept();
+        if(!socket.getInetAddress().isLoopbackAddress()||peers.size()>=MAX_CONNECTIONS){socket.close();continue;}
+        socket.setTcpNoDelay(true);socket.setSoTimeout(0); // Original HTTP header/request timers own idle/SSE policy.
+        int id=allocated.incrementAndGet();if(id<=0){socket.close();throw new IOException("ID_EXHAUSTED");}
+        Peer peer=new Peer(id,socket);peers.put(id,peer);
+        byte[] address=socket.getInetAddress().getAddress();
+        if(address.length!=4){peer.close(false);throw new IOException("PEER_FAMILY");}
+        send(OPEN,id,ByteBuffer.allocate(8).put(address).putInt(socket.getPort()).array());peer.start();
+      }
+    }catch(IOException error){if(!closed.get()&&accepting.get())fail("ACCEPT");}
+  }
+  private final class Peer {
+    final int id;final Socket socket;final Credit credit=new Credit();
+    final ArrayBlockingQueue<byte[]> pending=new ArrayBlockingQueue<>(16);
+    final AtomicBoolean done=new AtomicBoolean();
+    volatile long progress=System.nanoTime(),writeStarted;
+    int buffered;boolean ending;
+    Peer(int id,Socket socket){this.id=id;this.socket=socket;}
+    synchronized void receive(byte[] data)throws IOException{
+      if(ending||data.length==0||data.length>WINDOW-buffered||!pending.offer(data))throw new IOException("RESPONSE_BOUND");buffered+=data.length;
+    }
+    synchronized void end()throws IOException{
+      if(ending||!pending.offer(new byte[0]))throw new IOException("RESPONSE_END");ending=true;
+    }
+    void start(){thread("dsh-http-request",()->{
+      try{InputStream in=socket.getInputStream();while(!done.get()){
+        credit.reserve(CHUNK);if(done.get())break;
+        byte[] block=new byte[CHUNK];int n=in.read(block);
+        credit.submitted(CHUNK,Math.max(0,n));
+        if(n==-1){send(END,id,new byte[0]);break;}
+        if(n>0){progress=System.nanoTime();send(DATA,id,Arrays.copyOf(block,n));}
+      }}catch(Exception error){close(true);}
+    });thread("dsh-http-response",()->{
+      try{OutputStream out=socket.getOutputStream();while(!done.get()){
+        byte[] block=pending.poll(1,TimeUnit.SECONDS);if(block==null)continue;
+        if(block.length==0){socket.shutdownOutput();close(false);break;}
+        writeStarted=System.nanoTime();out.write(block);out.flush();progress=System.nanoTime();writeStarted=0;
+        synchronized(this){buffered-=block.length;}send(ACK,id,integer(block.length));
+      }}catch(Exception error){close(true);}
+    });}
+    void close(boolean notify){
+      if(!done.compareAndSet(false,true))return;peers.remove(id,this);pending.clear();credit.revoke();
+      try{socket.close();}catch(IOException ignored){}
+      if(notify&&!closed.get())sendOrFail(CLOSE,id,new byte[0]);
+    }
+  }
+  private LogSink log(int channel){return logs[mergedError?0:channel];}
+  private static final class LogPart {
+    final byte[] data;final int channel;final boolean credit;
+    LogPart(byte[] data,int channel,boolean credit){this.data=data;this.channel=channel;this.credit=credit;}
+  }
+  private final class LogSink {
+    final int channel;final AtomicBoolean discarded=new AtomicBoolean();
+    final PipedInputStream reader=new PipedInputStream(WINDOW){
+      @Override public void close()throws IOException{
+        super.close();if(!discarded.compareAndSet(false,true))return;
+        synchronized(LogSink.this){pending.clear();buffered=0;}
+        if(!HttpProcessTransport.this.closed.get()){
+          sendOrFail(LOG_CLOSE,channel,new byte[0]);
+          if(mergedError&&channel==0)sendOrFail(LOG_CLOSE,1,new byte[0]);
+          if(channel==1||mergedError)child.getErrorStream().close();
+        }
+      }
+    };
+    final PipedOutputStream writer;
+    final ArrayBlockingQueue<LogPart> pending=new ArrayBlockingQueue<>(16);
+    int buffered;
+    LogSink(int channel){this.channel=channel;try{writer=new PipedOutputStream(reader);}catch(IOException error){throw new IllegalStateException(error);}}
+    synchronized void accept(byte[] data,int channel,boolean credit)throws IOException{
+      if(discarded.get())return;
+      if(data.length>(mergedError?2*WINDOW:WINDOW)-buffered||!pending.offer(new LogPart(data,channel,credit)))throw new IOException("LOG_BOUND");buffered+=data.length;
+    }
+    void run(){
+      try{while(true){LogPart part=pending.poll(1,TimeUnit.SECONDS);if(part==null){if(closed.get()&&nativeErrorDone.getCount()==0)break;continue;}
+        writer.write(part.data);writer.flush();synchronized(this){if(!discarded.get())buffered-=part.data.length;}
+        if(part.credit&&!closed.get()&&!discarded.get())send(LOG_ACK,part.channel,integer(part.data.length));
+      }}catch(Exception bad){if(!closed.get()&&!discarded.get())fail("LOG_CONSUMER");}
+      finally{try{writer.close();}catch(IOException ignored){}}
+    }
+  }
+  private final OutputStream applicationInput=new OutputStream(){
+    @Override public void write(int value)throws IOException{write(new byte[]{(byte)value});}
+    @Override public synchronized void write(byte[] data,int offset,int length)throws IOException{
+      if(data==null)throw new NullPointerException();if(offset<0||length<0||offset>data.length-length)throw new IndexOutOfBoundsException();
+      while(length>0){if(closed.get()||!stdinOpen.get())throw new IOException("STDIN_CLOSED");int n=Math.min(CHUNK,length);
+        try{appCredit.reserve(n);}catch(InterruptedException e){Thread.currentThread().interrupt();throw new InterruptedIOException("STDIN_INTERRUPTED");}
+        synchronized(appInputLock){
+          if(closed.get()||!stdinOpen.get())throw new IOException("STDIN_CLOSED");
+          appCredit.submitted(n,n);send(APP_DATA,0,Arrays.copyOfRange(data,offset,offset+n));
+        }offset+=n;length-=n;
+      }
+    }
+    @Override public void close()throws IOException{synchronized(appInputLock){if(stdinOpen.compareAndSet(true,false)&&!closed.get()){appCredit.revoke();send(APP_END,0,new byte[0]);}}}
+  };
+  private void stopListener(){
+    accepting.set(false);try{listener.close();}catch(IOException ignored){}
+    for(Peer peer:peers.values())peer.close(false);
+  }
+  private void fail(String category){failure=category;close();}
+  @Override public void close(){
+    if(!closed.compareAndSet(false,true))return;accepting.set(false);listened.countDown();stdinOpen.set(false);appCredit.revoke();
+    deadlines.shutdownNow();try{listener.close();}catch(IOException ignored){}
+    for(Peer peer:peers.values())peer.close(false);writes.clear();
+    // Closing the authenticated Process owns cancellation of blocked native I/O.
+    if(child.isAlive())child.destroyForcibly();
+    try{child.getOutputStream().close();}catch(IOException ignored){}
+    try{input.close();}catch(IOException ignored){}
+    Arrays.fill(key,(byte)0);
+  }
+  @Override public OutputStream getOutputStream(){return applicationInput;}
+  @Override public InputStream getInputStream(){return logs[0].reader;}
+  @Override public InputStream getErrorStream(){return mergedError?new ByteArrayInputStream(new byte[0]):logs[1].reader;}
+  @Override public int waitFor()throws InterruptedException{return child.waitFor();}
+  @Override public boolean waitFor(long timeout,TimeUnit unit)throws InterruptedException{return child.waitFor(timeout,unit);}
+  @Override public int exitValue(){return child.exitValue();}
+  @Override public boolean isAlive(){return child.isAlive();}
+  @Override public void destroy(){
+    if(closed.get()||!stopping.compareAndSet(false,true))return;
+    stopListener();stdinOpen.set(false);appCredit.revoke();
+    sendOrFail(SHUTDOWN,0,new byte[0]);
+    try{deadlines.schedule(()->{if(child.isAlive())close();},5,TimeUnit.SECONDS);}
+    catch(RejectedExecutionException ended){if(child.isAlive())close();}
+  }
+  @Override public Process destroyForcibly(){close();return this;}
+}

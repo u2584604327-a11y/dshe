@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""Real original HTTP/auth/frontend over a host listener and Process pipes.
+Host validation only. Never installs an APK or claims Android/full DSH READY.
+"""
+import argparse
+import hashlib
+from pathlib import Path
+import os
+import shutil
+import struct
+import subprocess
+import tarfile
+import tempfile
+import zipfile
+
+ROOT = Path(__file__).resolve().parent
+APK_SHA = '3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5'
+TREE_SHA = 'b2c7e52890351c4d1a3200c67ccb9be6154389a20da0b0b590d16676ce47b1e1'
+
+
+def require(value, code):
+    if not value:
+        raise RuntimeError(code)
+
+
+def reference(apk, destination):
+    with apk.open('rb') as source:
+        require(hashlib.file_digest(source, 'sha256').hexdigest() == APK_SHA, 'ORIGINAL_APK_SHA')
+    tree = hashlib.sha256(b'P54_IMMUTABLE_ENGINE_TREE_V1\0')
+    names = set()
+    total = addons = 0
+    with zipfile.ZipFile(apk) as archive:
+        with tarfile.open(fileobj=archive.open('assets/engine.bin'), mode='r|gz') as tar:
+            for member in tar:
+                name = member.name.rstrip('/')
+                require(name and not any(x in ('', '.', '..') for x in name.split('/')) and
+                        '\\' not in name and not any(ord(x) < 32 or ord(x) == 127 for x in name) and
+                        name not in names and member.type in (b'0', b'\0', b'5') and
+                        0 <= member.size <= 128 * 1024 * 1024, 'ORIGINAL_MEMBER_TYPE_PATH_BOUND')
+                names.add(name)
+                require(len(names) <= 30411, 'ORIGINAL_MEMBER_COUNT')
+                directory = member.isdir()
+                require(not directory or member.size == 0, 'ORIGINAL_DIRECTORY_SIZE')
+                encoded = name.encode('utf-8')
+                tree.update(struct.pack('>I', len(encoded)) + encoded + bytes([directory]) + struct.pack('>Q', member.size))
+                digest = hashlib.sha256()
+                target = destination / name
+                require(target.resolve().is_relative_to(destination.resolve()), 'ORIGINAL_EXTRACTION_PATH')
+                if directory:
+                    target.mkdir(parents=True, exist_ok=True)
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with tar.extractfile(member) as source, target.open('xb') as out:
+                        copied = 0
+                        while block := source.read(65536):
+                            copied += len(block)
+                            require(copied <= member.size, 'ORIGINAL_FILE_OVERRUN')
+                            digest.update(block)
+                            out.write(block)
+                        require(copied == member.size, 'ORIGINAL_FILE_LENGTH')
+                    total += member.size
+                    addons += name.endswith('.node')
+                tree.update(digest.digest())
+    require(len(names) == 30411 and total == 262498938 and addons == 9 and
+            tree.hexdigest() == TREE_SHA, 'ORIGINAL_COMPLETE_CLOSURE_SHA')
+    print('HTTP_TEST_ORIGINAL_COMPLETE_RESOURCE_CLOSURE=PASS members=30411 bytes=262498938')
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--apk', type=Path, required=True)
+    parser.add_argument('--node', type=Path, required=True)
+    args = parser.parse_args()
+    node = str(args.node.resolve())
+    require(subprocess.check_output([node, '--version'], text=True).strip() == 'v26.4.0', 'EXACT_NODE_VERSION')
+    # This child has no network permission. The control must fail at a real
+    # native bind, before the IPC adapter can legitimately serve HTTP.
+    denied = subprocess.run([node, '--permission', '--eval',
+                             "require('node:net').createServer().listen(0,'127.0.0.1')"],
+                            capture_output=True, timeout=10)
+    require(denied.returncode != 0 and b'ERR_ACCESS_DENIED' in denied.stderr, 'NATIVE_NODE_LISTEN_NOT_DENIED')
+    print('HTTP_TEST_NATIVE_NODE_TCP_BIND=DENY_PERMISSION')
+    with tempfile.TemporaryDirectory(prefix='dsh-original-http-') as folder:
+        work = Path(folder)
+        original = work / 'original'
+        original.mkdir()
+        reference(args.apk.resolve(), original)
+        classes = work / 'classes'
+        home = work / 'fresh-home'
+        home.mkdir(mode=0o700)
+        sources = list((ROOT / 'src').rglob('*.java')) + list((ROOT / 'test').rglob('*.java'))
+        subprocess.run(['javac', '--release', '8', '-d', str(classes), *map(str, sources)], check=True)
+        subprocess.run(['java', '-cp', str(classes), 'com.dsh.android.engine.HttpProcessTransportTest', node,
+                        str(ROOT / 'test/original_http_services.mjs'), str(original),
+                        str(ROOT / 'http_transport.mjs'), str(home)], check=True, timeout=90)
+        subprocess.run(['java', '-cp', str(classes), 'com.dsh.android.engine.HttpProtocolNegativeTest', node,
+                        str(ROOT / 'test/malformed_peer.mjs'), str(ROOT / 'test/malformed_host.mjs'),
+                        str(ROOT / 'http_transport.mjs')], check=True, timeout=60)
+    print('HTTP_TRANSPORT_ANDROID_BINDER_ARM64_MAIN_PROFILE=NOT_TESTED')
+    print('DSH_PRODUCTION_ENGINE_HTTP_READY=NOT_ATTESTED')
+
+
+if __name__ == '__main__':
+    main()

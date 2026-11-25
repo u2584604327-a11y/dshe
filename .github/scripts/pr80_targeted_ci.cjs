@@ -65,7 +65,9 @@ module.exports = async function select({github, context, core}) {
     {...repo, event: 'pull_request', head_sha: pr.head.sha, per_page: 100});
   let cancelled = 0;
   for (const run of runs) {
-    if (run.id === context.runId || run.head_sha !== pr.head.sha || run.head_branch !== branch ||
+    if (!Array.isArray(run.pull_requests) || run.pull_requests.length !== 1 ||
+        run.pull_requests[0].number !== 80 ||
+        run.id === context.runId || run.head_sha !== pr.head.sha || run.head_branch !== branch ||
         run.event !== 'pull_request' || !['queued', 'in_progress', 'pending', 'waiting', 'requested'].includes(run.status) ||
         !/^\.github\/workflows\/[a-zA-Z0-9_.-]+\.ya?ml$/.test(run.path)) continue;
     const name = run.path.split('/').at(-1);
@@ -85,4 +87,12 @@ module.exports = async function select({github, context, core}) {
   }
   await core.summary.addRaw('PR #80 targeted CI: cancelled ' + cancelled +
     ' unrelated repetitions. Cancelled checks are NOT_TESTED, never PASS.\n').write();
+  // New runtime transport is not compiled into the P51 config APK. Reuse the
+  // already device-accepted artifact unless an APK/CI input also changed.
+  // Unknown changes retain the build; cancellation/skip never means PASS.
+  const onlyTransport = changed.length > 0 && changed.every(file =>
+    file.startsWith('host_candidate/engine_runtime/') ||
+    file === '.github/workflows/engine-runtime-http.yml' ||
+    file === '.github/workflows/p37-remote-process-contract.yml');
+  return {artifactNeeded: !onlyTransport};
 };
