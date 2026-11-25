@@ -312,6 +312,6 @@ public final class P50OriginalNodeFixedChild {
       throw new SecurityException("P50_BOOTSTRAP_HASH_MISMATCH");
     return new String(bytes,StandardCharsets.UTF_8);
   }
-  private static final String HTTP_BOOTSTRAP_SHA="14d9e696e0705e5ce8ed2ca25054a9926bf1028bbb151cf4905e730c6be13315";
+  private static final String HTTP_BOOTSTRAP_SHA="680bd869d4e50ba713fb25cdfcad4b634efbaac845ece84163a759177c0bf975";
   private static final String MODULE_BOOTSTRAP_SHA="bc0c4c874e617016de0bd909c7c665795a7d6ff728e8245677f4e71074bbf140";
 }

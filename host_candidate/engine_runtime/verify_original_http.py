@@ -104,10 +104,19 @@ def main():
         matches=re.findall(r'^ORIGINAL_RENDERED_FRONTEND_SHA256=([a-f0-9]{64})$',ordinary.stdout,re.M)
         require(len(matches)==1,'INDEPENDENT_ORIGINAL_FRONTEND_SHA')
         require(not Path('/dsh-runtime').exists() and not Path('/dsh-home').exists(),'VIRTUAL_NAMESPACE_HAS_NATIVE_FILES')
-        from build_http_bootstrap import build
+        from build_http_bootstrap import build, _compose, CORE
+        legacy=work/'legacy-unproxied-directory.mjs'
+        legacy.write_bytes(_compose(False))
+        require(hashlib.sha256(legacy.read_bytes()).hexdigest()==
+                '14d9e696e0705e5ce8ed2ca25054a9926bf1028bbb151cf4905e730c6be13315','LEGACY_BOOTSTRAP_REPRODUCTION_SHA')
+        directory=CORE.read_text().split('async function run() {\n')[0]
+        directory+=(ROOT/'readonly_directory.mjs').read_text().replace('export function installVirtualDirectories','function installVirtualDirectories')
+        directory+="\nimport assert from 'node:assert/strict';\n"+(ROOT/'test/readonly_directory.test.mjs').read_text()
+        subprocess.run([node,'--permission','--input-type=module','--eval',directory],cwd='/',env={},check=True,timeout=15)
         bootstrap=work/'sealed-original-http.mjs'
         bootstrap.write_bytes(build())
         command=['java','-cp',str(classes),'com.dsh.android.engine.ClosedResourceHttpTest',node,str(bootstrap)]
+        subprocess.run(command[:5]+[str(legacy),str(module_stream),matches[0],'LEGACY_UNPROXIED_DIRECTORY'],check=True,timeout=90)
         subprocess.run(command+[str(module_stream),matches[0]],check=True,timeout=90)
         negative=work/'negative.modules'
         for kind,code in [('LEGACY','E_DSH_MODULE_STREAM_VERSION'),('HASH','E_DSH_MODULE_TREE_SEAL'),('CONTINUATION','E_DSH_IPC_HELLO')]:

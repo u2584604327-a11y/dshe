@@ -172,6 +172,29 @@ probe is not substituted for the successful real-service component checks.
 
 ## Closed-resource service bootstrap
 
+The original credentials provider validates a missing document's directory
+hierarchy with `canonicalizeWatchPath()`, including `fs/promises.opendir()`.
+The earlier receiver virtualized stat/realpath/readdir but left opendir native.
+On the actual Android argv (root cwd, --eval, no native bootstrap-file grant),
+the unchanged legacy bootstrap exits 125 with ERR_ACCESS_DENIED before listen.
+The prior host file-entry test had an extra filesystem grant and did not prove
+this launch shape. The device's HTTP_TRANSPORT denial alone does not prove its
+private error code; the host reproduction preserves that distinction.
+
+`readonly_directory.mjs` supplies read-only memory Dir/Dirent handles from the
+already verified namespace, including sync/callback/promise reads, close and
+async iteration. An ordinary file, absent directory, host path or traversal
+still rejects. It opens no native directory and grants no new permission.
+The SHA-pinned legacy bootstrap is still generated only as a negative control;
+the Android/P49 asset allowlists accept only the fixed bootstrap. The config
+bootstrap and its existing EOF protocol remain byte-identical.
+
+The sealed HTTP integration now runs the exact Android eval argv and root cwd,
+without a native script-file read grant. It reproduces the old real error and
+checks the fixed real-service token exchange/frontend plus directory-handle
+lifecycle and host-path negatives. This remains host evidence until the new
+APK executes on the actual ARM64 device.
+
 `build_http_bootstrap.py` composes the SHA-pinned existing P50 module core with
 these HTTP/session adapters and a fixed five-service entry. The original
 config bootstrap is left byte-identical. Only the composed receiver changes

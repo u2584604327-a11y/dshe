@@ -20,7 +20,7 @@ def once(source, old, new):
     return source.replace(old, new)
 
 
-def build():
+def _compose(with_directory_adapter):
     raw = CORE.read_bytes()
     if hashlib.sha256(raw).hexdigest() != CORE_SHA:
         raise RuntimeError('HTTP_BOOTSTRAP_REVIEWED_RESOURCE_CORE_SHA')
@@ -37,12 +37,18 @@ def build():
                      'export async function installHttpTransport', 'async function installHttpTransport')
     scope = once((ROOT / 'browser_session_scope.mjs').read_text(),
                  'export function scopeBrowserSession', 'function scopeBrowserSession')
+    directory = once((ROOT / 'readonly_directory.mjs').read_text(),
+                     'export function installVirtualDirectories', 'function installVirtualDirectories') if with_directory_adapter else ''
     entry = (ROOT / 'original_http_entry.mjs').read_text()
     marker = '// INSERT_REVIEWED_RESOURCE_INITIALIZATION\n'
-    entry = once(entry, marker, setup)
+    entry = once(entry, marker, setup + ('  installVirtualDirectories();\n' if with_directory_adapter else ''))
     return ('// Generated from pinned resource core and reviewed transport adapters.\n'
             '// Fixed original HTTP service composition; NOT the full main profile.\n' +
-            prefix + '\n' + transport + '\n' + scope + '\n' + entry).encode()
+            prefix + '\n' + transport + '\n' + scope + ('\n' + directory if with_directory_adapter else '') + '\n' + entry).encode()
+
+
+def build():
+    return _compose(True)
 
 
 if __name__ == '__main__':
