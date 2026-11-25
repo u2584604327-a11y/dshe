@@ -1,4 +1,4 @@
-name: P311 target EngineManager coroutine ART class load without initialization (CI-only)
+name: P311 original EngineManager coroutine entry and exception controls (CI-only)
 on:
   pull_request:
     types: [opened, synchronize]
@@ -32,6 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - uses: actions/setup-java@v4
         with:
@@ -54,8 +55,8 @@ jobs:
           test -f .github/workflows/p311-original-target-class-link.yml
           grep -Fq 'Class.forName(TARGET, false, loader)' host_candidate/p311_art_target/TargetClassProbe.java
           grep -Fq 'getDeclaredMethod("invokeSuspend", Object.class)' host_candidate/p311_art_target/TargetClassProbe.java
-          if grep -Eq '\.invoke\(|newInstance\(|\.start\(' host_candidate/p311_art_target/TargetClassProbe.java;then
-            echo P311_FORBIDDEN_TARGET_INVOCATION=DENY;exit 2
+          if grep -Eq 'ProcessBuilder|Runtime\.getRuntime|\.start\(' host_candidate/p311_art_target/TargetClassProbe.java;then
+            echo P311_DIRECT_PROCESS_CREATION=DENY;exit 2
           fi
           echo P311_SOURCE_SCOPE_AND_STATIC_JAVA_BOUNDARY=PASS
       - name: Provision existing pinned P310 build dependencies
@@ -80,7 +81,7 @@ jobs:
       - name: Enable ephemeral Android35 KVM
         shell: bash
         run: if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
-      - name: Real Android35 target class load and signature only, no invocation
+      - name: Real Android35 class load and bounded original coroutine entry
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35

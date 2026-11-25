@@ -2,6 +2,7 @@
 """Static DEX gate for the existing P245 diagnostic. Never authorizes execution."""
 
 import argparse
+from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 import re
@@ -38,6 +39,16 @@ SIGNED_GETTER = (
 LOG_METHOD = (b"Landroid/util/Log;", b"i", (b"Ljava/lang/String;",) * 2, b"I")
 SAFE_TAGS = {b"DSH", b"MainActivity", b"Android", b"Log"}
 CODE_METHODS = 52_014
+SIGNED_CODE_METHODS = 52_011
+SIGNED_BRIDGED = {
+    START,
+    ("Lcom/dsh/android/EngineManager;", "probeBoot", "(Ljava/lang/String;Ljava/util/List;J)Lcom/dsh/android/EngineManager$ProbeResult;"),
+    ("Lcom/dsh/android/EngineManager;", "runDumpConfig", "()Lcom/dsh/android/EngineManager$DumpResult;"),
+}
+P40_METHODS = {
+    ("Lcom/dsh/android/p40/P40ProcessBridge;", name, "(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;")
+    for name in ("start", "probeOrDeny", "configOrDeny")
+}
 SIGNATURE_ENTRY = re.compile(r"META-INF/(?:MANIFEST\.MF|[^/]+\.(?:SF|RSA|DSA|EC))", re.IGNORECASE)
 
 
@@ -155,6 +166,100 @@ def compare_code(left, right, base, candidate, is_target):
     need(edits == int(is_target), "START_EDIT_COUNT")
 
 
+def ordinal_tries(tries, ordinals):
+    """Represent dispatch per protected range and coalesce equal neighbors."""
+    spans = []
+    for start, length, (typed, catchall) in tries:
+        begin, end = ordinals[2 * start], ordinals[2 * (start + length)]
+        handlers = (tuple((kind, ordinals[2 * target]) for kind, target in typed),
+                    None if catchall is None else ordinals[2 * catchall])
+        if spans and spans[-1][1:] == (begin, handlers):
+            begin = spans.pop()[0]
+        spans.append((begin, end, handlers))
+    return tuple(spans)
+
+
+def relocated_instruction(view, rows, ordinals, pc, raw):
+    """Compare the same instruction and destination by ordinal, never by name."""
+    op = raw[0]
+    fixed, ref = view.instruction(raw)
+    if op in (0x1A, 0x1B):
+        index = int.from_bytes(raw[2:], "little")
+        need(op == 0x1A or index > 0xFFFF, "UNNECESSARY_JUMBO")
+        return (b"\x1a" + raw[1:2], ref)
+    if op in BRANCHES:
+        offset = 1 if op == 0x28 else 2
+        delta, = struct.unpack_from(BRANCHES[op], raw, offset)
+        return (raw[:offset], ordinals[pc + 2 * delta])
+    if op in PAYLOAD_BRANCHES:
+        delta, = struct.unpack_from("<i", raw, 2)
+        target = pc + 2 * delta
+        payload = rows[target]
+        if op == 0x26:
+            return (raw[:2], ordinals[target], payload)
+        _, size = struct.unpack_from("<HH", payload)
+        pivot = 8 if op == 0x2B else 4 + 4 * size
+        destinations = tuple(ordinals[pc + 2 * off] for off, in struct.iter_unpack("<i", payload[pivot:]))
+        return (raw[:2], ordinals[target], payload[:pivot], destinations)
+    # Switch payload targets are relative to each referring instruction.
+    # The case keys and each destination were compared with their user.
+    if int.from_bytes(raw[:2], "little") in (0x0100, 0x0200):
+        return (raw[:2], len(raw))
+    return (fixed, ref)
+
+
+def compare_signed_code(left, right, signed, base):
+    """Account for assembler layout changes in methods outside the three seams."""
+    lc, rc = left.get_code(), right.get_code()
+    need((lc.get_registers_size(), lc.get_ins_size()) == (rc.get_registers_size(), rc.get_ins_size()), "SIGNED_REGISTER_FRAME")
+    lsize, ltry = decode(left, signed.dex)
+    rsize, rtry = decode(right, base.dex)
+    lrows, rrows = signed.rows(left), base.rows(right)
+    need(len(lrows) == len(rrows), "SIGNED_INSTRUCTION_COUNT")
+    validate_targets(lrows)
+    validate_targets(rrows)
+    lo = {pc: n for n, pc in enumerate((*lrows, 2 * lsize))}
+    ro = {pc: n for n, pc in enumerate((*rrows, 2 * rsize))}
+    need(ordinal_tries(ltry, lo) == ordinal_tries(rtry, ro), "SIGNED_EXCEPTION_DISPATCH")
+    same_offsets = lrows.keys() == rrows.keys()
+    for (old_pc, old_raw), (new_pc, new_raw) in zip(lrows.items(), rrows.items()):
+        if old_raw[0] != new_raw[0]:
+            need((old_raw[0], new_raw[0]) == (0x1A, 0x1B), "SIGNED_ENCODING_CHANGE")
+        if same_offsets and old_raw[0] == new_raw[0]:
+            before, after = signed.instruction(old_raw), base.instruction(new_raw)
+        else:
+            before = relocated_instruction(signed, lrows, lo, old_pc, old_raw)
+            after = relocated_instruction(base, rrows, ro, new_pc, new_raw)
+        need(before == after, "SIGNED_INSTRUCTION_SEMANTICS")
+
+    # A lower outs_size is valid only when it still covers every encoded
+    # method invocation. Filled-new-array creates its own array instead of
+    # transferring words to a callee and doesn't use the outgoing frame.
+    if lc.get_outs_size() != rc.get_outs_size():
+        required = max((raw[1] >> 4 if raw[0] <= 0x72 else raw[1]
+                        for raw in rrows.values() if raw[0] in INVOKE_METHOD), default=0)
+        need(required <= rc.get_outs_size() < lc.get_outs_size(), "SIGNED_OUTGOING_CAPACITY")
+    return (lc.get_outs_size() != rc.get_outs_size(), not same_offsets, ltry != rtry)
+
+
+def verify_signed_baseline(signed, base):
+    """Census of signed v138 methods outside the separately audited bridges."""
+    source, baseline = index(signed.dex), index(base.dex)
+    need(SIGNED_BRIDGED <= source.keys() and set(baseline) == set(source) | P40_METHODS, "SIGNED_METHOD_SET")
+    counts = Counter()
+    for key, left in source.items():
+        right = baseline[key]
+        need(left.get_access_flags() == right.get_access_flags(), "SIGNED_METHOD_FLAGS")
+        need((left.get_code() is None) == (right.get_code() is None), "SIGNED_METHOD_CODE_PRESENCE")
+        if left.get_code() is None or key in SIGNED_BRIDGED:
+            continue
+        counts["METHODS"] += 1
+        for name, changed in zip(("OUTGOING_CAPACITY", "WIDTH_RELOCATED", "TRY_LAYOUT"), compare_signed_code(left, right, signed, base)):
+            counts[name] += changed
+    need(counts["METHODS"] == SIGNED_CODE_METHODS - len(SIGNED_BRIDGED), "SIGNED_CODE_METHOD_CENSUS")
+    return counts
+
+
 def verify_helper(method, base, candidate):
     code = method.get_code()
     need(method.get_access_flags() == 0x9 and code is not None, "HELPER_STATIC_PUBLIC")
@@ -213,7 +318,9 @@ def verify(signed_path, base_path, candidate_path):
         for name in sorted(names - {"classes.dex"}):
             need(base.read(name) == derived.read(name), "UNAPPROVED_APK_MEMBER_CHANGE")
         need(source.read("classes2.dex") == base.read("classes2.dex"), "ORIGINAL_SECONDARY_DEX")
-        return verify_methods(*(DexView(apk.read("classes.dex")) for apk in (source, base, derived)))
+        signed_dex, base_dex, derived_dex = (DexView(apk.read("classes.dex")) for apk in (source, base, derived))
+        comparable = verify_signed_baseline(signed_dex, base_dex)
+        return verify_methods(signed_dex, base_dex, derived_dex), comparable
 
 
 def main():
@@ -223,7 +330,7 @@ def main():
     args = ap.parse_args()
     logger.remove()
     try:
-        examined = verify(args.signed_original, args.base, args.candidate)
+        examined, signed_comparison = verify(args.signed_original, args.base, args.candidate)
     except Deny as exc:
         print("P245_STRICT_" + str(exc), file=sys.stderr)
         return 2
@@ -231,6 +338,8 @@ def main():
         print("P245_STRICT_DENY_UNREADABLE_INPUT", file=sys.stderr)
         return 2
     print(f"P245_STRICT_BASELINE_CODE_METHODS={examined}")
+    for name, count in signed_comparison.items():
+        print(f"P245_STRICT_SIGNED_UNRELATED_{name}={count}")
     print("P245_STRICT_DIAGNOSTIC_DERIVED_BASELINE=PASS")
     print("P245_ART_AND_RELEASE=NOT_ATTESTED")
     return 0

@@ -31,25 +31,16 @@ echo P310_PINNED_ORIGINAL_DERIVED_BASE=PASS
 trap 'python3 -B host_candidate/p279_counterfactual/p279_counterfactual.py --restore >/dev/null 2>&1 || true; python3 -B host_candidate/p245_build_only_probe/p245_build_only_probe.py --restore >/dev/null 2>&1 || true' EXIT
 python3 -B host_candidate/p245_build_only_probe/p245_build_only_probe.py --patch >/dev/null
 python3 -B host_candidate/p279_counterfactual/p279_counterfactual.py --apply >/dev/null
-if ! apktool b .p43tmp/decoded -o "$UNSIGNED" > "$DIR/candidate-build.log" 2>&1;then
+if ! apktool b .p43tmp/decoded -o "$DIR/apktool-candidate.apk" > "$DIR/candidate-build.log" 2>&1;then
  echo P310_P294_TEMP_CANDIDATE_BUILD=DENY;exit 2
 fi
 python3 -B host_candidate/p279_counterfactual/p279_counterfactual.py --restore >/dev/null
 python3 -B host_candidate/p245_build_only_probe/p245_build_only_probe.py --restore >/dev/null
 trap - EXIT
 echo P310_TEMP_ORIGINAL_SMALI_RESTORED=BYTE_EXACT
-# Preserve original P43 classes3 and validated compiled manifest, not Apktool text.
-python3 - "$BASE" "$UNSIGNED" <<'PY'
-import sys,zipfile
-with zipfile.ZipFile(sys.argv[1]) as a,zipfile.ZipFile(sys.argv[2],"a") as b:
-    assert "classes3.dex" not in b.namelist()
-    b.writestr("classes3.dex",a.read("classes3.dex"),compress_type=zipfile.ZIP_STORED)
-print("P310_DISPOSABLE_CLASSES3=VERBATIM")
-PY
-python3 -B host_candidate/p293_manifest_parity/p293_manifest_parity.py --stage > "$DIR/manifest-stage.log"
-grep -Fxq 'P293_STAGE_FROM_VALIDATED_BASE=BYTE_EXACT' "$DIR/manifest-stage.log"
-(cd .p245tmp && zip -q -d P294-UNSIGNED-DO-NOT-INSTALL.apk AndroidManifest.xml)
-(cd .p245tmp/p293-staged-manifest && zip -q -0 ../P294-UNSIGNED-DO-NOT-INSTALL.apk AndroidManifest.xml)
+# Preserve all original-derived members apart from the rebuilt primary DEX.
+python3 -B host_candidate/p245_build_only_probe/stage_candidate.py "$BASE" "$DIR/apktool-candidate.apk" "$UNSIGNED"
+echo P310_DISPOSABLE_CLASSES3=VERBATIM
 python3 -B host_candidate/p293_manifest_parity/p293_manifest_parity.py --verify > "$DIR/manifest-verify.log"
 grep -Fxq 'P293_FINAL_MANIFEST_MEMBER=BYTE_EXACT_BASELINE' "$DIR/manifest-verify.log"
 echo P310_BINARY_MANIFEST_RESTORED=BYTE_EXACT
@@ -70,6 +61,8 @@ if [[ "$strict_rc" -ne 0 ]] || ! grep -Fxq 'P245_STATIC_BUILD_ONLY=PASS' "$DIR/p
  echo P310_STRICT_CLONED_STATIC=DENY;exit 2
 fi
 echo P310_STRICT_CLONED_STATIC=PASS_NOT_RELEASE
+python3 -B host_candidate/p245_build_only_probe/strict_dex.py \
+  --signed-original "$SIGNED" --base "$BASE" --candidate "$UNSIGNED"
 # Check every protected asset and native library content against pinned P43.
 python3 - "$BASE" "$UNSIGNED" <<'PY'
 import hashlib,sys,zipfile

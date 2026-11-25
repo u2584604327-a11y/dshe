@@ -64,7 +64,7 @@ rawpath="$(adb -s "$SERIAL" shell pm path com.dsh.android | tr -d '\r' | sed -n 
 [[ "$rawpath" =~ ^/data/app/[A-Za-z0-9._+~=/\-]+/base\.apk$ ]] || {
  echo P311_CANDIDATE_APK_PATH=DENY;exit 2;
 }
-# -Xverify:all and negative unknown-name control. No method invocation.
+# Keep the original class-load controls separate from the two executions.
 set +e
 adb -s "$SERIAL" shell su 2000 dalvikvm -Xverify:all -cp "$PROBE_PATH" \
   com.dsh.p311.TargetClassProbe missing "$rawpath" > .p311tmp/negative.log 2>&1
@@ -86,10 +86,30 @@ if [[ "$pos" -ne 0 ]] ||
 fi
 echo P311_REAL_ANDROID35_TARGET_CLASS_LINK=PASS_NARROW
 echo P311_REAL_ANDROID35_INVOKESUSPEND_REFLECTION=PASS_NARROW
+
+exercise_entry() {
+  local mode="$1" status="$2" expected_helper_count="$3" pid count
+  local report=".p311tmp/$mode.log"
+  if ! adb -s "$SERIAL" shell su 2000 dalvikvm -Xverify:all -cp "$PROBE_PATH" \
+      com.dsh.p311.TargetClassProbe "$mode" "$rawpath" > "$report" 2>&1;then
+    echo "P311_INVOKESUSPEND_${mode}_EXECUTION=DENY";exit 2
+  fi
+  grep -Fxq "$status" "$report"
+  pid="$(sed -n -E 's/^P311_PROBE_PID=([0-9]+)$/\1/p' "$report")"
+  [[ "$pid" =~ ^[0-9]+$ ]]
+  adb -s "$SERIAL" logcat -d --pid="$pid" -v brief P208_ORIGINAL_ENTRY:I DSH:I '*:S' > ".p311tmp/$mode-device.log"
+  grep -Fq 'P208_ORIGINAL_START2_COROUTINE_UID=2000' ".p311tmp/$mode-device.log"
+  count="$(grep -Ec '^I/DSH[[:space:]]*\([[:space:]0-9]+\): false$' ".p311tmp/$mode-device.log" || true)"
+  [[ "$count" -eq "$expected_helper_count" ]]
+  echo "$status"
+}
+exercise_entry failure P311_INVOKESUSPEND_RESUME_FAILURE_RETHROWN=PASS 0
+exercise_entry post-return P311_INVOKESUSPEND_POST_HELPER_OWNER_GUARD=PASS 1
+echo P311_REAL_ANDROID35_P245_HELPER_REACHED_ONLY_AFTER_NORMAL_RETURN=PASS
 pid="$(adb -s "$SERIAL" shell pidof com.dsh.android | tr -d '\r' || true)"
 [[ -z "$pid" ]] || { echo P311_ORIGINAL_APP_PROCESS=DENY;exit 2;}
 echo P311_ORIGINAL_APP_PROCESS_STARTED=NO
-echo P311_TARGET_INVOKESUSPEND_EXECUTED=NO
+echo P311_TARGET_INVOKESUSPEND_ENTRY_EXECUTED=SHELL_UID_NULL_OWNER
 echo P311_ORIGINAL_NODE_EXECUTED=NO
 echo P311_ARM64_AND_PRODUCTION_ENGINE=NOT_ATTESTED
 echo P311_ART_FULL_RUNTIME_AND_OWNER_BRIDGE=NOT_ATTESTED

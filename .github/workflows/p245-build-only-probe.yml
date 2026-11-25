@@ -105,24 +105,10 @@ jobs:
           python3 -B "$literals" --restore
           python3 -B "$gate" --restore
           trap - EXIT
-          python3 - "$base" <<'PY'
-          from pathlib import Path
-          import sys
-          import zipfile
-          sys.path.insert(0, 'host_candidate/p245_build_only_probe')
-          from strict_dex import SIGNATURE_ENTRY
-          with zipfile.ZipFile(sys.argv[1]) as base:
-              for flavor in ('with-new-literals', 'with-reused-literals'):
-                  temp = Path('.p245tmp')
-                  with zipfile.ZipFile(temp / (flavor + '.apk')) as rebuilt:
-                      assert rebuilt.namelist().count('classes.dex') == 1
-                      primary = rebuilt.read('classes.dex')
-                  with zipfile.ZipFile(temp / (flavor + '-UNSIGNED-DO-NOT-INSTALL.apk'), 'x') as output:
-                      for entry in base.infolist():
-                          if not SIGNATURE_ENTRY.fullmatch(entry.filename):
-                              data = primary if entry.filename == 'classes.dex' else base.read(entry)
-                              output.writestr(entry, data)
-          PY
+          for flavor in with-new-literals with-reused-literals; do
+            python3 -B host_candidate/p245_build_only_probe/stage_candidate.py "$base" \
+              ".p245tmp/$flavor.apk" ".p245tmp/$flavor-UNSIGNED-DO-NOT-INSTALL.apk"
+          done
           expect_original_denial() {
             local result=0
             python3 -B "$gate" --verify "$1" > "$RUNNER_TEMP/p245-original.log" 2>&1 || result=$?
