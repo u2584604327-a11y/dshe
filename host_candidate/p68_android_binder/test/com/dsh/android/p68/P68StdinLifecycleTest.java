@@ -3,7 +3,8 @@ package com.dsh.android.p68;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.util.concurrent.TimeUnit;
+import java.util.Arrays;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /** Real JVM child lifecycle, not a Node/Android/Binder attestation. */
@@ -30,6 +31,49 @@ public final class P68StdinLifecycleTest {
     String line=new BufferedReader(new InputStreamReader(child.getInputStream(),StandardCharsets.UTF_8)).readLine();
     check("CHILD_STDIN_CLOSED".equals(line),"real child closed fd0 before forwarding");
   }
+  private static byte[] packet(int length,int seed){
+    byte[] result=new byte[length];for(int i=0;i<length;i++)result[i]=(byte)(seed+i*7);return result;
+  }
+  private static void bufferedDuplex(Path release,boolean legacy)throws Exception{
+    Process process=child("--duplex",release);
+    ExecutorService reads=Executors.newSingleThreadExecutor();
+    PipedInputStream source=new PipedInputStream(8192);
+    PipedOutputStream sender=new PipedOutputStream(source);
+    CountDownLatch accepted=new CountDownLatch(1);AtomicInteger sourceFailures=new AtomicInteger();
+    class Buffer extends BufferedOutputStream {
+      Buffer(OutputStream target){super(target,8192);}
+      @Override public synchronized void write(byte[] b,int o,int n)throws IOException{super.write(b,o,n);accepted.countDown();}
+      synchronized int pending(){return count;}
+    }
+    Buffer destination=new Buffer(process.getOutputStream());Thread pump=null;
+    try{
+      BufferedReader stdout=new BufferedReader(new InputStreamReader(process.getInputStream(),StandardCharsets.US_ASCII));
+      check("PIPE_READY".equals(reads.submit(stdout::readLine).get(3,TimeUnit.SECONDS)),"real child is waiting for interactive stdin");
+      pump=P68AndroidBinderIntake.forwardStdin(source,destination,sourceFailures::incrementAndGet);
+      sender.write(packet(88,11));sender.flush();
+      check(accepted.await(3,TimeUnit.SECONDS),"actual forwarding method accepted the complete short preface");
+      Future<String> hello=reads.submit(stdout::readLine);
+      if(legacy){
+        check(destination.pending()==88,"original forwarder leaves the actual preface in its child buffer");
+        try{hello.get(350,TimeUnit.MILLISECONDS);throw new AssertionError("legacy buffer unexpectedly delivered before EOF");}
+        catch(TimeoutException expected){}
+        check(process.isAlive()&&pump.isAlive(),"both sides remain live while the preface is buffered");
+        sender.write(packet(53,29));sender.close();
+        check("PIPE_HELLO_88".equals(hello.get(3,TimeUnit.SECONDS)),"original preface is delivered only after upstream EOF");
+        check("PIPE_CONTROL_53".equals(reads.submit(stdout::readLine).get(3,TimeUnit.SECONDS)),"original control bytes finally delivered on close");
+      }else{
+        check("PIPE_HELLO_88".equals(hello.get(3,TimeUnit.SECONDS)),"preface reaches real child before producer EOF");
+        check(destination.pending()==0&&pump.isAlive(),"short write flushed while input stays open");
+        sender.write(packet(53,29));sender.flush();
+        check("PIPE_CONTROL_53".equals(reads.submit(stdout::readLine).get(3,TimeUnit.SECONDS)),"subsequent small frame reaches child before EOF");
+        check(pump.isAlive(),"interactive forwarding stays open after control response");sender.close();
+      }
+      pump.join(3000);check(!pump.isAlive()&&sourceFailures.get()==0,"clean EOF releases interactive pump without source failure");
+      check(process.waitFor(3,TimeUnit.SECONDS)&&process.exitValue()==0,"actual duplex child exits normally after EOF");
+      System.out.println(legacy?"P68_BUFFERED_CHILD_STDIN_HELLO_WITHHELD_UNTIL_EOF=REPRODUCED":
+          "P68_BUFFERED_CHILD_STDIN_PREFACE_AND_FRAME_BEFORE_EOF=PASS");
+    }finally{sender.close();source.close();process.destroyForcibly();reads.shutdownNow();if(pump!=null)pump.join(2000);}
+  }
   public static void main(String[] args)throws Exception{
     if(args.length==2&&args[0].startsWith("--")){
       if(args[0].equals("--closed")){
@@ -37,6 +81,12 @@ public final class P68StdinLifecycleTest {
         long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(12);
         while(!Files.exists(Paths.get(args[1]))&&System.nanoTime()<deadline)Thread.sleep(10);
         if(!Files.exists(Paths.get(args[1])))System.exit(99);
+      }else if(args[0].equals("--duplex")){
+        System.out.println("PIPE_READY");System.out.flush();DataInputStream input=new DataInputStream(System.in);
+        byte[] hello=new byte[88];input.readFully(hello);if(!Arrays.equals(hello,packet(88,11)))System.exit(96);
+        System.out.println("PIPE_HELLO_88");System.out.flush();
+        byte[] control=new byte[53];input.readFully(control);if(!Arrays.equals(control,packet(53,29)))System.exit(95);
+        System.out.println("PIPE_CONTROL_53");System.out.flush();if(input.read()!=-1)System.exit(94);System.exit(0);return;
       }else if(args[0].equals("--eof")){
         if(!text(System.in).equals("abc"))System.exit(98);
       }else System.exit(97);
@@ -45,6 +95,8 @@ public final class P68StdinLifecycleTest {
     Path directory=Files.createTempDirectory("p68-stdin-lifecycle-");
     Path release=directory.resolve("release");
     try{
+      boolean legacy=args.length==1&&args[0].equals("--legacy-buffered");
+      bufferedDuplex(release,legacy);if(legacy)return;
       Process process=child("--closed",release);
       try{
         awaitClosed(process);

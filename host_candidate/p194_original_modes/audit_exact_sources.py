@@ -18,7 +18,7 @@ PINNED = {
   "host_candidate/p184_verified_child_receipt/src/com/dsh/android/p68/P184ChildStartReceipt.java":
     "3dac8177db81cb48ec85612b6eb31ff61ed4ee98",
   "host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java":
-    "65f69172ee029cb0566a8bf523e4d19d11382ced",
+    "863426552f2af31ff175b5fb548167e5e494c46a",
   "host_candidate/p75_engine_rendezvous/src/com/dsh/android/p75/P75EngineStartRendezvous.java":
     "9a476e4254918c56377f5fe0bd30fea2326b653c",
 }
@@ -84,6 +84,7 @@ def main():
     count(receipt,"expectedOwnerEpoch!=ownerEpoch")
     p68=src("P68AndroidBinderIntake.java")
     count(p68,"int sender=msg.sendingUid;")
+    count(p68,"childInput.write(bytes,0,count);childInput.flush();")
     count(p68,"msg.what==P53StartOrder.CHILD_STARTED && p184OwnerEpoch>0")
     p75=src("P75EngineStartRendezvous.java")
     count(p75,"armForVerifiedChildReceipt(")

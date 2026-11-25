@@ -76,7 +76,8 @@ JDK 17, Python 3.11+ and the exact original Node 26.4.0:
 
 ```
 python host_candidate/engine_runtime/verify_original_http.py \
-  --apk /path/to/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk --node /path/to/node
+  --apk /path/to/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk --node /path/to/node \
+  --android-jar /path/to/existing/android-35/android.jar
 ```
 
 The runner seals the original APK SHA and full 30,411-member / 262,498,938-byte
@@ -171,6 +172,30 @@ required profile/file operations with owner-scoped durability. This full-main
 probe is not substituted for the successful real-service component checks.
 
 ## Closed-resource service bootstrap
+
+The subsequent ARM64 report completed the **sender's** resource seal, then
+timed out before LISTEN with the proxy still RUNNING and no reported error.
+That is not receiver completion or actual child liveness. A second real defect
+was present in P68's stdin pump: writes to a Process's buffered output were not
+flushed. A short resource tail/preface/control frame could remain pending until
+more bytes or EOF, deadlocking an interactive session. The EOF config path
+could pass because closing stdin flushed its tail.
+
+The pump now flushes after each successful write. Flush errors have the same
+classification as child-input write errors, preserving late stderr and actual
+exit instead of treating them as an authenticated-source failure. Genuine
+source failure still cancels. The original pre-fix full P68 source is recreated
+in a temporary compilation and checked against git blob
+`65f69172ee029cb0566a8bf523e4d19d11382ced`; a real child reproduces the 88-byte
+preface withheld until EOF. The fixed real-child test requires both that
+preface and a later 53-byte control frame before EOF.
+
+The sealed-resource integration now includes the **actual production stdin
+pump**, a real OS pipe and an explicitly buffered real Node stdin. It no
+longer bypasses this intermediate layer. The exact Android argv, original
+authentication/frontend and actual JS bytes must pass through it. Existing
+Android35 reliable-PFD tests additionally require short interactive frames
+before EOF; those remain shell-UID pipe tests, not ARM64 Node evidence.
 
 The original credentials provider validates a missing document's directory
 hierarchy with `canonicalizeWatchPath()`, including `fs/promises.opendir()`.

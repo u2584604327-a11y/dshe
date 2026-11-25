@@ -233,7 +233,9 @@ public final class P68AndroidBinderIntake {
           catch(IOException sourceLost){onSourceFailure.run();return;}
           if(count<0)return;
           if(count==0)continue;
-          try{childInput.write(bytes,0,count);}
+          // Process stdin can be buffered. A live interactive child must see
+          // a short preface/frame before the producer sends more data or EOF.
+          try{childInput.write(bytes,0,count);childInput.flush();}
           catch(IOException childClosedInput){return;}
         }
       }finally{

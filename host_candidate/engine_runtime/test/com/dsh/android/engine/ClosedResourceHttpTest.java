@@ -13,7 +13,7 @@ public final class ClosedResourceHttpTest {
     "--input-type=module","--eval",new String(Files.readAllBytes(Paths.get(a[1])),"UTF-8"));
   builder.directory(new File("/"));builder.environment().clear();builder.environment().put("HOME","/dsh-home");builder.environment().put("DSH_HOME","/dsh-home");
   builder.environment().put("NODE_OPTIONS","--max-old-space-size=1024");
-  Process child=builder.start();
+  Process child=com.dsh.android.p68.BufferedChildStdin.wrap(builder.start());
   HttpProcessTransport process=null;
   try{
    boolean legacy=a.length>4&&a[4].equals("LEGACY_UNPROXIED_DIRECTORY");
@@ -50,6 +50,9 @@ public final class ClosedResourceHttpTest {
    HttpURLConnection frontend=(HttpURLConnection)new URL("http://127.0.0.1:"+process.port()+"/").openConnection();
    frontend.setRequestProperty("Cookie",cookie);frontend.setReadTimeout(5000);
    yes(frontend.getResponseCode()==200,"sealed_original_frontend");yes(sha(read(frontend.getInputStream())).equals(a[3]),"independent_original_frontend_render_sha");frontend.disconnect();
+   HttpURLConnection javascript=(HttpURLConnection)new URL("http://127.0.0.1:"+process.port()+"/assets/index-CN7NIWNw.js").openConnection(Proxy.NO_PROXY);
+   javascript.setReadTimeout(5000);yes(javascript.getResponseCode()==200,"sealed_original_js_status");
+   yes(sha(read(javascript.getInputStream())).equals("4bc914bfbb6adbdd63953a29f63835eb7127defd2a973149d64cdab489f1a9a5"),"sealed_original_js_bytes");javascript.disconnect();
    String modules=stdout.readLine();yes(modules!=null&&modules.matches("DSH_ORIGINAL_HTTP_RESOURCE_MODULES=[0-9]+"),"actual_module_loading_count");
    int count=Integer.parseInt(modules.substring(modules.indexOf('=')+1));yes(count>69&&count<30411,"real_service_dependency_modules");
    process.destroy();yes(process.waitFor(8,TimeUnit.SECONDS)&&process.exitValue()==0,"sealed_runtime_graceful_exit");
@@ -57,6 +60,7 @@ public final class ClosedResourceHttpTest {
    System.out.println("SEALED_ORIGINAL_HTTP_FRONTEND_AND_AUTH=PASS modules="+count);
    System.out.println("SEALED_HTTP_NATIVE_HOST_MODULE_OR_PROFILE_FS_ACCESS=NOT_GRANTED");
    System.out.println("SEALED_ORIGINAL_HTTP_EXACT_ANDROID_EVAL_ARGV_AND_ROOT_CWD=PASS");
+   System.out.println("SEALED_ORIGINAL_HTTP_PRODUCTION_STDIN_PUMP_BUFFERED_CHILD_AND_JS_ASSET=PASS_HOST");
   }finally{if(process!=null)process.close();else{child.destroyForcibly();child.waitFor();}}
  }
 }

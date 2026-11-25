@@ -76,7 +76,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apk', type=Path, required=True)
     parser.add_argument('--node', type=Path, required=True)
+    parser.add_argument('--android-jar', type=Path, required=True,
+                        help='existing Android35 SDK stubs to compile the actual P68 stdin pump')
     args = parser.parse_args()
+    require(args.android_jar.is_file(),'EXISTING_ANDROID_JAR_REQUIRED')
     node = str(args.node.resolve())
     require(subprocess.check_output([node, '--version'], text=True).strip() == 'v26.4.0', 'EXACT_NODE_VERSION')
     # This child has no network permission. The control must fail at a real
@@ -96,8 +99,33 @@ def main():
         home = work / 'fresh-home'
         home.mkdir(mode=0o700)
         sources = list((ROOT / 'src').rglob('*.java')) + list((ROOT / 'test').rglob('*.java'))
-        subprocess.run(['javac', '--release', '8', '-d', str(classes), *map(str, sources)], check=True)
-        ordinary = subprocess.run(['java', '-cp', str(classes), 'com.dsh.android.engine.HttpProcessTransportTest', node,
+        host_root=ROOT.parent
+        roots=[str(p) for pattern in ('*/src','*/android') for p in host_root.glob(pattern) if p.is_dir()]
+        stdin_test=host_root/'p68_android_binder/test/com/dsh/android/p68/P68StdinLifecycleTest.java'
+        sources.append(stdin_test)
+        subprocess.run(['javac','--release','8','-cp',str(args.android_jar.resolve()),'-sourcepath',os.pathsep.join(roots),
+                        '-d',str(classes),*map(str,sources)],check=True)
+        classpath=str(classes)+os.pathsep+str(args.android_jar.resolve())
+        # Recompile the byte-identified pre-fix source as an independent legacy
+        # control. No original/baseline source or production gate is changed.
+        actual=host_root/'p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java'
+        fixed=actual.read_text()
+        addition=('          // Process stdin can be buffered. A live interactive child must see\n'
+                  '          // a short preface/frame before the producer sends more data or EOF.\n'
+                  '          try{childInput.write(bytes,0,count);childInput.flush();}')
+        require(fixed.count(addition)==1,'STDIN_FLUSH_REPRODUCTION_ANCHOR')
+        old=fixed.replace(addition,'          try{childInput.write(bytes,0,count);}')
+        blob=old.encode();require(hashlib.sha1(b'blob '+str(len(blob)).encode()+b'\0'+blob).hexdigest()==
+            '65f69172ee029cb0566a8bf523e4d19d11382ced','LEGACY_STDIN_SOURCE_BLOB')
+        legacy_source=work/'legacy-source/com/dsh/android/p68/P68AndroidBinderIntake.java'
+        legacy_source.parent.mkdir(parents=True);legacy_source.write_bytes(blob)
+        legacy_classes=work/'legacy-classes'
+        subprocess.run(['javac','--release','8','-cp',str(args.android_jar.resolve()),'-sourcepath',os.pathsep.join(roots),
+                        '-d',str(legacy_classes),str(legacy_source),str(stdin_test)],check=True)
+        subprocess.run(['java','-cp',str(legacy_classes)+os.pathsep+str(args.android_jar.resolve()),
+                        'com.dsh.android.p68.P68StdinLifecycleTest','--legacy-buffered'],check=True,timeout=15)
+        subprocess.run(['java','-cp',classpath,'com.dsh.android.p68.P68StdinLifecycleTest'],check=True,timeout=30)
+        ordinary = subprocess.run(['java', '-cp', classpath, 'com.dsh.android.engine.HttpProcessTransportTest', node,
                         str(ROOT / 'test/original_http_services.mjs'), str(original),
                         str(ROOT / 'http_transport.mjs'), str(home)], check=True, timeout=90, capture_output=True, text=True)
         print(ordinary.stdout, end='')
@@ -115,7 +143,7 @@ def main():
         subprocess.run([node,'--permission','--input-type=module','--eval',directory],cwd='/',env={},check=True,timeout=15)
         bootstrap=work/'sealed-original-http.mjs'
         bootstrap.write_bytes(build())
-        command=['java','-cp',str(classes),'com.dsh.android.engine.ClosedResourceHttpTest',node,str(bootstrap)]
+        command=['java','-cp',classpath,'com.dsh.android.engine.ClosedResourceHttpTest',node,str(bootstrap)]
         subprocess.run(command[:5]+[str(legacy),str(module_stream),matches[0],'LEGACY_UNPROXIED_DIRECTORY'],check=True,timeout=90)
         subprocess.run(command+[str(module_stream),matches[0]],check=True,timeout=90)
         negative=work/'negative.modules'
@@ -128,7 +156,7 @@ def main():
                     changed.seek(-5,os.SEEK_END);value=changed.read(1);changed.seek(-1,os.SEEK_CUR);changed.write(bytes([value[0]^1]))
             subprocess.run(command+[str(negative),matches[0],code],check=True,timeout=60)
 
-        subprocess.run(['java', '-cp', str(classes), 'com.dsh.android.engine.HttpProtocolNegativeTest', node,
+        subprocess.run(['java', '-cp', classpath, 'com.dsh.android.engine.HttpProtocolNegativeTest', node,
                         str(ROOT / 'test/malformed_peer.mjs'), str(ROOT / 'test/malformed_host.mjs'),
                         str(ROOT / 'http_transport.mjs')], check=True, timeout=60)
     print('HTTP_TRANSPORT_ANDROID_BINDER_ARM64_MAIN_PROFILE=NOT_TESTED')
