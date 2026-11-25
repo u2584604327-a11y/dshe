@@ -106,6 +106,21 @@ exercise_entry() {
 exercise_entry failure P311_INVOKESUSPEND_RESUME_FAILURE_RETHROWN=PASS
 exercise_entry post-return P311_INVOKESUSPEND_POST_HELPER_OWNER_GUARD=PASS
 echo P311_REAL_ANDROID35_P245_HELPER_REACHED_ONLY_AFTER_NORMAL_RETURN=PASS
+# Exercise the current Process implementation with native pipe endpoints in
+# the same network-denied shell UID, including blocked read/write revocation.
+if ! adb -s "$SERIAL" shell su 2000 dalvikvm -Xverify:all -cp "$PROBE_PATH" \
+    com.dsh.p37.P37RemoteProcessTest > .p311tmp/process-pipes.log 2>&1;then
+  echo P37_ANDROID35_PROCESS_PIPE_LIFECYCLE=DENY;exit 2
+fi
+for marker in \
+  P37_NATIVE_PIPE_BACKPRESSURE_STDIN_AND_EXIT=PASS \
+  P37_NATIVE_PIPE_REVOCATION_AND_MERGED_EOF=PASS \
+  P37_NATIVE_PIPE_BLOCKED_IO_CANCELLED=PASS;do
+  grep -Fxq "$marker" .p311tmp/process-pipes.log
+  echo "$marker"
+done
+grep -Eq '^P37_JAVA_PROCESS_LIFECYCLE_PROXY_TESTS=PASS assertions=[0-9]+$' .p311tmp/process-pipes.log
+echo P37_ANDROID35_PROCESS_PIPE_LIFECYCLE=PASS
 pid="$(adb -s "$SERIAL" shell pidof com.dsh.android | tr -d '\r' || true)"
 [[ -z "$pid" ]] || { echo P311_ORIGINAL_APP_PROCESS=DENY;exit 2;}
 echo P311_ORIGINAL_APP_PROCESS_STARTED=NO

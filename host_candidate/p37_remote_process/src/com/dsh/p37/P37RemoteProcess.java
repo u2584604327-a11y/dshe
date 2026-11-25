@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
+import java.io.ByteArrayInputStream;
+import java.io.Closeable;
 import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -13,9 +15,48 @@ import java.util.concurrent.TimeUnit;
  * This is NOT a process launcher, Android Binder implementation, or an original
  * EngineManager patch. A trusted native adapter must validate the framework
  * Binder sender UID and supply a host-generated session before constructing it.
- * No arbitrary stdin, command, filesystem, or tool capabilities are exposed.
+ * Pipe endpoints are supplied and owned by the trusted transport. Command,
+ * filesystem and tool authorization belong to that transport's launch lease.
  */
 public final class P37RemoteProcess extends Process {
+  /** Owned pipe endpoints supplied by the authenticated host transport.
+   * The child must already have merged stderr when merged() is selected.
+   * Pipe writes provide backpressure without buffering data on Binder threads.
+   */
+  public static final class Stdio implements Closeable {
+    private final OutputStream input;
+    private final InputStream output;
+    private final InputStream error;
+    private final boolean merged;
+
+    private Stdio(OutputStream input, InputStream output, InputStream error,
+        boolean merged) {
+      if (input == null || output == null || error == null || output == error)
+        throw new IllegalArgumentException("distinct owned pipe endpoints required");
+      this.input = input;
+      this.output = output;
+      this.error = error;
+      this.merged = merged;
+    }
+    public static Stdio split(OutputStream input, InputStream output,
+        InputStream error) {
+      return new Stdio(input, output, error, false);
+    }
+    public static Stdio merged(OutputStream input, InputStream output) {
+      return new Stdio(input, output, new ByteArrayInputStream(new byte[0]), true);
+    }
+    @Override public void close() throws IOException {
+      IOException failure = null;
+      for (Closeable stream : new Closeable[] {input, output, error}) {
+        try { stream.close(); }
+        catch (IOException closed) {
+          if (failure == null) failure = closed;
+          else failure.addSuppressed(closed);
+        }
+      }
+      if (failure != null) throw failure;
+    }
+  }
   public interface IsolatedUidVerifier {
     boolean isIsolatedUid(int frameworkUid);
   }
@@ -34,6 +75,7 @@ public final class P37RemoteProcess extends Process {
   private final String session;
   private final IsolatedUidVerifier uidVerifier;
   private final RemoteControl control;
+  private final Stdio pipes;
   /** Only trusted host constructor may opt in; legacy P51 stays split. */
   private final boolean mergeErrorToOutput;
   private final BoundedStream stdout = new BoundedStream(BUFFER_BYTES);
@@ -56,6 +98,26 @@ public final class P37RemoteProcess extends Process {
   public P37RemoteProcess(int authenticatedWorkerUid, String hostSession,
       IsolatedUidVerifier verifier, RemoteControl remoteControl,
       boolean trustedHostRequestsMergedStderr) {
+    this(authenticatedWorkerUid, hostSession, verifier, remoteControl,
+        trustedHostRequestsMergedStderr, null);
+  }
+
+  /** Host-only pipe transport. Construction takes ownership after validation.
+   * The caller must verify CHILD_STARTED, lease and generation before handoff.
+   * Binder carries lifecycle frames while the owned pipes carry stream data.
+   */
+  public P37RemoteProcess(int authenticatedWorkerUid, String hostSession,
+      IsolatedUidVerifier verifier, RemoteControl remoteControl, Stdio streams) {
+    this(authenticatedWorkerUid, hostSession, verifier, remoteControl,
+        requireStreams(streams).merged, streams);
+  }
+  private static Stdio requireStreams(Stdio streams) {
+    if (streams == null) throw new IllegalArgumentException("owned pipes required");
+    return streams;
+  }
+  private P37RemoteProcess(int authenticatedWorkerUid, String hostSession,
+      IsolatedUidVerifier verifier, RemoteControl remoteControl,
+      boolean trustedHostRequestsMergedStderr, Stdio streams) {
     if (verifier == null || remoteControl == null || hostSession == null ||
         !hostSession.matches("[a-f0-9]{64}") || authenticatedWorkerUid < 0 ||
         !verifier.isIsolatedUid(authenticatedWorkerUid)) {
@@ -65,6 +127,7 @@ public final class P37RemoteProcess extends Process {
     session = hostSession;
     uidVerifier = verifier;
     control = remoteControl;
+    pipes = streams;
     mergeErrorToOutput = trustedHostRequestsMergedStderr;
     // With redirectErrorStream(true), Java Process.getErrorStream() is EOF;
     // no reader may wait forever for an unpopulated error pipe.
@@ -113,6 +176,10 @@ public final class P37RemoteProcess extends Process {
   private boolean accept(int uid, String incomingSession, byte[] data,
       BoundedStream stream) {
     if (!authenticate(uid, incomingSession)) return false;
+    if (pipes != null) {
+      failClosed(TerminalReason.TRANSPORT_LOST);
+      return false;
+    }
     // Serialize the final RUNNING check and frame enqueue with authenticated
     // EXIT. Otherwise EXIT can publish REMOTE_EXIT while a prior callback is
     // waiting for the stream monitor, then that callback can append a frame
@@ -142,8 +209,11 @@ public final class P37RemoteProcess extends Process {
       stdout.finish(false);
       stderr.finish(false);
       exited.countDown();
-      return true;
     }
+    // Preserve unread stdout/stderr until their pipe writers close. Closing
+    // the child input also releases writers when exit precedes their write.
+    if (pipes != null) closeQuietly(pipes.input);
+    return true;
   }
   /** Both binder death and worker unbind must invalidate this proxy. */
   public void onTransportLost() { failClosed(TerminalReason.TRANSPORT_LOST); }
@@ -172,12 +242,24 @@ public final class P37RemoteProcess extends Process {
   private void failClosed(TerminalReason cause) {
     boolean callKill;
     synchronized (lock) { callKill = failClosedUnderLock(cause); }
+    if (pipes != null && reason != TerminalReason.RUNNING &&
+        reason != TerminalReason.REMOTE_EXIT) closeQuietly(pipes);
     if (callKill) requestForceStopSafely();
   }
-  @Override public InputStream getInputStream() { return stdout; }
-  @Override public InputStream getErrorStream() { return stderr; }
-  /** Fail closed: real original EngineManager stdin use is NOT yet audited. */
+  private static void closeQuietly(Closeable stream) {
+    try { stream.close(); } catch (IOException ignored) {
+      // The lifecycle reason records failure independently of stream close.
+    }
+  }
+  @Override public InputStream getInputStream() {
+    return pipes == null ? stdout : pipes.output;
+  }
+  @Override public InputStream getErrorStream() {
+    return pipes == null ? stderr : pipes.error;
+  }
+  /** The legacy frame transport denies stdin. Owned pipes forward stdin and EOF. */
   @Override public OutputStream getOutputStream() {
+    if (pipes != null) return pipes.input;
     return new OutputStream() {
       @Override public void write(int b) throws IOException {
         throw new IOException("P37_UNAUDITED_STDIN_DENIED");

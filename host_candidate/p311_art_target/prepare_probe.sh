@@ -9,7 +9,9 @@ test -s .p310tmp/P310-ART-VERIFY-EMULATOR-ONLY.apk
 test -s "$SDK/platforms/android-35/android.jar"
 test -x "$BT/d8"
 javac --release 8 -cp "$SDK/platforms/android-35/android.jar" \
-  -d "$DIR/classes" host_candidate/p311_art_target/TargetClassProbe.java
+  -d "$DIR/classes" host_candidate/p311_art_target/TargetClassProbe.java \
+  host_candidate/p37_remote_process/src/com/dsh/p37/P37RemoteProcess.java \
+  host_candidate/p37_remote_process/test/com/dsh/p37/P37RemoteProcessTest.java
 test -s "$DIR/classes/com/dsh/p311/TargetClassProbe.class"
 jar cf "$DIR/probe-classes.jar" -C "$DIR/classes" .
 "$BT/d8" --min-api 35 --lib "$SDK/platforms/android-35/android.jar" \

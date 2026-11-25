@@ -7,6 +7,8 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.nio.channels.Channels;
+import java.nio.channels.Pipe;
 
 /** No Android stubs, APK, network, personal data or original DSH files. */
 public final class P37RemoteProcessTest {
@@ -352,6 +354,125 @@ public final class P37RemoteProcessTest {
        "exit verifier exception removes unread stream bytes");
     System.out.println("P37_UID_VERIFIER_RUNTIME_FAILURE_FAIL_CLOSED=PASS");
   }
+  private static final class NativePipes implements Closeable {
+    final Pipe input = Pipe.open();
+    final Pipe output = Pipe.open();
+    final Pipe error = Pipe.open();
+    final OutputStream childOutput = Channels.newOutputStream(output.sink());
+    final OutputStream childError = Channels.newOutputStream(error.sink());
+    final InputStream childInput = Channels.newInputStream(input.source());
+    final P37RemoteProcess.Stdio stdio;
+    NativePipes(boolean merged) throws IOException {
+      OutputStream stdin = Channels.newOutputStream(input.sink());
+      InputStream stdout = Channels.newInputStream(output.source());
+      stdio = merged ? P37RemoteProcess.Stdio.merged(stdin, stdout) :
+          P37RemoteProcess.Stdio.split(stdin, stdout, Channels.newInputStream(error.source()));
+    }
+    @Override public void close() throws IOException {
+      for (Pipe pipe : new Pipe[] {input, output, error}) {
+        pipe.source().close();
+        pipe.sink().close();
+      }
+    }
+  }
+  private static void testNativePipeBackpressure() throws Exception {
+    ExecutorService tasks = Executors.newFixedThreadPool(2);
+    try (NativePipes pipes = new NativePipes(false)) {
+      Port port = new Port();
+      P37RemoteProcess process = new P37RemoteProcess(UID, S, uid -> uid == UID, port, pipes.stdio);
+      byte[] payload = new byte[2 * 1024 * 1024];
+      for (int i = 0; i < payload.length; i++) payload[i] = (byte) ('a' + i % 23);
+      CountDownLatch started = new CountDownLatch(1);
+      Future<?> writer = tasks.submit(() -> {
+        started.countDown();
+        pipes.childOutput.write(payload);
+        pipes.childOutput.close();
+        return null;
+      });
+      ok(started.await(2, TimeUnit.SECONDS), "native pipe writer started");
+      try {
+        writer.get(100, TimeUnit.MILLISECONDS);
+        throw new AssertionError("pipe writer did not apply backpressure");
+      } catch (TimeoutException expected) {
+        ok(process.isAlive() && port.kill == 0, "slow reader preserves live child");
+      }
+      Future<String> reader = tasks.submit(() -> readAll(process.getInputStream()));
+      writer.get(5, TimeUnit.SECONDS);
+      ok(new String(payload, StandardCharsets.US_ASCII).equals(reader.get(5, TimeUnit.SECONDS)),
+          "two MiB stream crosses native pipe without loss or frame overflow");
+      Future<String> stdin = tasks.submit(() -> readAll(pipes.childInput));
+      ok(process.getOutputStream() == process.getOutputStream(), "stdin endpoint identity stable");
+      process.getOutputStream().write(b("child input"));
+      process.getOutputStream().flush();
+      process.getOutputStream().close();
+      ok("child input".equals(stdin.get(2, TimeUnit.SECONDS)), "stdin write and close deliver EOF");
+      pipes.childError.write(b("tail"));
+      pipes.childError.close();
+      ok(process.onAuthenticatedExit(UID, S, 17), "pipe child exit accepted");
+      ok(process.waitFor() == 17, "pipe waitFor uses actual exit code");
+      ok("tail".equals(readAll(process.getErrorStream())), "exit preserves unread stderr tail");
+      ok(port.kill == 0, "normal pipe exit does not kill child");
+    } finally {
+      tasks.shutdownNow();
+      tasks.awaitTermination(2, TimeUnit.SECONDS);
+    }
+    System.out.println("P37_NATIVE_PIPE_BACKPRESSURE_STDIN_AND_EXIT=PASS");
+  }
+  private static void testNativePipeRevocation() throws Exception {
+    try (NativePipes pipes = new NativePipes(true)) {
+      Port port = new Port();
+      P37RemoteProcess process = new P37RemoteProcess(UID, S, uid -> uid == UID, port, pipes.stdio);
+      ok(process.getErrorStream().read() == -1, "merged pipe stderr is immediate EOF");
+      process.getInputStream().close();
+      ok(process.isAlive() && port.kill == 0, "local pipe reader close keeps child alive");
+      process.onTransportLost();
+      ok(process.waitFor() == 125 && port.kill == 1, "pipe Binder death fails closed");
+      try {
+        process.getOutputStream().write(1);
+        throw new AssertionError("stdin remained writable after transport loss");
+      } catch (IOException expected) { checks.incrementAndGet(); }
+    }
+    try (NativePipes pipes = new NativePipes(false)) {
+      Port port = new Port();
+      P37RemoteProcess process = new P37RemoteProcess(UID, S, uid -> uid == UID, port, pipes.stdio);
+      ok(!process.onAuthenticatedStdout(UID, S, b("mixed")), "pipe mode rejects Binder data frames");
+      ok(process.waitFor() == 125 && port.kill == 1, "mixed transport revokes pipe process");
+      ok(!process.onAuthenticatedExit(UID, S, 0), "revoked pipe process rejects late clean exit");
+    }
+    System.out.println("P37_NATIVE_PIPE_REVOCATION_AND_MERGED_EOF=PASS");
+  }
+  private static void testNativePipeBlockedIoCancellation() throws Exception {
+    ExecutorService tasks = Executors.newFixedThreadPool(3);
+    try (NativePipes pipes = new NativePipes(false)) {
+      Port port = new Port();
+      P37RemoteProcess process = new P37RemoteProcess(UID, S, uid -> uid == UID, port, pipes.stdio);
+      CountDownLatch entered = new CountDownLatch(2);
+      Future<Boolean> reader = tasks.submit(() -> {
+        entered.countDown();
+        try { process.getInputStream().read(); return false; }
+        catch (IOException closed) { return true; }
+      });
+      Future<Boolean> writer = tasks.submit(() -> {
+        entered.countDown();
+        try { process.getOutputStream().write(new byte[2 * 1024 * 1024]); return false; }
+        catch (IOException closed) { return true; }
+      });
+      ok(entered.await(2, TimeUnit.SECONDS), "native blocking IO started");
+      try {
+        writer.get(100, TimeUnit.MILLISECONDS);
+        throw new AssertionError("stdin writer did not block");
+      } catch (TimeoutException expected) { checks.incrementAndGet(); }
+      Future<?> cancel = tasks.submit(() -> process.onTransportLost());
+      cancel.get(2, TimeUnit.SECONDS);
+      ok(reader.get(2, TimeUnit.SECONDS), "revocation interrupts blocked native stdout read");
+      ok(writer.get(2, TimeUnit.SECONDS), "revocation interrupts blocked native stdin write");
+      ok(process.waitFor() == 125 && port.kill == 1, "IO cancellation publishes one terminal failure");
+    } finally {
+      tasks.shutdownNow();
+      tasks.awaitTermination(2, TimeUnit.SECONDS);
+    }
+    System.out.println("P37_NATIVE_PIPE_BLOCKED_IO_CANCELLED=PASS");
+  }
   public static void main(String[] args)throws Exception {
     testLifecycle();testIsolationAndReplay();testBoundedBuffer();
     testTimeoutAndDisconnect();testStdinAndFailures();
@@ -359,6 +480,8 @@ public final class P37RemoteProcessTest {
     testBufferedReadyTokenErasure();
     testExitFrameAtomicity();testOverflowExitAtomicity();
     testVerifierExceptionFailsClosed();
+    testNativePipeBackpressure();testNativePipeRevocation();
+    testNativePipeBlockedIoCancellation();
     System.out.println("P37_JAVA_PROCESS_LIFECYCLE_PROXY_TESTS=PASS assertions="+checks);
     System.out.println("P37_ORIGINAL_ENGINEMANAGER_WIRING=NO");
     System.out.println("P37_ANDROID_BINDER_RUNTIME_E2E=NOT_TESTED");

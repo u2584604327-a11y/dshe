@@ -53,8 +53,9 @@ def verify(engine, p37, p50, p74, p75, manifest):
             "REAL_HTTP_TOKEN_URL_READY_REGEX_MISSING")
     require('P37RemoteProcess' not in engine, "UPSTREAM_ALREADY_WIRED_REVIEW_REQUIRED")
     require("P37_UNAUDITED_STDIN_DENIED" in p37
-            and "getErrorStream() { return stderr;" in p37
-            and "getInputStream() { return stdout;" in p37
+            and "return pipes == null ? stderr : pipes.error;" in p37
+            and "return pipes == null ? stdout : pipes.output;" in p37
+            and "if (pipes != null) return pipes.input;" in p37
             and "onTransportLost()" in p37,
             "P37_STREAM_PROXY_CAPABILITIES_CHANGED")
     require("P74_FIXTURE_ONLY_REAL_ENGINE_ARGV_NOT_AUTHORIZED" in p74
