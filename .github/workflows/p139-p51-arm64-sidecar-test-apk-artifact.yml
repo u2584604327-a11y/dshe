@@ -1,4 +1,4 @@
-name: P139 P51 ARM64 isolated Node side-by-side TEST APK (1-day artifact)
+name: P139 P51 ARM64 original-module default-config TEST APK (1-day artifact)
 on:
   pull_request:
     types: [opened, synchronize]
@@ -28,10 +28,12 @@ jobs:
       P47_NO_HOST_FALLBACK: '1'
       P49_NODE_STAGE: '1'
       P51_SIDE_BY_SIDE: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -39,6 +41,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
       - name: Fail-closed immutable original source, distinct package and original-builder guard
         shell: bash
         run: |
@@ -66,6 +71,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 host_candidate/p50_original_arm64_node/prepare_module_sidecar.py
           if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > "$RUNNER_TEMP/p139-builder.log" 2>&1; then
             echo P139_TEST_APK_BUILDER=FAILED_NOT_PUBLISHED
             grep -E "P43_|P47_|P49_|P50_|P51_|P134_|RuntimeError|Exception|Traceback|error:" "$RUNNER_TEMP/p139-builder.log" | tail -n 22 | cut -c 1-220 || true
@@ -98,25 +104,38 @@ jobs:
           unzip -p "$apk" classes3.dex | strings | grep -Fq "Lcom/dsh/android/p50/P50OriginalNodeFixedChild;"
           echo P139_SEPARATE_PACKAGE_PERMISSIONLESS_DIFFERENT_SIGNER=PASS
           echo P139_P134_REAL_KERNEL_GUARD_INSIDE_P51_DEX=PASS
+      - name: Compare original default-config with unmodified Node resolver and reject malicious streams
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/p50_original_arm64_node/verify_original_modules.py \
+            --apk .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --host-node "$(command -v node)" | tee "$RUNNER_TEMP/original-modules.log"
+          grep -Fxq 'ORIGINAL_MODULE_STREAM_DEFAULT_CONFIG=PASS modules=69 bytes=44560' "$RUNNER_TEMP/original-modules.log"
+          cat "$RUNNER_TEMP/original-modules.log" >> "$GITHUB_STEP_SUMMARY"
       - name: Prepare limited-life APK artifact and SHA256 manifest
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/p139delivery"
           from=".p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"
-          to="$RUNNER_TEMP/p139delivery/P139-P51-ARM64-Isolated-Node-TEST-ONLY.apk"
+          to="$RUNNER_TEMP/p139delivery/P139-P51-ARM64-Original-Modules-TEST-ONLY.apk"
           cp "$from" "$to"
-          (cd "$RUNNER_TEMP/p139delivery" && sha256sum P139-P51-ARM64-Isolated-Node-TEST-ONLY.apk > SHA256SUMS.txt)
+          (cd "$RUNNER_TEMP/p139delivery" && sha256sum P139-P51-ARM64-Original-Modules-TEST-ONLY.apk > SHA256SUMS.txt)
           sha="$(sha256sum "$to" | cut -d" " -f1)"
           test "${#sha}" = 64
           echo "P139_TEST_APK_SHA256=$sha" >> "$GITHUB_STEP_SUMMARY"
           echo "P139_TEST_APK_PACKAGE=com.dsh.p51.isolatedprobe" >> "$GITHUB_STEP_SUMMARY"
           echo "P139_DO_NOT_INSTALL_OVER_ORIGINAL_DSH=YES" >> "$GITHUB_STEP_SUMMARY"
+          bt="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools/35.0.0"
+          "$bt/apksigner" verify --print-certs "$to" > "$RUNNER_TEMP/p139delivery/TEST-ONLY-SIGNATURE.txt"
+          printf 'TEST-ONLY; not v139; not an upgrade to com.dsh.android.\nCommit: %s\n' "$(git rev-parse HEAD)" > "$RUNNER_TEMP/p139delivery/SOURCE.txt"
           echo "P139_ORIGINAL_NODE_ARM64_RUNTIME=NOT_TESTED" >> "$GITHUB_STEP_SUMMARY"
+          echo "P139_REAL_MODULE_RUNCLI_DEFAULT_CONFIG_PHONE_RESULT=PENDING" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload single short-lived download ZIP containing test-only APK and checksum
         uses: actions/upload-artifact@v4
         with:
-          name: p139-p51-arm64-isolated-node-test-only
+          name: p139-p51-arm64-original-modules-test-only
           path: ${{ runner.temp }}/p139delivery/
           if-no-files-found: error
           retention-days: 1

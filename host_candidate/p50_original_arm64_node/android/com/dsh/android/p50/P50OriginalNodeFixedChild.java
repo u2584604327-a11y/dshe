@@ -12,6 +12,7 @@ import android.os.RemoteException;
 import android.system.Os;
 import com.dsh.android.p134.P134RealArm64Gate;
 import com.dsh.android.p48.P48FixedIsolatedChild;
+import com.dsh.android.p68.P68AndroidBinderIntake.WorkerPipes;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -52,6 +53,18 @@ public final class P50OriginalNodeFixedChild {
   private volatile boolean aborted;
   private long sequence=0;
   private boolean started;
+  private WorkerPipes modulePipes;
+
+  /** Explicit permissionless sidecar only; never authorizes production P47. */
+  public static P50OriginalNodeFixedChild originalDefaultConfig(Context context,
+      Messenger authenticatedHost,String session,WorkerPipes authenticatedPipes) {
+    if(context==null || authenticatedPipes==null ||
+       !"com.dsh.p51.isolatedprobe".equals(context.getPackageName()))
+      throw new SecurityException("P50_DEFAULT_CONFIG_SIDECAR_ONLY");
+    P50OriginalNodeFixedChild result=new P50OriginalNodeFixedChild(context,authenticatedHost,session);
+    result.modulePipes=authenticatedPipes;
+    return result;
+  }
 
   public P50OriginalNodeFixedChild(Context context, Messenger host, String session) {
     if(context==null || host==null || session==null ||
@@ -70,6 +83,7 @@ public final class P50OriginalNodeFixedChild {
     aborted=true;
     java.lang.Process p=child;
     if(p!=null){if(force)p.destroyForcibly();else p.destroy();}
+    if(modulePipes!=null)modulePipes.close();
   }
   private void emit(int kind,byte[] data,int code){
     synchronized(sendLock){
@@ -126,7 +140,10 @@ public final class P50OriginalNodeFixedChild {
   }
   private void runFixedOriginalNode(){
     java.lang.Process node=null;
+    android.os.IBinder.DeathRecipient hostDied=()->stop(true);
+    boolean deathLinked=false;
     try{
+      host.getBinder().linkToDeath(hostDied,0);deathLinked=true;
       // P134: x86_64 Google APIs Native Bridge advertises arm64-v8a in
       // SUPPORTED_ABIS. That is NOT evidence of an ARM64 kernel/process.
       // Reject translated guest architectures before any asset read/exec.
@@ -176,13 +193,16 @@ public final class P50OriginalNodeFixedChild {
       }
       if(aborted)throw new IOException("P50_STOP_BEFORE_SPAWN");
 
-      ProcessBuilder pb=new ProcessBuilder(executable.getAbsolutePath(),
-          "--no-warnings","--eval",FIXED_JS);
+      String script=modulePipes==null?FIXED_JS:loadModuleBootstrap();
+      ProcessBuilder pb=modulePipes==null?
+          new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--eval",script):
+          new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--input-type=module","--eval",script);
       pb.directory(new File("/"));
       Map<String,String> env=pb.environment();
       env.clear();
       env.put("PATH","/system/bin");
-      env.put("HOME","/");
+      env.put("HOME",modulePipes==null?"/":"/dsh-home");
+      if(modulePipes!=null)env.put("DSH_HOME","/dsh-home");
       env.put("LD_LIBRARY_PATH",dir.getAbsolutePath());
       env.put("LD_PRELOAD",preloadsEnv.toString());
       node=pb.start(); child=node;
@@ -190,6 +210,15 @@ public final class P50OriginalNodeFixedChild {
       // P53: send on Binder only after actual original ARM64 Node
       // ProcessBuilder.start() returns successfully. This is not READY.
       emit(P48FixedIsolatedChild.CHILD_STARTED,null,0);
+
+      if(modulePipes!=null) {
+        modulePipes.attach(node);
+        if(!node.waitFor(90,TimeUnit.SECONDS) || aborted ||
+           !modulePipes.finishAfterChildExit(5000))
+          throw new IOException("P50_ORIGINAL_MODULE_TIMEOUT_OR_PIPE_FAILURE");
+        emit(P48FixedIsolatedChild.EXIT,null,node.exitValue());
+        return;
+      }
 
       final java.lang.Process running=node;
       AtomicReference<String> failure=new AtomicReference<>();
@@ -210,7 +239,28 @@ public final class P50OriginalNodeFixedChild {
       emit(P48FixedIsolatedChild.FAIL,null,125);
     }finally {
       if(node!=null && node.isAlive())node.destroyForcibly();
+      if(modulePipes!=null)modulePipes.close();
+      if(deathLinked)host.getBinder().unlinkToDeath(hostDied,0);
       child=null;
     }
   }
+  private String loadModuleBootstrap()throws Exception {
+    byte[] bytes;
+    try(InputStream input=context.getAssets().open("p50-original-modules.mjs");
+        ByteArrayOutputStream output=new ByteArrayOutputStream()) {
+      byte[] chunk=new byte[4096];int n;
+      while((n=input.read(chunk))!=-1) {
+        if(n>32768-output.size())throw new IOException("P50_BOOTSTRAP_BOUND");
+        output.write(chunk,0,n);
+      }
+      bytes=output.toByteArray();
+    }
+    StringBuilder hash=new StringBuilder(64);
+    for(byte b:MessageDigest.getInstance("SHA-256").digest(bytes))
+      hash.append(String.format(Locale.ROOT,"%02x",b&255));
+    if(!MODULE_BOOTSTRAP_SHA.equals(hash.toString()))
+      throw new SecurityException("P50_BOOTSTRAP_HASH_MISMATCH");
+    return new String(bytes,StandardCharsets.UTF_8);
+  }
+  private static final String MODULE_BOOTSTRAP_SHA="9c48fee08e0038f3f6d1140ee93b808c20b7ecd4f74c990c250af2b3b747e4fd";
 }

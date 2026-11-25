@@ -30,6 +30,17 @@ public final class P77TarAudit {
   private static final int BLOCK=512;
   private static final long MAX_MEMBER=128L*1024*1024, MAX_TOTAL=4L*1024*1024*1024;
   private P77TarAudit(){}
+  /** Receives bounded canonical members. Consumers must not execute before sealOriginal. */
+  public interface MemberSink {
+    void begin(String canonical,boolean directory,long size)throws IOException;
+    void accept(byte[] bytes,int offset,int length)throws IOException;
+    void endMember()throws IOException;
+    void sealOriginal(Result complete)throws IOException;
+  }
+  public static Result inspectGzipTo(InputStream source,MemberSink sink)throws IOException{
+    if(sink==null)throw new IllegalArgumentException("P77_SINK_REQUIRED");
+    return inspectGzip(source,null,null,null,null,sink);
+  }
   public static final class Result {
     public final int members,addons;
     public final long bytes;
@@ -123,6 +134,12 @@ public final class P77TarAudit {
   private static void consume(InputStream in,long bytes,MessageDigest md,
                               P78ModuleSlot selected,P144ScopedSourceBroker leased,
                               P145ExactBootEntry boot,P147ScopedCandidateLease candidate)throws IOException{
+    consume(in,bytes,md,selected,leased,boot,candidate,null);
+  }
+  private static void consume(InputStream in,long bytes,MessageDigest md,
+                              P78ModuleSlot selected,P144ScopedSourceBroker leased,
+                              P145ExactBootEntry boot,P147ScopedCandidateLease candidate,
+                              MemberSink sink)throws IOException{
     byte[] buffer=new byte[65536];long remaining=bytes;
     while(remaining>0){
       int n=in.read(buffer,0,(int)Math.min(remaining,buffer.length));
@@ -133,6 +150,7 @@ public final class P77TarAudit {
       if(leased!=null)leased.accept(buffer,0,n);
       if(boot!=null)boot.accept(buffer,0,n);
       if(candidate!=null)candidate.accept(buffer,0,n);
+      if(sink!=null)sink.accept(buffer,0,n);
       remaining-=n;
     }
   }
@@ -186,6 +204,11 @@ public final class P77TarAudit {
                                     P144ScopedSourceBroker broker,
                                     P145ExactBootEntry boot,
                                     P147ScopedCandidateLease candidate)throws IOException{
+    return inspectGzip(source,selectedModule,broker,boot,candidate,null);
+  }
+  private static Result inspectGzip(InputStream source,P78ModuleSlot selectedModule,
+                                    P144ScopedSourceBroker broker,P145ExactBootEntry boot,
+                                    P147ScopedCandidateLease candidate,MemberSink sink)throws IOException{
     try(GZIPInputStream tar=new GZIPInputStream(source,65536)){
       MessageDigest root=digest();
       root.update("P54_IMMUTABLE_ENGINE_TREE_V1\0".getBytes(StandardCharsets.US_ASCII));
@@ -245,13 +268,15 @@ public final class P77TarAudit {
         boolean leased=broker!=null && broker.begin(name,directory,size);
         boolean exact=boot!=null && boot.begin(name,directory,size);
         boolean target=candidate!=null && candidate.begin(name,directory,size);
+        if(sink!=null)sink.begin(name,directory,size);
         MessageDigest member=digest();
         consume(tar,size,member,selected?selectedModule:null,
-                leased?broker:null,exact?boot:null,target?candidate:null);
+                leased?broker:null,exact?boot:null,target?candidate:null,sink);
         if(selected)selectedModule.endMember();
         if(leased)broker.endMember();
         if(exact)boot.endMember();
         if(target)candidate.endMember();
+        if(sink!=null)sink.endMember();
         pad(tar,size);
         byte[] path=name.getBytes(StandardCharsets.UTF_8);
         root.update(ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN)
@@ -270,6 +295,7 @@ public final class P77TarAudit {
       if(broker!=null)broker.sealOriginal(complete);
       if(boot!=null)boot.sealOriginal(complete);
       if(candidate!=null)candidate.sealOriginal(complete);
+      if(sink!=null)sink.sealOriginal(complete);
       return complete;
     }
   }
