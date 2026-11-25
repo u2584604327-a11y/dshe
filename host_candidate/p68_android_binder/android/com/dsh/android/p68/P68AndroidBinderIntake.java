@@ -127,12 +127,15 @@ public final class P68AndroidBinderIntake {
       if(child!=null || startedChild==null || closed.get())
         throw new IllegalStateException("P68_ONE_CHILD_PIPE_ATTACHMENT_REQUIRED");
       child=startedChild;
-      input=pump(stdinPipe,child.getOutputStream(),true,"dsh-child-stdin");
-      output=pump(child.getInputStream(),stdoutPipe,false,"dsh-child-stdout");
-      error=pump(child.getErrorStream(),stderrPipe,false,"dsh-child-stderr");
+      input=forwardStdin(stdinPipe,child.getOutputStream(),()->{
+        if(!closed.get()&&!childEnded.get()&&child.isAlive()){
+          failed.set(true);child.destroyForcibly();
+        }
+      });
+      output=pumpOutput(child.getInputStream(),stdoutPipe,"dsh-child-stdout");
+      error=pumpOutput(child.getErrorStream(),stderrPipe,"dsh-child-stderr");
     }
-    private Thread pump(InputStream source, OutputStream destination,
-        boolean stdin, String name) {
+    private Thread pumpOutput(InputStream source, OutputStream destination,String name) {
       Thread thread=new Thread(()->{
         try(InputStream in=source;OutputStream out=destination) {
           byte[] bytes=new byte[8192];
@@ -141,14 +144,14 @@ public final class P68AndroidBinderIntake {
           while((count=in.read(bytes))!=-1)if(count>0&&!discard) {
             try {out.write(bytes,0,count);}
             catch(IOException peerClosed) {
-              if(stdin||!brokenPipe(peerClosed))throw peerClosed;
+              if(!brokenPipe(peerClosed))throw peerClosed;
               // Closing a host reader releases its endpoint. Drain the child
               // output so that this local close doesn't terminate the child.
               discard=true;
             }
           }
         } catch(IOException failure) {
-          if(!closed.get() && !(stdin&&(childEnded.get()||!child.isAlive()))) {
+          if(!closed.get()) {
             failed.set(true);
             if(child.isAlive())child.destroyForcibly();
           }
@@ -185,6 +188,35 @@ public final class P68AndroidBinderIntake {
         try {stream.close();}catch(IOException ignored) { }
       }
     }
+  }
+  /**
+   * A child may close stdin and keep running (including printing an error).
+   * A failed write to child stdin closes the upstream reader so its producer
+   * observes EPIPE; it must not kill the child or discard its eventual exit.
+   * Only a failure reading the authenticated transport invokes onSourceFailure.
+   */
+  static Thread forwardStdin(InputStream source,OutputStream childInput,
+      Runnable onSourceFailure) {
+    if(source==null||childInput==null||onSourceFailure==null)
+      throw new IllegalArgumentException("P68_STDIN_STREAMS_REQUIRED");
+    Thread thread=new Thread(()->{
+      try {
+        byte[] bytes=new byte[8192];
+        for(;;){
+          final int count;
+          try{count=source.read(bytes);}
+          catch(IOException sourceLost){onSourceFailure.run();return;}
+          if(count<0)return;
+          if(count==0)continue;
+          try{childInput.write(bytes,0,count);}
+          catch(IOException childClosedInput){return;}
+        }
+      }finally{
+        try{source.close();}catch(IOException ignored){}
+        try{childInput.close();}catch(IOException ignored){}
+      }
+    },"dsh-child-stdin");
+    thread.setDaemon(true);thread.start();return thread;
   }
   private static void closeDescriptors(ParcelFileDescriptor[] descriptors) {
     for(ParcelFileDescriptor fd:descriptors)if(fd!=null) {

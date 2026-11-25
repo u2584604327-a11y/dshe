@@ -4,11 +4,17 @@ const fs = require('node:fs');
 
 const ALWAYS = new Set([
   'p139-p51-arm64-sidecar-test-apk-artifact.yml',
-  'p245-build-only-probe.yml', 'p310-original-art-verify-one-shot.yml',
-  'p311-original-target-class-link.yml', 'p37-remote-process-contract.yml',
+  'p37-remote-process-contract.yml',
   'p141-original-engine-stderr-merge.yml', 'p195-coroutine-process-lifecycle.yml',
   'p184-android35-real-p68-p75-receipt.yml', 'p184-verified-child-start-receipt.yml',
 ]);
+
+const DEX_GATES = new Set(['p245-build-only-probe.yml',
+  'p310-original-art-verify-one-shot.yml', 'p311-original-target-class-link.yml']);
+const DEX_INPUTS = ['host_candidate/p40_', 'host_candidate/p43_original_service/',
+  'host_candidate/p47_no_fallback/', 'host_candidate/p209_', 'host_candidate/p245_',
+  'host_candidate/p279_', 'host_candidate/p285_', 'host_candidate/p289_',
+  'host_candidate/p291_', 'host_candidate/p294_', 'host_candidate/p310_', 'host_candidate/p311_'];
 
 function relevant(text, changed) {
   // Retain workflows without a simple positive path list, and those using
@@ -64,6 +70,7 @@ module.exports = async function select({github, context, core}) {
         !/^\.github\/workflows\/[a-zA-Z0-9_.-]+\.ya?ml$/.test(run.path)) continue;
     const name = run.path.split('/').at(-1);
     if (ALWAYS.has(name)) continue;
+    if (DEX_GATES.has(name) && changed.some(file => DEX_INPUTS.some(prefix => file.startsWith(prefix)))) continue;
     let source;
     try {source = fs.readFileSync(run.path, 'utf8');} catch {continue;}
     if (relevant(source, changed)) continue;

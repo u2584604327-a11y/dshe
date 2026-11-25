@@ -12,6 +12,7 @@ import sys
 import tarfile
 import tempfile
 import threading
+import time
 import zipfile
 
 APK_SHA = '3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5'
@@ -65,6 +66,8 @@ def main():
     parser.add_argument('--apk', required=True, type=Path)
     parser.add_argument('--host-node', required=True, type=Path)
     parser.add_argument('--module-apk', type=Path, help='also verify the built TEST-ONLY asset allowlist')
+    parser.add_argument('--android-jar', type=Path, help='also test the actual stdin forwarding implementation on JVM')
+    parser.add_argument('--baseline-bootstrap', type=Path, help='reproduce the exact 2c88fcc nonblocking-input failure')
     args = parser.parse_args()
     node = str(args.host_node.resolve())
     require(subprocess.check_output([node, '--version'], text=True).strip() == 'v26.4.0',
@@ -87,33 +90,69 @@ public final class ModuleStreamMain {
 }''')
         roots = [str(p) for pattern in ('*/src', '*/android')
                  for p in (ROOT / 'host_candidate').glob(pattern) if p.is_dir()]
-        subprocess.run(['javac', '--release', '8', '-sourcepath', os.pathsep.join(roots),
-                        '-d', str(work), str(source),
-                        str(ROOT / 'host_candidate/p77_engine_tar_audit/test/com/dsh/android/p77/P77TarAuditTest.java')], check=True)
+        sources = [str(source), str(ROOT / 'host_candidate/p77_engine_tar_audit/test/com/dsh/android/p77/P77TarAuditTest.java')]
+        classpath = str(work)
+        if args.android_jar:
+            require(args.android_jar.is_file(), 'ANDROID_SDK_JAR_REQUIRED')
+            sources.append(str(ROOT / 'host_candidate/p68_android_binder/test/com/dsh/android/p68/P68StdinLifecycleTest.java'))
+            classpath += os.pathsep + str(args.android_jar.resolve())
+        subprocess.run(['javac', '--release', '8', '-cp', classpath,
+                        '-sourcepath', os.pathsep.join(roots), '-d', str(work), *sources], check=True)
+        if args.android_jar:
+            subprocess.run(['java', '-cp', classpath, 'com.dsh.android.p68.P68StdinLifecycleTest'],
+                           check=True, timeout=30)
         subprocess.run(['java', '-cp', str(work), 'com.dsh.android.p77.P77TarAuditTest'], check=True)
         wire = work / 'original.modules'
         subprocess.run(['java', '-cp', str(work), 'ModuleStreamMain',
                         str(args.apk.resolve()), str(wire)], check=True)
         environment = {'PATH': os.environ.get('PATH', ''), 'HOME': '/dsh-home', 'DSH_HOME': '/dsh-home'}
-        command = [node, '--permission', '--allow-worker', '--allow-fs-read=' + str(BOOTSTRAP), str(BOOTSTRAP)]
-
-        def execute(payload):
+        def execute(payload, nonblocking=False, bootstrap=BOOTSTRAP, expect_early_rejection=False):
+            command = [node, '--permission', '--allow-worker', '--allow-fs-read=' + str(bootstrap), str(bootstrap)]
             failures = []
             with (work / 'stdout').open('wb') as stdout, (work / 'stderr').open('wb') as stderr:
-                process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=stdout,
-                                           stderr=stderr, env=environment, cwd=work)
+                read_fd = write_fd = None
+                if nonblocking:
+                    read_fd, write_fd = os.pipe()
+                    os.set_blocking(read_fd, False)
+                try:
+                    process = subprocess.Popen(command, stdin=read_fd if nonblocking else subprocess.PIPE,
+                                               stdout=stdout, stderr=stderr, env=environment, cwd=work)
+                except BaseException:
+                    if write_fd is not None:
+                        os.close(write_fd)
+                    raise
+                finally:
+                    if read_fd is not None:
+                        os.close(read_fd)
+                feeder = os.fdopen(write_fd, 'wb') if nonblocking else process.stdin
 
                 def send():
                     try:
+                        if expect_early_rejection:
+                            # Keep the writer open with zero bytes until the exact
+                            # old reader rejects. EOF cannot produce this result.
+                            for _ in range(400):
+                                if process.poll() is not None:
+                                    return
+                                time.sleep(0.025)
+                            raise RuntimeError('BASELINE_DID_NOT_REJECT_EMPTY_NONBLOCKING_FD')
+                        if nonblocking:
+                            time.sleep(0.25)  # real empty nonblocking fd during Node startup
                         with payload.open('rb') as data:
-                            shutil.copyfileobj(data, process.stdin, 65536)
+                            sent = 0
+                            while block := data.read(65536):
+                                feeder.write(block)
+                                sent += len(block)
+                                if nonblocking and sent % (4 * 1024 * 1024) == 0:
+                                    feeder.flush()
+                                    time.sleep(0.01)  # force repeated gaps, not just initial EAGAIN
                     except BrokenPipeError:
                         pass  # A bounded rejection need not consume the supplied stream.
                     except Exception as error:
                         failures.append(type(error).__name__)
                     finally:
                         try:
-                            process.stdin.close()
+                            feeder.close()
                         except BrokenPipeError:
                             pass
                 writer = threading.Thread(target=send, daemon=True)
@@ -127,6 +166,16 @@ public final class ModuleStreamMain {
                 writer.join(5)
                 require(not writer.is_alive() and not failures, 'MODULE_WRITER_FAILURE')
             return status, (work / 'stdout').read_bytes(), (work / 'stderr').read_bytes()
+
+        if args.baseline_bootstrap:
+            baseline = args.baseline_bootstrap.resolve()
+            require(hashlib.sha256(baseline.read_bytes()).hexdigest() ==
+                    '9c48fee08e0038f3f6d1140ee93b808c20b7ecd4f74c990c250af2b3b747e4fd',
+                    'BEFORE_FIX_BOOTSTRAP_SHA')
+            status, output, diagnostics = execute(wire, nonblocking=True, bootstrap=baseline, expect_early_rejection=True)
+            require(status == 125 and output == b'' and b'DSH_ORIGINAL_CONFIG_ERROR=EAGAIN' in diagnostics,
+                    'BEFORE_FIX_FAILURE_NOT_REPRODUCED')
+            print('ORIGINAL_MODULE_NONBLOCKING_BEFORE_FIX=REPRODUCED_EAGAIN_EXIT125')
 
         status, output, diagnostics = execute(wire)
         require(status == 0 and b'DSH_ORIGINAL_CONFIG_MODULES=69\n' in diagnostics,
@@ -161,6 +210,10 @@ public final class ModuleStreamMain {
         normalized = result.stdout.replace(str(home).encode(), b'/dsh-home').replace(
             str(reference).encode(), b'/dsh-runtime')
         require(normalized == output, 'HOOKS_DIFFER_FROM_ORIGINAL_NODE_RESOLVER')
+        status, delayed, diagnostics = execute(wire, nonblocking=True)
+        require(status == 0 and delayed == output and b'DSH_ORIGINAL_CONFIG_MODULES=69\n' in diagnostics,
+                'NONBLOCKING_STDIN_LOST_ORIGINAL_MODULES')
+        print('ORIGINAL_MODULE_NONBLOCKING_STDIN_AND_DELAYED_CHUNKS=PASS modules=69')
         print('ORIGINAL_MODULE_STREAM_DEFAULT_CONFIG=PASS modules=69 bytes=44560')
         print('ORIGINAL_CONFIG_NATIVE_NODE_RESOLVER_COMPARISON=PASS sha256=' + CONFIG_SHA)
 
@@ -189,7 +242,7 @@ public final class ModuleStreamMain {
             value = destination.read(1)
             destination.seek(-1, os.SEEK_CUR)
             destination.write(bytes([value[0] ^ 1]))
-        status, output, diagnostics = execute(negative)
+        status, output, diagnostics = execute(negative, nonblocking=True)
         require(status == 125 and output == b'' and b'E_DSH_MODULE_TREE_SEAL' in diagnostics,
                 'CHANGED_ORIGINAL_BYTES_ACCEPTED')
         print('ORIGINAL_MODULE_STREAM_TRAILING_AND_HASH_MUTATION=DENY')

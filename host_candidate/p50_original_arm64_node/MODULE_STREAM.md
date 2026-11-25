@@ -47,4 +47,28 @@ acknowledgment, owner epoch and one-use receipt before obtaining P37. It streams
 resources through P37 stdin, verifies stdout/stderr/EOF and authenticated exit,
 and cancels on Binder death or deadline. The child checks a real ARM64 kernel
 before exec and pins the bootstrap asset. No raw configuration is displayed.
-The phone result remains pending until the APK actually runs on ARM64 Android.
+The repaired phone route remains unverified; the 2c88fcc failure is recorded below.
+
+November 25 input/exit repair
+----------------------------
+
+The vivo report for 2c88fcc authenticated CHILD_STARTED and consumed its receipt,
+then failed with the previous combined AUTHENTICATED_CHILD_REJECTED status. That
+status did not distinguish a valid supervisor FAIL from a protocol rejection and
+discarded useful exit diagnostics. It is not a production-module PASS.
+
+The exact pinned 2c88fcc bootstrap independently reproduces exit 125 / EAGAIN on
+an empty, open, nonblocking stdin. The repaired receiver retries EAGAIN,
+EWOULDBLOCK and EINTR with bounded waiting; all tree verification stays required.
+P139 fetches that immutable baseline and repeats this before/after comparison.
+The same 69 original modules and byte-identical config must load with delayed
+nonblocking chunks. Mutated resources still reject before config output.
+
+Child stdin closure now propagates upstream closure without killing a still-live
+child. A real JVM subprocess test requires its later stderr and actual exit 7;
+a failed transport read must still cancel it. The config sender closes stdin on
+transfer failure and waits for the authenticated error/exit within its deadline.
+Authenticated supervisor FAIL now reports only a fixed phase and (after exit)
+its numeric status; invalid UID/session/order still closes everything. These
+changes fix reproduced defects, but the cause of the reported vivo failure is
+not conclusively attributed until the repaired ARM64 route runs on the device.

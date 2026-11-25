@@ -77,6 +77,9 @@ jobs:
           python3 host_candidate/p138_original_build_gate/verify_p134_wired.py
           python3 host_candidate/p51_side_by_side/test_manifest.py
           bash -n host_candidate/p43_original_service/build_embedded_emulator_apk.sh
+          gh api "repos/$GH_REPO/contents/host_candidate/p50_original_arm64_node/original_modules.mjs?ref=2c88fcc40e562619b31660732b6e53f54892659e" \
+            --jq '.content' | base64 --decode > "$RUNNER_TEMP/p50-before-fix.mjs"
+          printf '%s  %s\n' 9c48fee08e0038f3f6d1140ee93b808c20b7ecd4f74c990c250af2b3b747e4fd "$RUNNER_TEMP/p50-before-fix.mjs" | sha256sum -c -
           echo P139_ONLY_PR80_SEPARATE_P51_PACKAGE=PASS
       - name: Install offline build prerequisites; do not accept Android SDK licenses
         shell: bash
@@ -133,6 +136,8 @@ jobs:
           set -euo pipefail
           python3 host_candidate/p50_original_arm64_node/verify_original_modules.py \
             --apk .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
+            --baseline-bootstrap "$RUNNER_TEMP/p50-before-fix.mjs" \
+            --android-jar "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/platforms/android-35/android.jar" \
             --module-apk .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk \
             --host-node "$(command -v node)" | tee "$RUNNER_TEMP/original-modules.log"
           grep -Fxq 'ORIGINAL_MODULE_STREAM_DEFAULT_CONFIG=PASS modules=69 bytes=44560' "$RUNNER_TEMP/original-modules.log"

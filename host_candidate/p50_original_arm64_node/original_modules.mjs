@@ -20,6 +20,8 @@ const directories = new Set([ROOT, '/', '/dsh-home', '/dsh-workspace']);
 const loaded = new Set();
 const packageCache = new Map();
 const originalRead = fs.readSync;
+const readGate = new Int32Array(new SharedArrayBuffer(4));
+let streamDeadline = 0n;
 
 function fail(code) {
   const error = new Error(code);
@@ -31,14 +33,29 @@ function exactBytes(length) {
   const bytes = Buffer.allocUnsafe(length);
   let offset = 0;
   while (offset < length) {
-    const count = originalRead(0, bytes, offset, length - offset, null);
+    const count = streamRead(bytes, offset, length - offset);
     if (count === 0) fail('E_DSH_MODULE_STREAM_EOF');
     offset += count;
   }
   return bytes;
 }
 
+function streamRead(bytes, offset, length) {
+  for (;;) {
+    if (process.hrtime.bigint() >= streamDeadline) fail('E_DSH_MODULE_STREAM_TIMEOUT');
+    try { return originalRead(0, bytes, offset, length, null); }
+    catch (error) {
+      if (error?.code === 'EINTR') continue;
+      if (error?.code !== 'EAGAIN' && error?.code !== 'EWOULDBLOCK') throw error;
+      // Android child stdio need not be blocking. The resource producer runs
+      // outside this Node process; bounded futex waiting releases the CPU.
+      Atomics.wait(readGate, 0, 0, 2);
+    }
+  }
+}
+
 function receiveModules() {
+  streamDeadline = process.hrtime.bigint() + 80_000_000_000n;
   if (exactBytes(8).toString('ascii') !== 'DSHMOD01') fail('E_DSH_MODULE_STREAM_VERSION');
   const digest = createHash('sha256');
   digest.update('P54_IMMUTABLE_ENGINE_TREE_V1\0');
@@ -80,7 +97,7 @@ function receiveModules() {
     }
   }
   const trailing = Buffer.alloc(1);
-  if (originalRead(0, trailing, 0, 1, null) !== 0 || members !== EXPECTED_MEMBERS ||
+  if (streamRead(trailing, 0, 1) !== 0 || members !== EXPECTED_MEMBERS ||
       total !== EXPECTED_BYTES || addons !== 9 || digest.digest('hex') !== EXPECTED_TREE) {
     fail('E_DSH_MODULE_TREE_SEAL');
   }

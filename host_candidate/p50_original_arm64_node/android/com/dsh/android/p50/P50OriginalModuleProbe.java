@@ -27,6 +27,7 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
   private P68AndroidBinderIntake intake;
   private P37RemoteProcess process;
   private boolean started,handedOut;
+  private final AtomicReference<String> sourceState=new AtomicReference<>("NOT_STARTED");
   private final long epoch=SystemClock.elapsedRealtimeNanos();
   private final android.os.IBinder.DeathRecipient workerDied=()->main.post(()->deny("BINDER_DEATH"));
   private boolean deathLinked;
@@ -35,8 +36,19 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
       if(closed.get()||intake==null)return;
       try{
         P68AndroidBinderIntake.Result result=intake.accept(message);
-        if(result==P68AndroidBinderIntake.Result.REJECTED||result==P68AndroidBinderIntake.Result.FAIL){
-          deny("AUTHENTICATED_CHILD_REJECTED");return;
+        if(result==P68AndroidBinderIntake.Result.REJECTED){
+          report("ORIGINAL_CONFIG_MODULE_SOURCE="+sourceState.get());
+          deny("BINDER_PROTOCOL_REJECTED");return;
+        }
+        if(result==P68AndroidBinderIntake.Result.FAIL){
+          // Only inspect this bounded diagnostic after UID/session/order have
+          // authenticated FAIL. It never authorizes or resurrects a Process.
+          report("ORIGINAL_CONFIG_SUPERVISOR_STAGE="+
+              P50OriginalNodeFixedChild.failureStageName(message.arg1));
+          if(message.arg1==6&&message.arg2>=0&&message.arg2<=255)
+            report("ORIGINAL_CONFIG_SUPERVISOR_CHILD_EXIT="+message.arg2);
+          report("ORIGINAL_CONFIG_MODULE_SOURCE="+sourceState.get());
+          deny("SUPERVISOR_FAILURE");return;
         }
         if(result==P68AndroidBinderIntake.Result.CHILD_STARTED){
           if(handedOut){deny("DUPLICATE_CHILD");return;}
@@ -91,9 +103,15 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
     AtomicReference<String> failure=new AtomicReference<>();
     ByteArrayOutputStream output=new ByteArrayOutputStream(),error=new ByteArrayOutputStream();
     Thread input=new Thread(()->{
+      sourceState.set("STREAMING");
       try(InputStream original=host.getAssets().open("engine.bin");OutputStream stdin=child.getOutputStream()){
         P50ModuleStream.writeOriginal(original,stdin);
-      }catch(Exception denied){failure.compareAndSet(null,"MODULE_TRANSFER");child.destroyForcibly();}
+        sourceState.set("VERIFIED_COMPLETE");
+      }catch(Exception denied){
+        sourceState.set("FAILED");failure.compareAndSet(null,"MODULE_TRANSFER");
+        // Closing stdin sends EOF. Let the authenticated child report its
+        // actual error/exit and stderr; the existing deadline still cancels it.
+      }
       finally{finished.countDown();}
     },"dsh-original-module-stream");
     Thread stdout=reader(child.getInputStream(),output,1024*1024,finished,failure,child);
@@ -119,6 +137,9 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
             report("ORIGINAL_CONFIG_ENGINE_MANAGER_AND_HTTP_READY=NOT_WIRED");
             close();
           }else{
+            report("ORIGINAL_CONFIG_MODULE_SOURCE="+sourceState.get());
+            report("ORIGINAL_CONFIG_CHILD_EXIT="+child.exitValue());
+            report("ORIGINAL_CONFIG_STDERR_BYTES="+error.size());
             report("ORIGINAL_CONFIG_OBSERVED_SHA256="+sha+" bytes="+output.size());
             String prefix="DSH_ORIGINAL_CONFIG_ERROR=";
             for(String line:diagnostics.split("\n"))if(line.startsWith(prefix)&&

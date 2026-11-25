@@ -55,6 +55,19 @@ public final class P50OriginalNodeFixedChild {
   private boolean started;
   private WorkerPipes modulePipes;
 
+  // Fixed supervisor diagnostics, never authority, paths or exception text.
+  public static String failureStageName(int stage) {
+    switch(stage){
+      case 1:return "VERIFY_RUNTIME";
+      case 2:return "LOAD_BOOTSTRAP";
+      case 3:return "CREATE_CHILD";
+      case 4:return "ATTACH_PIPES";
+      case 5:return "WAIT_CHILD_EXIT";
+      case 6:return "DRAIN_PIPES";
+      default:return "UNSPECIFIED";
+    }
+  }
+
   /** Explicit permissionless sidecar only; never authorizes production P47. */
   public static P50OriginalNodeFixedChild originalDefaultConfig(Context context,
       Messenger authenticatedHost,String session,WorkerPipes authenticatedPipes) {
@@ -86,6 +99,9 @@ public final class P50OriginalNodeFixedChild {
     if(modulePipes!=null)modulePipes.close();
   }
   private void emit(int kind,byte[] data,int code){
+    emit(kind,data,code,0);
+  }
+  private void emit(int kind,byte[] data,int code,int failureStage){
     synchronized(sendLock){
       if(aborted)return;
       Bundle payload=new Bundle();
@@ -94,6 +110,12 @@ public final class P50OriginalNodeFixedChild {
       if(data!=null)payload.putByteArray("data",data);
       if(kind==P48FixedIsolatedChild.EXIT)payload.putInt("exitCode",code);
       Message message=Message.obtain(null,kind);message.setData(payload);
+      if(kind==P48FixedIsolatedChild.FAIL){
+        message.arg1=failureStage;
+        message.arg2=Integer.MIN_VALUE;
+        java.lang.Process p=child;
+        if(failureStage==6&&p!=null&&!p.isAlive())message.arg2=p.exitValue();
+      }
       try{host.send(message);}
       catch(RemoteException lost){stop(true);}
     }
@@ -142,6 +164,7 @@ public final class P50OriginalNodeFixedChild {
     java.lang.Process node=null;
     android.os.IBinder.DeathRecipient hostDied=()->stop(true);
     boolean deathLinked=false;
+    int failureStage=1;
     try{
       host.getBinder().linkToDeath(hostDied,0);deathLinked=true;
       // P134: x86_64 Google APIs Native Bridge advertises arm64-v8a in
@@ -193,6 +216,7 @@ public final class P50OriginalNodeFixedChild {
       }
       if(aborted)throw new IOException("P50_STOP_BEFORE_SPAWN");
 
+      failureStage=2;
       String script=modulePipes==null?FIXED_JS:loadModuleBootstrap();
       ProcessBuilder pb=modulePipes==null?
           new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--eval",script):
@@ -205,6 +229,7 @@ public final class P50OriginalNodeFixedChild {
       if(modulePipes!=null)env.put("DSH_HOME","/dsh-home");
       env.put("LD_LIBRARY_PATH",dir.getAbsolutePath());
       env.put("LD_PRELOAD",preloadsEnv.toString());
+      failureStage=3;
       node=pb.start(); child=node;
       if(aborted){node.destroyForcibly();throw new IOException("P50_CANCELLED");}
       // P53: send on Binder only after actual original ARM64 Node
@@ -212,10 +237,14 @@ public final class P50OriginalNodeFixedChild {
       emit(P48FixedIsolatedChild.CHILD_STARTED,null,0);
 
       if(modulePipes!=null) {
+        failureStage=4;
         modulePipes.attach(node);
-        if(!node.waitFor(90,TimeUnit.SECONDS) || aborted ||
-           !modulePipes.finishAfterChildExit(5000))
-          throw new IOException("P50_ORIGINAL_MODULE_TIMEOUT_OR_PIPE_FAILURE");
+        failureStage=5;
+        if(!node.waitFor(90,TimeUnit.SECONDS) || aborted)
+          throw new IOException("P50_ORIGINAL_MODULE_TIMEOUT");
+        failureStage=6;
+        if(!modulePipes.finishAfterChildExit(5000))
+          throw new IOException("P50_ORIGINAL_MODULE_PIPE_FAILURE");
         emit(P48FixedIsolatedChild.EXIT,null,node.exitValue());
         return;
       }
@@ -236,7 +265,7 @@ public final class P50OriginalNodeFixedChild {
       emit(P48FixedIsolatedChild.EXIT,null,node.exitValue());
     }catch(Exception | LinkageError failure) {
       // No raw exception string, environment, user data, or executable path.
-      emit(P48FixedIsolatedChild.FAIL,null,125);
+      emit(P48FixedIsolatedChild.FAIL,null,125,modulePipes==null?0:failureStage);
     }finally {
       if(node!=null && node.isAlive())node.destroyForcibly();
       if(modulePipes!=null)modulePipes.close();
@@ -262,5 +291,5 @@ public final class P50OriginalNodeFixedChild {
       throw new SecurityException("P50_BOOTSTRAP_HASH_MISMATCH");
     return new String(bytes,StandardCharsets.UTF_8);
   }
-  private static final String MODULE_BOOTSTRAP_SHA="9c48fee08e0038f3f6d1140ee93b808c20b7ecd4f74c990c250af2b3b747e4fd";
+  private static final String MODULE_BOOTSTRAP_SHA="bf8557d829df6b4a3ce1137b5fa29dfe52563baa04c5693accae1a159d1a8807";
 }
