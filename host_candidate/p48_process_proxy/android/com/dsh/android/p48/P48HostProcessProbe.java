@@ -280,7 +280,10 @@ public final class P48HostProcessProbe {
     m.replyTo=inbox;
     try{isolated.send(m);}
     catch(Exception e){failClosed("P48_INIT_SEND_FAILED");return;}
-    finally{if(processPipes!=null)processPipes.closeWorkerCopies();}
+    finally{
+      if(processPipes!=null&&!processPipes.closeWorkerCopies())
+        failClosed("P68_SENDER_PIPE_OWNERSHIP_RELEASE_FAILED");
+    }
     main.postDelayed(()->{
       if(!failed&&!complete)failClosed("P48_ISOLATED_CHILD_DEADLINE");
     },14000);

@@ -1,6 +1,8 @@
 package com.dsh.android.p68;
 import android.os.Bundle;
 import android.os.Message;
+import android.os.Parcel;
+import android.os.Parcelable;
 import com.dsh.android.p53.P53StartOrder;
 import com.dsh.android.p67.P67AuthenticatedHandoff;
 import com.dsh.p37.P37RemoteProcess;
@@ -26,6 +28,7 @@ public final class P68AndroidBinderIntake {
     private final ParcelFileDescriptor[] ends;
     private final P37RemoteProcess.Stdio stdio;
     private boolean delivered;
+    private boolean workerCopiesReleased,closed;
 
     private HostPipes(ParcelFileDescriptor[] descriptors) {
       // Each pair is [read, write], in stdin/stdout/stderr order.
@@ -60,15 +63,37 @@ public final class P68AndroidBinderIntake {
       bundle.putParcelable("stderr",ends[5]);
       return bundle;
     }
-    /** Call after Messenger.send has parcelled the descriptors, including failure. */
-    public void closeWorkerCopies() {
-      closeDescriptors(new ParcelFileDescriptor[] {ends[0],ends[3],ends[5]});
+    /**
+     * Call after Messenger.send. Ordinary close() would publish a premature
+     * reliable-pipe status from this local copy, stealing/masking the actual
+     * peer's EOF/error status. Release transferred ownership without a status.
+     */
+    public synchronized boolean closeWorkerCopies() {
+      if(workerCopiesReleased)return !closed;
+      workerCopiesReleased=true;
+      if(!delivered){close();return false;}
+      try{
+        for(ParcelFileDescriptor fd:new ParcelFileDescriptor[] {ends[0],ends[3],ends[5]})
+          releaseTransferredCopy(fd);
+        return true;
+      }catch(RuntimeException transferFailure){close();return false;}
     }
     @Override public synchronized void close() {
-      delivered=true;
+      delivered=true;closed=true;workerCopiesReleased=true;
       try {stdio.close();}catch(IOException ignored) { }
       closeDescriptors(ends);
     }
+  }
+  /** Public Parcel ownership semantics; no detachFd, hidden API or skipped checkError.
+   * The throwaway Parcel owns a duplicate until recycle. RETURN_VALUE closes
+   * the sender object without emitting a false peer status (AOSP Status.SILENCE).
+   * The already-transferred receiver remains the sole protocol endpoint owner.
+   */
+  static void releaseTransferredCopy(ParcelFileDescriptor descriptor) {
+    if(descriptor==null)return;
+    Parcel parcel=Parcel.obtain();
+    try{descriptor.writeToParcel(parcel,Parcelable.PARCELABLE_WRITE_RETURN_VALUE);}
+    finally{parcel.recycle();}
   }
 
   /** Worker-side pipe adapter. The service authenticates the enclosing Message. */

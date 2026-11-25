@@ -91,7 +91,9 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
       main.postDelayed(()->{if(!closed.get())deny("DEADLINE");},100000);
       report("ORIGINAL_CONFIG_ENGINE_MANAGER_AND_HTTP_READY=NOT_WIRED");
     }catch(IOException|RemoteException|RuntimeException failure){deny("START_TRANSPORT");}
-    finally{if(pipes!=null)pipes.closeWorkerCopies();}
+    finally{
+      if(pipes!=null&&!pipes.closeWorkerCopies())deny("PIPE_OWNERSHIP_RELEASE");
+    }
   }
   private void control(int kind){
     Message message=Message.obtain(null,kind);Bundle data=new Bundle();

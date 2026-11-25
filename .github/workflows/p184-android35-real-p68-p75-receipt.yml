@@ -93,6 +93,18 @@ jobs:
           grep -Fxq 'P181_ORIGINAL_V138_THREE_ENGINE_SPAWN_SITES_NO_HOST_EXEC=PASS' .p184_build.log
           grep -Fxq 'P182_ORIGINAL_V138_TYPED_DENY_BRIDGES_VERIFIED_IN_REBUILT_DEX=PASS' .p184_build.log
           echo P184_ORIGINAL_P43_EMULATOR_TEST_APK_COMPILED=PASS
+      - name: Compile actual Android reliable-pipe EOF regression harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          mkdir -p .p68pipetmp/classes
+          javac --release 8 -cp "$sdk/platforms/android-35/android.jar:.p43tmp/p43.jar" \
+            -d .p68pipetmp/classes \
+            host_candidate/p68_android_binder/test/com/dsh/android/p68/P68ReliablePipeLifecycleTest.java
+          jar cf .p68pipetmp/fixture.jar -C .p68pipetmp/classes .
+          "$sdk/build-tools/35.0.0/d8" --min-api 26 --lib "$sdk/platforms/android-35/android.jar" \
+            --classpath .p43tmp/p43.jar --output .p68pipetmp .p68pipetmp/fixture.jar
       - name: Enable disposable Android emulator KVM
         shell: bash
         run: if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
@@ -110,7 +122,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          rm -rf .p43tmp .p184_build.log .p184_actual .p184_expected
+          rm -rf .p43tmp .p184_build.log .p184_actual .p184_expected .p68pipetmp
           echo P184_ANDROID35_RECEIPT_PASS=CHECK_ACTUAL_EMULATOR_JOB >> "$GITHUB_STEP_SUMMARY"
           echo P184_ORIGINAL_P40_COROUTINE=NOT_INVOKED >> "$GITHUB_STEP_SUMMARY"
           echo P184_REAL_ARM64_NODE=NOT_EXECUTED >> "$GITHUB_STEP_SUMMARY"

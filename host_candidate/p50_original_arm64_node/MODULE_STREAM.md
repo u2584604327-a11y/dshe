@@ -72,3 +72,36 @@ Authenticated supervisor FAIL now reports only a fixed phase and (after exit)
 its numeric status; invalid UID/session/order still closes everything. These
 changes fix reproduced defects, but the cause of the reported vivo failure is
 not conclusively attributed until the repaired ARM64 route runs on the device.
+
+Reliable pipe ownership repair after the bd4d76e phone result
+-----------------------------------------------------------
+
+The user reports VERIFIED_COMPLETE at the resource sender, then supervisor
+DRAIN_PIPES failure and child exit 143. This is a failure, not module execution
+proof. P68 had closed each sender-side reliable-PFD copy immediately after
+Messenger.send. P302 already documented why that can turn EOF into peer DEAD:
+closing a duplicate also participates in the shared completion-status socket.
+It can consume the peer's OK and leave the actual receiver with no status.
+The symmetric writer-copy close can report OK before the real writer finishes,
+masking that writer's eventual error.
+
+Sender copies now use the documented Parcelable RETURN_VALUE transfer close:
+a temporary Parcel receives a copy, the sender closes without publishing a
+completion status, then the temporary copy is recycled. The real Binder receiver
+already owns its delivered copy. No detachFd, raw-descriptor close, disabled
+checkError or plain-pipe substitution is used. A failed local transfer release
+revokes the process. Stdin/stdout/stderr status is owned by their actual stream
+endpoints; real errors and peer loss remain failures.
+
+The existing P184 Android35 job runs an actual ART Parcel/PFD fixture as UID2000:
+reproduce full-payload/false-cancellation with the old close, require clean EOF
+with transfer close, reproduce the old writer-copy error masking, and require
+writer-error and silent-peer-loss rejection after repair. It uses the actual
+P68 stdin forwarder. This is an Android FD lifecycle test, not a Binder identity
+or ARM64 Node attestation. P184's separate real Binder identity/receipt test is
+retained. The P302/P306 synthetic stream workflows are not rerun.
+
+AOSP API36 implementation reviewed: ParcelFileDescriptor.writeToParcel uses
+Status.SILENCE for PARCELABLE_WRITE_RETURN_VALUE; checkError continues to throw
+on non-OK statuses. Source:
+https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-16.0.0_r1/core/java/android/os/ParcelFileDescriptor.java
