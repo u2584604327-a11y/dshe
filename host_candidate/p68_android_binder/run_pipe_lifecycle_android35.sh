@@ -18,8 +18,10 @@ trap cleanup EXIT
 adb -s "$serial" push .p68pipetmp/classes.dex "$remote.dex" >/dev/null
 adb -s "$serial" push "$apk" "$remote.apk" >/dev/null
 adb -s "$serial" shell chmod 644 "$remote.dex" "$remote.apk"
-adb -s "$serial" shell su 2000 dalvikvm -Xverify:all -cp "$remote.dex:$remote.apk" \
-  com.dsh.android.p68.P68ReliablePipeLifecycleTest | tr -d '\r' | tee .p68pipetmp/android-result.txt
+# Parcel needs the framework JNI registration performed by app_process;
+# standalone dalvikvm links Java classes but does not register Parcel natives.
+adb -s "$serial" shell "su 2000 /system/bin/sh -c 'CLASSPATH=$remote.dex:$remote.apk /system/bin/app_process / com.dsh.android.p68.P68ReliablePipeLifecycleTest'" \
+  | tr -d '\r' | tee .p68pipetmp/android-result.txt
 for marker in \
   P68_OLD_COMPLETE_STREAM_EOF_FALSE_CANCEL=REPRODUCED \
   P68_RELIABLE_STDIN_EOF_NO_FALSE_CANCEL=PASS \
