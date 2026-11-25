@@ -94,13 +94,17 @@ exercise_entry() {
       com.dsh.p311.TargetClassProbe "$mode" "$rawpath" > "$report" 2>&1;then
     echo "P311_INVOKESUSPEND_${mode}_EXECUTION=DENY";exit 2
   fi
-  grep -Fxq "$status" "$report"
+  tr -d '\r' < "$report" > "$report.normalized"
+  mv "$report.normalized" "$report"
+  grep -E '^P311_[A-Z0-9_]+=[A-Z0-9_]+$' "$report" || true
+  grep -Fxq "$status" "$report" || { echo P311_ENTRY_EXPECTED_EXCEPTION=DENY;exit 2; }
   pid="$(sed -n -E 's/^P311_PROBE_PID=([0-9]+)$/\1/p' "$report")"
-  [[ "$pid" =~ ^[0-9]+$ ]]
+  [[ "$pid" =~ ^[0-9]+$ ]] || { echo P311_ENTRY_PID=DENY;exit 2; }
   adb -s "$SERIAL" logcat -d --pid="$pid" -v brief P208_ORIGINAL_ENTRY:I DSH:I '*:S' > ".p311tmp/$mode-device.log"
-  grep -Fq 'P208_ORIGINAL_START2_COROUTINE_UID=2000' ".p311tmp/$mode-device.log"
+  grep -Fq 'P208_ORIGINAL_START2_COROUTINE_UID=2000' ".p311tmp/$mode-device.log" || { echo P311_ENTRY_UID_WITNESS=DENY;exit 2; }
   count="$(grep -Ec '^I/DSH[[:space:]]*\([[:space:]0-9]+\): false$' ".p311tmp/$mode-device.log" || true)"
-  [[ "$count" -eq "$expected_helper_count" ]]
+  echo "P311_ENTRY_HELPER_LOG_COUNT=$count"
+  [[ "$count" -eq "$expected_helper_count" ]] || { echo P311_ENTRY_HELPER_COUNT=DENY;exit 2; }
   echo "$status"
 }
 exercise_entry failure P311_INVOKESUSPEND_RESUME_FAILURE_RETHROWN=PASS 0
