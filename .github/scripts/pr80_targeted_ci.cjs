@@ -61,10 +61,20 @@ module.exports = async function select({github, context, core}) {
   const comparison = compared.data;
   if (comparison.status !== 'ahead' || !comparison.files?.length || comparison.files.length >= 300) return;
   const changed = comparison.files.flatMap(file => [file.filename, file.previous_filename].filter(Boolean));
+  // Decide required work before optional cancellation. Unknown changes retain
+  // the build; Actions API degradation must not consume the selector timeout.
+  const onlyTransport = changed.length > 0 && changed.every(file =>
+    file.startsWith('host_candidate/engine_runtime/') ||
+    file === '.github/workflows/engine-runtime-http.yml' ||
+    file === '.github/workflows/p37-remote-process-contract.yml');
   const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
     {...repo, event: 'pull_request', head_sha: pr.head.sha, per_page: 100});
   let cancelled = 0;
+  const stopAt = Date.now() + 60000;
   for (const run of runs) {
+    if (Date.now() >= stopAt) {
+      core.warning('Optional CI cancellation budget exhausted; required checks remain enabled.');break;
+    }
     if (!Array.isArray(run.pull_requests) || run.pull_requests.length !== 1 ||
         run.pull_requests[0].number !== 80 ||
         run.id === context.runId || run.head_sha !== pr.head.sha || run.head_branch !== branch ||
@@ -77,7 +87,8 @@ module.exports = async function select({github, context, core}) {
     try {source = fs.readFileSync(run.path, 'utf8');} catch {continue;}
     if (relevant(source, changed)) continue;
     try {
-      await github.rest.actions.cancelWorkflowRun({...repo, run_id: run.id});
+      await github.rest.actions.cancelWorkflowRun({...repo, run_id: run.id,
+        request: {timeout: 2500, retries: 0}});
       core.info('NOT_TESTED_CANCELLED_UNRELATED_CHANGE run=' + run.id + ' workflow=' + name);
       cancelled++;
     } catch (error) {
@@ -87,12 +98,5 @@ module.exports = async function select({github, context, core}) {
   }
   await core.summary.addRaw('PR #80 targeted CI: cancelled ' + cancelled +
     ' unrelated repetitions. Cancelled checks are NOT_TESTED, never PASS.\n').write();
-  // New runtime transport is not compiled into the P51 config APK. Reuse the
-  // already device-accepted artifact unless an APK/CI input also changed.
-  // Unknown changes retain the build; cancellation/skip never means PASS.
-  const onlyTransport = changed.length > 0 && changed.every(file =>
-    file.startsWith('host_candidate/engine_runtime/') ||
-    file === '.github/workflows/engine-runtime-http.yml' ||
-    file === '.github/workflows/p37-remote-process-contract.yml');
   return {artifactNeeded: !onlyTransport};
 };
