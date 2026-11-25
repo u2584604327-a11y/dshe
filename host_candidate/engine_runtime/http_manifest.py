@@ -25,7 +25,7 @@ def require(value, code):
 def transform(source):
     root = ET.fromstring(p51.transform(source))
     root.set('package', PACKAGE)
-    root.set(A + 'versionName', 'http-components-test-1')
+    root.set(A + 'versionName', 'http-native-prerequisite-test-2')
     ET.SubElement(root, 'uses-permission', {A + 'name': 'android.permission.INTERNET'})
     app = root.find('application')
     app.set(A + 'label', LABEL)
@@ -42,7 +42,7 @@ def transform(source):
 def verify_bytes(source):
     root = ET.fromstring(source)
     require(root.get('package') == PACKAGE and root.get(A + 'versionCode') == '1' and
-            root.get(A + 'versionName') == 'http-components-test-1', 'IDENTITY')
+            root.get(A + 'versionName') == 'http-native-prerequisite-test-2', 'IDENTITY')
     permission = root.findall('uses-permission')
     require(len(permission) == 1 and permission[0].attrib == {A + 'name': 'android.permission.INTERNET'}, 'HOST_INTERNET_ONLY')
     app = root.find('application')

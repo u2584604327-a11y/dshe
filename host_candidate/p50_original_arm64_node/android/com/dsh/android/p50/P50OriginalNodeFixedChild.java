@@ -238,8 +238,16 @@ public final class P50OriginalNodeFixedChild {
       ProcessBuilder pb=modulePipes==null?
           new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--eval",script):
           new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--input-type=module","--eval",script);
-      if(httpServices)pb=new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--permission",
-          "--allow-fs-read=/dsh-runtime","--allow-fs-read=/dsh-home","--input-type=module","--eval",script);
+      if(httpServices){
+        File addon=new File(dir,"libdsh_original_require_builtin.so").getCanonicalFile();
+        if(!dir.equals(addon.getParentFile())||addon.length()!=91840||
+            Os.sysconf(android.system.OsConstants._SC_PAGESIZE)!=4096||
+            !"b69021cecbe48a62395b6a30c4975d17c4277ccb2429adada78dd74bc0fb0c44".equals(sha256(addon)))
+          throw new SecurityException("P50_EXACT_ANDROID_ADDON_OR_PAGE_SIZE_INVALID");
+        pb=new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--permission","--allow-addons",
+          "--allow-fs-read="+addon.getAbsolutePath(),"--allow-fs-read=/dsh-runtime","--allow-fs-read=/dsh-home",
+          "--input-type=module","--eval",script);
+      }
       pb.directory(new File("/"));
       Map<String,String> env=pb.environment();
       env.clear();
@@ -312,6 +320,6 @@ public final class P50OriginalNodeFixedChild {
       throw new SecurityException("P50_BOOTSTRAP_HASH_MISMATCH");
     return new String(bytes,StandardCharsets.UTF_8);
   }
-  private static final String HTTP_BOOTSTRAP_SHA="680bd869d4e50ba713fb25cdfcad4b634efbaac845ece84163a759177c0bf975";
+  private static final String HTTP_BOOTSTRAP_SHA="c78ea5b631d5716d9cf3aa324613637f5a88919f0744058b382f4b8e503f30b1";
   private static final String MODULE_BOOTSTRAP_SHA="bc0c4c874e617016de0bd909c7c665795a7d6ff728e8245677f4e71074bbf140";
 }

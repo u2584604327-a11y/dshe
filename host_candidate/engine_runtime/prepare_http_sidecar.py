@@ -3,11 +3,9 @@
 original app components, broad permissions or production P47 registration.
 """
 from pathlib import Path
-import hashlib
 import json
 import os
 import subprocess
-from build_http_bootstrap import build
 
 ROOT=Path(__file__).resolve().parents[2]
 BUILDER='host_candidate/p43_original_service/build_embedded_emulator_apk.sh'
@@ -36,8 +34,12 @@ def patches(sources):
     if builder.count('host_candidate/p51_side_by_side/p51_manifest.py')!=3:raise RuntimeError('HTTP_TEST_MANIFEST_CALL_COUNT')
     builder=builder.replace('host_candidate/p51_side_by_side/p51_manifest.py','host_candidate/engine_runtime/http_manifest.py')
     builder=once(builder,'apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"',
-        'python host_candidate/engine_runtime/build_http_bootstrap.py "$DIR/decoded/assets/engine-http-services.mjs"\n'
+        'python host_candidate/engine_runtime/prepare_native_http.py prepare "$ORIGINAL" "$DIR/decoded"\n'
         'apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"')
+    builder=once(builder,
+        '  python host_candidate/p49_original_node_stage.py embed "$DIR/with-p43-dex.apk" "$DIR/p49"',
+        '  python host_candidate/p49_original_node_stage.py embed "$DIR/with-p43-dex.apk" "$DIR/p49"\n'
+        '  python host_candidate/engine_runtime/prepare_native_http.py embed "$ORIGINAL" "$DIR/with-p43-dex.apk"')
     anchor='  host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java \\\n'
     builder=once(builder,anchor,anchor+''.join('  '+name+' \\\n' for name in [
         'host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50ModuleStream.java',
@@ -67,7 +69,7 @@ def main():
     if not git('remote','get-url','origin').removesuffix('.git').endswith('/'+REPO):raise RuntimeError('HTTP_TEST_WRONG_REPOSITORY')
     for name,pin in PINS.items():
         if git('hash-object',name)!=pin:raise RuntimeError('HTTP_TEST_PIN_CHANGED')
-    digest=hashlib.sha256(build()).hexdigest()
+    digest="c78ea5b631d5716d9cf3aa324613637f5a88919f0744058b382f4b8e503f30b1"
     java=Path('host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java').read_text()
     if 'HTTP_BOOTSTRAP_SHA="'+digest+'"' not in java:raise RuntimeError('HTTP_TEST_COMPOSED_BOOTSTRAP_PIN')
     for name,text in patches({name:Path(name).read_text() for name in PINS}).items():Path(name).write_text(text)

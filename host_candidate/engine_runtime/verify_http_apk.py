@@ -49,7 +49,7 @@ def main():
             try:stage.verify(args.original,path,False,explicit)
             except RuntimeError as error:require(str(error)=='P49_BLOCKED_'+expected,'WRONG_HTTP_ASSET_REJECTION')
             else:raise RuntimeError('HTTP_ASSET_NEGATIVE_ACCEPTED')
-        denied(args.candidate,False,'UNAUTHORIZED_EXTRA_ASSET_OR_LIB')
+        denied(args.candidate,False,'ADDITIONAL_ARM64_LIB_SET_CHANGED')
         shutil.copyfile(args.candidate,negative)
         with zipfile.ZipFile(negative,'a') as archive:archive.writestr('assets/unapproved-http.js',b'bad')
         denied(negative,True,'UNAUTHORIZED_EXTRA_ASSET_OR_LIB')

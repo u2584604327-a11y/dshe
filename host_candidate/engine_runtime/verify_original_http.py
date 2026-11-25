@@ -95,6 +95,8 @@ def main():
         original.mkdir()
         module_stream=work/'original.modules'
         with module_stream.open('wb') as stream:reference(args.apk.resolve(),original,stream)
+        from test_original_native_bundle import verify_runtime_adapter
+        verify_runtime_adapter(args.apk.resolve(), args.node.resolve(), module_stream)
         classes = work / 'classes'
         home = work / 'fresh-home'
         home.mkdir(mode=0o700)

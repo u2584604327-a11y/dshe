@@ -115,9 +115,11 @@ public final class OriginalHttpProbeActivity extends Activity {
       if(!transport.awaitListening(15,TimeUnit.SECONDS))throw new IOException("LISTEN");
       stage(stage,"ORIGINAL_SERVICE_OUTPUT");
       InputStream out=transport.getInputStream();
-      String urlLine=boundedLine(out,512),modulesLine=boundedLine(out,128);
+      String urlLine=boundedLine(out,512),modulesLine=boundedLine(out,128),nativeLine=boundedLine(out,128);
       String prefix="DSH_ORIGINAL_HTTP_URL=";
       if(urlLine==null||!urlLine.startsWith(prefix)||modulesLine==null||!modulesLine.matches("DSH_ORIGINAL_HTTP_RESOURCE_MODULES=[0-9]+"))throw new IOException("SERVICE_OUTPUT");
+      if(!"DSH_ORIGINAL_ANDROID_NATIVE_BINDING=PASS".equals(nativeLine))throw new IOException("ORIGINAL_NATIVE_BINDING");
+      main.post(()->report("ORIGINAL_ANDROID_NATIVE_BINDING_AND_FIVE_INTERNAL_APIS=PASS"));
       URL login=new URL(urlLine.substring(prefix.length()));
       if(!"http".equals(login.getProtocol())||!"127.0.0.1".equals(login.getHost())||login.getPort()!=transport.port()||
           !"/".equals(login.getPath())||login.getUserInfo()!=null||login.getRef()!=null||login.getQuery()==null||!login.getQuery().matches("token=[A-Za-z0-9_-]{43}"))throw new IOException("PRIVATE_AUTH_URL");

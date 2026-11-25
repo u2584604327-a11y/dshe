@@ -129,16 +129,40 @@ API remains to be tested. Its original ELF has 4 KiB PT_LOAD alignment; a
 16 KiB page-size request is deliberately rejected **before** any output is
 created. ZIP alignment does not repair this ELF incompatibility. A device's
 actual page size must be measured, not inferred from its Android API level.
-The library mapping, authenticated supplemental-resource delivery and runtime
-dlopen permission remain unconnected; the HTTP component APK does not load
-this addon or claim a complete main-profile closure.
+`original_native_mapping.mjs` now maps only the verified installer-owned
+`libdsh_original_require_builtin.so` to its one original virtual `.node` path.
+The three original supplement JS/JSON files are embedded unchanged in the
+SHA-pinned bootstrap, outside the separate unchanged engine.bin seal. The
+original 0.1.9 public/custom loader resolves the original 0.1.7 supplement.
+A one-use immutable dlopen guard checks exact path/module/flags; every other
+native target still rejects. Original require-builtin forwards arbitrary
+internal IDs: the adapter keeps its raw native exports private and exposes
+only the five internal module IDs used by original app-boot. Denied IDs and
+API-shape checks are part of the finite device prerequisite.
+
+The HTTP test worker verifies the exact original native bytes, canonical
+installer directory and measured 4096-byte pages before adding --allow-addons
+and a read grant for that one library. It remains an isolated UID without
+INTERNET or a production P47 registration. This privileged native capability
+is not a JavaScript sandbox guarantee; production activation still needs
+independent validation of the original loader/internal-module behavior.
+
+The updated independent HTTP APK additionally checks real original native
+binding metadata and the five Node loader interfaces. Host tests use an
+explicit dlopen spy (never execute the ARM64 ELF), plus actual original
+resolver/JS/JSON and mutated-metadata/path/UID/page-size/replay negatives.
+They are labeled PASS_HOST/PASS_VM, not Android binding evidence. The exact
+native-enabled bootstrap is 50,210 bytes, SHA256
+`c78ea5b631d5716d9cf3aa324613637f5a88919f0744058b382f4b8e503f30b1`.
+Its real ARM64 binding/HTTP result is pending the new device test. Original
+main EngineManager, persistent profile and complete main READY remain absent.
 
 A local full-main probe using the sealed namespace now passes the installation
 lookup that blocked the native filesystem probe, then exits 1 during original
 host preparation because that host run lacks the Android native supplement.
 HTTP does not listen. This is neither an ARM64 binding failure nor evidence
 that the original APK lacks the binding. No original module source, filesystem
-permission or native-loading permission was broadened to make it pass.
+permission or native-loading permission was broadened in that historical host probe.
 
 ## Device evidence retained from the previous milestone
 
@@ -275,9 +299,17 @@ control writes and closes upstream stdin before the isolated supervisor drains
 FDs and reports the actual process exit. FINISH alone is not process success.
 
 P49's existing default/config allowlists remain strict. An explicit mutually
-exclusive HTTP-test mode requires the new strict manifest and only one exact
-38145-byte bootstrap, SHA256
-`14d9e696e0705e5ce8ed2ca25054a9926bf1028bbb151cf4905e730c6be13315`.
+exclusive HTTP-test mode requires the new strict manifest and only the exact native-enabled bootstrap described above and the one
+SHA-pinned original native supplement. The independently retained base HTTP
+bootstrap remains 40,717 bytes / `680bd869d4e50ba713fb25cdfcad4b634efbaac845ece84163a759177c0bf975`;
+the older 38,145-byte bootstrap is only a negative failure reproduction.
 Original assets/ELF/secondary DEX remain byte-preserved and the three original
 EngineManager launch seams still route to the repository P47 DENY gate. A new
 one-day test signer cannot upgrade com.dsh.android; no long-term key is used.
+
+
+User-reported vivo 4KiB-page ARM64 result on 2026-11-26 for the previous
+stdin-flush HTTP component package: 193 original modules, real authorization,
+frontend/JS byte checks, Host fence and child exit0 PASS. That report does not
+independently re-hash the installed APK, test Android SSE/restart, execute the
+main EngineManager coroutine, or validate this new native-enabled package.

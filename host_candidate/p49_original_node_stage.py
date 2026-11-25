@@ -121,6 +121,11 @@ def verify(original,apk,original_default_config=False,original_http_services=Fal
                  "/" not in alias and ".." not in alias,"INVALID_ALIAS")
             required["lib/arm64-v8a/"+alias]=lib["sha256"]
         fail(len(required)==11,"REQUIRED_ELF_COUNT")
+        if original_http_services:
+            # Only this explicitly separate isolated HTTP/native test admits
+            # the original external supplement. Default/config stay at 11 ELF.
+            from engine_runtime.original_native_bundle import ALIAS, MEMBERS, NATIVE
+            required["lib/arm64-v8a/"+ALIAS]=MEMBERS[NATIVE][1]
         installed={x for x in allnames if x.startswith("lib/arm64-v8a/") and
                    x not in base and not x.endswith("/")}
         fail(installed==set(required),"ADDITIONAL_ARM64_LIB_SET_CHANGED")
@@ -142,8 +147,8 @@ def verify(original,apk,original_default_config=False,original_http_services=Fal
             bootstrap="assets/engine-http-services.mjs"
             fail(bootstrap not in base and bootstrap in allnames,"HTTP_BOOTSTRAP_MISSING")
             payload=derived.read(bootstrap)
-            fail(len(payload)==40717 and hash_bytes(payload)==
-                 "680bd869d4e50ba713fb25cdfcad4b634efbaac845ece84163a759177c0bf975",
+            fail(len(payload)==50210 and hash_bytes(payload)==
+                 "c78ea5b631d5716d9cf3aa324613637f5a88919f0744058b382f4b8e503f30b1",
                  "HTTP_BOOTSTRAP_SHA_OR_LENGTH")
             allowed_assets.add(bootstrap)
         fail({x for x in allnames if x.startswith(("lib/","assets/")) and
@@ -159,7 +164,7 @@ def verify(original,apk,original_default_config=False,original_http_services=Fal
                  int.from_bytes(payload[18:20],"little")==183,"NOT_ARM64_ELF")
         fail(derived.read(LOCK_PATH).endswith(b"\n"),"LOCK_NOT_FINAL_NEWLINE")
     print("P49_REAL_ORIGINAL_DSH_ASSETS_AND_LIBRARIES_BYTE_PRESERVED=PASS")
-    print("P49_11_ADDITIONAL_ARM64_ELF_STORED_16K_AND_SHA=PASS")
+    print("P49_"+str(len(required))+"_ADDITIONAL_ARM64_ELF_STORED_16K_AND_SHA=PASS")
     print("P49_ORIGINAL_NODE_SOURCE_SHA256_MATCH=PASS")
     print("P49_EXTRA_APK_MEMBERS_ALLOWLIST=PASS")
     print("P49_REAL_NODE_EXECUTED_IN_ORIGINAL_APK=NO")
