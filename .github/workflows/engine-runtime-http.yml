@@ -5,6 +5,7 @@ on:
     paths:
       - 'host_candidate/engine_runtime/**'
       - '.github/workflows/engine-runtime-http.yml'
+      - '.github/scripts/pr80_targeted_ci.cjs'
 permissions:
   contents: read
 concurrency:
