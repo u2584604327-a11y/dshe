@@ -103,6 +103,42 @@ Node HTTP execution still need independent validation. The full DSH main
 profile, WebView, model stream, durable account resources, outbound model
 network access, B3/B4 and formal APK remain unaccepted.
 
+## Original Android native supplement
+
+The original `EngineManager.ensureNativeAddon()` installs
+`assets/node-addon-android-arm64.zip` **outside** `engine.bin`. A streamed
+engine.bin tree is therefore not the complete main-profile runtime closure.
+`original_native_bundle.py` now stages the actual four-file original supplement
+using the original APK SHA, archive SHA, individual lengths/hashes, regular-file
+types, package/prebuild versions and a bounded ELF64 dependency/layout parser.
+It copies the native bytes under one fixed APK-library alias and stages the
+three unchanged JS/JSON resources with a versioned manifest. It checks the
+exact original libc++ dependency already supplied by P49. Existing output
+directories, links and files cannot be overwritten. No code is executed,
+loaded or registered with P47 by this staging operation.
+
+```
+python host_candidate/engine_runtime/original_native_bundle.py ORIGINAL.apk \
+  NEW_EMPTY_OUTPUT --device-page-size 4096
+```
+
+The supplement is version 0.1.7 (the tree's loader wrapper is 0.1.9); do not
+silently replace either with a downloaded package. The actual ARM64 binding
+API remains to be tested. Its original ELF has 4 KiB PT_LOAD alignment; a
+16 KiB page-size request is deliberately rejected **before** any output is
+created. ZIP alignment does not repair this ELF incompatibility. A device's
+actual page size must be measured, not inferred from its Android API level.
+The library mapping, authenticated supplemental-resource delivery and runtime
+dlopen permission remain unconnected; the HTTP component APK does not load
+this addon or claim a complete main-profile closure.
+
+A local full-main probe using the sealed namespace now passes the installation
+lookup that blocked the native filesystem probe, then exits 1 during original
+host preparation because that host run lacks the Android native supplement.
+HTTP does not listen. This is neither an ARM64 binding failure nor evidence
+that the original APK lacks the binding. No original module source, filesystem
+permission or native-loading permission was broadened to make it pass.
+
 ## Device evidence retained from the previous milestone
 
 User-reported vivo ARM64 result for source

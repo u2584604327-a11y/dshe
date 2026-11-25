@@ -45,6 +45,8 @@ jobs:
             --repo u2584604327-a11y/dshe \
             --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk --dir "$RUNNER_TEMP/original-http"
           node host_candidate/engine_runtime/test/ci_selector.test.cjs
+          python3 -u host_candidate/engine_runtime/test_original_native_bundle.py \
+            "$RUNNER_TEMP/original-http/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk"
           python3 -u host_candidate/engine_runtime/verify_original_http.py \
             --apk "$RUNNER_TEMP/original-http/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk" \
             --node "$(command -v node)" | tee "$RUNNER_TEMP/http-result.txt"
