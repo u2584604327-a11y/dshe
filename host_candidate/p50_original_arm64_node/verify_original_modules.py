@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Actual original default-config comparison; host Node only, never ARM64 proof."""
 import argparse
+import copy
 import hashlib
 import os
 from pathlib import Path
 import shutil
 import struct
 import subprocess
+import sys
 import tarfile
 import tempfile
 import threading
@@ -23,10 +25,46 @@ def require(condition, code):
         raise RuntimeError(code)
 
 
+def verify_asset_allowlist(original, candidate, work):
+    sys.path.insert(0, str(ROOT / 'host_candidate'))
+    from loguru import logger
+    logger.remove()
+    import p49_original_node_stage as stage
+    stage.verify(original, candidate, True)
+
+    def denied(apk, explicit, reason):
+        try:
+            stage.verify(original, apk, explicit)
+        except RuntimeError as error:
+            require(str(error) == 'P49_BLOCKED_' + reason, 'WRONG_ASSET_REJECTION')
+        else:
+            raise RuntimeError('UNAUTHORIZED_MODULE_ASSET_ACCEPTED')
+
+    denied(candidate, False, 'UNAUTHORIZED_EXTRA_ASSET_OR_LIB')
+    negative = work / 'negative.apk'
+    shutil.copyfile(candidate, negative)
+    with zipfile.ZipFile(negative, 'a') as archive:
+        archive.writestr('assets/unapproved-script.js', b'bad')
+    denied(negative, True, 'UNAUTHORIZED_EXTRA_ASSET_OR_LIB')
+    with zipfile.ZipFile(candidate) as source, zipfile.ZipFile(negative, 'w') as destination:
+        for entry in source.infolist():
+            payload = source.read(entry.filename)
+            if entry.filename == 'assets/p50-original-modules.mjs':
+                payload = bytes([payload[0] ^ 1]) + payload[1:]
+            cloned = copy.copy(entry)
+            cloned.compress_type = zipfile.ZIP_STORED
+            destination.writestr(cloned, payload)
+    denied(negative, True, 'MODULE_BOOTSTRAP_SHA_OR_LENGTH')
+    negative.unlink()
+    print('P49_DEFAULT_ALLOWLIST_REMAINS_STRICT=PASS')
+    print('P49_EXPLICIT_MODULE_BOOTSTRAP_AND_EXTRA_ASSET_NEGATIVES=PASS')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apk', required=True, type=Path)
     parser.add_argument('--host-node', required=True, type=Path)
+    parser.add_argument('--module-apk', type=Path, help='also verify the built TEST-ONLY asset allowlist')
     args = parser.parse_args()
     node = str(args.host_node.resolve())
     require(subprocess.check_output([node, '--version'], text=True).strip() == 'v26.4.0',
@@ -35,6 +73,8 @@ def main():
         require(hashlib.file_digest(source, 'sha256').hexdigest() == APK_SHA, 'ORIGINAL_APK_SHA')
     with tempfile.TemporaryDirectory(prefix='dsh-original-modules-') as directory:
         work = Path(directory)
+        if args.module_apk:
+            verify_asset_allowlist(args.apk.resolve(), args.module_apk.resolve(), work)
         source = work / 'ModuleStreamMain.java'
         source.write_text('''import com.dsh.android.p50.P50ModuleStream;
 import java.io.*;import java.util.zip.*;

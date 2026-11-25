@@ -63,6 +63,8 @@ def patches(sources):
     builder = once(builder, anchor, anchor + ''.join(
         '  ' + MODULE + 'android/com/dsh/android/p50/' + name + '.java \\\n'
         for name in ('P50OriginalModuleProbe', 'P50ModuleStream')))
+    builder = once(builder, '    "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"\nfi\nif test "${P47_NO_HOST_FALLBACK:-0}" = 1;',
+                   '    "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" --original-default-config\nfi\nif test "${P47_NO_HOST_FALLBACK:-0}" = 1;')
     return {ACTIVITY: activity, WORKER: worker, BUILDER: builder}
 
 

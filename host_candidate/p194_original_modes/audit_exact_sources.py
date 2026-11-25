@@ -18,7 +18,7 @@ PINNED = {
   "host_candidate/p184_verified_child_receipt/src/com/dsh/android/p68/P184ChildStartReceipt.java":
     "3dac8177db81cb48ec85612b6eb31ff61ed4ee98",
   "host_candidate/p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java":
-    "14073b42a0e02efe2cd4f32259f5a70e657ae63e",
+    "448e1ed4d639cda5ad35c8837f975c1d7997f219",
   "host_candidate/p75_engine_rendezvous/src/com/dsh/android/p75/P75EngineStartRendezvous.java":
     "9a476e4254918c56377f5fe0bd30fea2326b653c",
 }
