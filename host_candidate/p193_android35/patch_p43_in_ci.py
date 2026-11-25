@@ -18,7 +18,7 @@ WORKER=BASE+"android/com/dsh/android/p43/P43IsolatedWorker.java"
 ACTIVITY=BASE+"android/com/dsh/android/p43/P43ProbeActivity.java"
 BUILDER=BASE+"build_embedded_emulator_apk.sh"
 PINNED={
-    WORKER:"feabcaf30f2458e85a044e0f789bbc31254f3269",
+    WORKER:"62a616d07e65e71cb671a8171b4c02ce3faf96a7",
     ACTIVITY:"8a83ef4c53c8e527f604023ab5eec2be8f2e12a9",
     BUILDER:"62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f"
 }

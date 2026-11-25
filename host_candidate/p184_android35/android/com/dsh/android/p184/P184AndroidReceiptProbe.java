@@ -83,6 +83,8 @@ public final class P184AndroidReceiptProbe implements AutoCloseable {
     child=new P48HostProcessProbe(isolated,hostSession,
         new P48HostProcessProbe.Listener(){
           @Override public void report(String s){
+            if("P68_AUTHENTICATED_OWNED_PROCESS_PIPES=PASS".equals(s))
+              status("P184_ANDROID35_AUTHENTICATED_PROCESS_PIPES=PASS");
             // Keep existing P48 evidence only; do not promote synthetic
             // fixed UID output to real production EngineManager READY.
             if("P184_P68_REAL_FRAMEWORK_RECEIPT_DELIVERED=PASS".equals(s))

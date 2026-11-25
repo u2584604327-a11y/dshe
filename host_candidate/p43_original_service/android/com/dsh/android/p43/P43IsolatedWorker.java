@@ -11,6 +11,7 @@ import java.util.Arrays;
 import com.dsh.android.p48.P48FixedIsolatedChild;
 import com.dsh.android.p50.P50OriginalNodeFixedChild;
 import com.dsh.android.p76.P76EngineArchiveFdProbe;
+import com.dsh.android.p68.P68AndroidBinderIntake.WorkerPipes;
 /**
  * P43 separate isolated-Service test inside original DSH APK only.
  * No Node, files, networking, credentials or capabilities.
@@ -51,11 +52,19 @@ public final class P43IsolatedWorker extends Service {
         try{mode=message.getData().getString("p50_mode");}
         catch(RuntimeException badMode){return;}
         if("p50-exact-original-node".equals(mode)) {
+          if(message.getData().containsKey("process_pipes"))return;
           p50Child=new P50OriginalNodeFixedChild(
               P43IsolatedWorker.this,message.replyTo,acceptedSession);
           p50Child.start();
         } else if(mode==null || "p48-fixed-id".equals(mode)) {
-          p48Child=new P48FixedIsolatedChild(message.replyTo,acceptedSession);
+          WorkerPipes pipes=null;
+          if(message.getData().containsKey("process_pipes")) {
+            try {
+              pipes=WorkerPipes.receive(message.getData().getBundle("process_pipes"),
+                  message.sendingUid,acceptedHostUid);
+            }catch(IOException|RuntimeException rejected){return;}
+          }
+          p48Child=new P48FixedIsolatedChild(message.replyTo,acceptedSession,pipes);
           p48Child.start();
         }
         // Unknown modes cannot obtain arbitrary process execution.

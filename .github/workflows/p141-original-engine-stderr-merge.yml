@@ -66,13 +66,13 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           old=Path('host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48HostProcessProbe.java').read_text()
-          # P184 adds a second P68 constructor ONLY for a host-minted epoch
-          # in the fixed /system/bin/id -u test, not an implicit production
-          # merged-stream or original-Node grant. Default route stays split.
-          assert old.count('new P68AndroidBinderIntake(')==2
+          # Receipt mode uses host-owned pipes and its host-minted generation.
+          # The existing P48/P51 routes keep their split frame transport.
+          assert old.count('new P68AndroidBinderIntake(')==3
           assert 'verifiedReceiptReceiver==null ?' in old
           assert 'new P68AndroidBinderIntake(session,control) :' in old
           assert 'new P68AndroidBinderIntake(session,control,false,p184OwnerEpoch)' in old
+          assert 'new P68AndroidBinderIntake(session,control,processPipes,p184OwnerEpoch)' in old
           assert '!enableP68ForFixtureOnly || exactOriginalArm64Node' in old
           assert 'liveProcessReceiver!=null || trustedOwnerEpoch<=0L' in old
           assert 'verifiedReceiptReceiver==null && trustedOwnerEpoch!=0L' in old

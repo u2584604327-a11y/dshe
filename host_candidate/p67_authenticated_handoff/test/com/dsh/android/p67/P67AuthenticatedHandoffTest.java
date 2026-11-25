@@ -4,6 +4,11 @@ import com.dsh.android.p53.P53StartOrder;
 import com.dsh.p37.P37RemoteProcess;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.FilterInputStream;
+import java.io.FilterOutputStream;
+import java.io.IOException;
 
 /** JVM-only malicious, early-exit, identity and stream boundary regression. */
 public final class P67AuthenticatedHandoffTest {
@@ -30,6 +35,49 @@ public final class P67AuthenticatedHandoffTest {
   }
   private static boolean sendBytes(P67AuthenticatedHandoff h,int kind,long seq,byte[] payload) {
     return h.onAuthenticatedFrame(UID, SESSION, kind, seq, payload, 0);
+  }
+  private static P37RemoteProcess.Stdio ownedStreams(int[] closed, ByteArrayOutputStream input) {
+    return P37RemoteProcess.Stdio.split(new FilterOutputStream(input) {
+      @Override public void close() throws IOException {closed[0]++;super.close();}
+    }, new FilterInputStream(new ByteArrayInputStream(new byte[] {65})) {
+      @Override public void close() throws IOException {closed[0]++;super.close();}
+    }, new FilterInputStream(new ByteArrayInputStream(new byte[] {66})) {
+      @Override public void close() throws IOException {closed[0]++;super.close();}
+    });
+  }
+  private static void testOwnedStreamHandoff() throws Exception {
+    int[] closed={0};ByteArrayOutputStream input=new ByteArrayOutputStream();
+    Control control=new Control();
+    P67AuthenticatedHandoff h=new P67AuthenticatedHandoff(
+        UID,SESSION,VERIFIER,control,ownedStreams(closed,input));
+    check(send(h,P53StartOrder.HELLO,0),"pipe_hello");
+    check(h.processAfterVerifiedChildStart()==null,"pipe_hello_has_no_process");
+    check(send(h,P53StartOrder.CHILD_STARTED,1),"pipe_child_started");
+    Process p=h.processAfterVerifiedChildStart();
+    check(p.getInputStream().read()==65 && p.getErrorStream().read()==66,"owned_streams_delivered");
+    p.getOutputStream().write(67);
+    check(input.toByteArray()[0]==67,"owned_stdin_delivered");
+    check(send(h,P53StartOrder.EXIT,2)&&p.waitFor()==0,"pipe_exit_without_data_frames");
+    check(closed[0]==1,"exit_closes_stdin_and_keeps_output_tail");
+    p.getInputStream().close();p.getErrorStream().close();
+
+    int[] rejectedClosed={0};Control rejectedControl=new Control();
+    P67AuthenticatedHandoff rejected=new P67AuthenticatedHandoff(
+        UID,SESSION,VERIFIER,rejectedControl,ownedStreams(rejectedClosed,new ByteArrayOutputStream()));
+    check(send(rejected,P53StartOrder.HELLO,0),"rejected_pipe_hello");
+    check(!send(rejected,P53StartOrder.CHILD_STARTED,2),"pipe_start_wrong_sequence_denied");
+    check(rejectedClosed[0]==3 && rejectedControl.hard==1,"unstarted_pipe_lease_closed_and_stopped");
+    rejected.onTransportLost();
+    check(rejectedControl.hard==1,"unstarted_pipe_cleanup_idempotent");
+
+    int[] mixedClosed={0};Control mixedControl=new Control();
+    P67AuthenticatedHandoff mixed=new P67AuthenticatedHandoff(
+        UID,SESSION,VERIFIER,mixedControl,ownedStreams(mixedClosed,new ByteArrayOutputStream()));
+    check(send(mixed,P53StartOrder.HELLO,0)&&send(mixed,P53StartOrder.CHILD_STARTED,1),"mixed_pipe_start");
+    check(!sendBytes(mixed,P53StartOrder.STDOUT,2,new byte[] {68}),"pipe_data_frame_rejected");
+    check(mixedClosed[0]==3 && mixedControl.hard==1,"mixed_transport_revokes_owned_pipes");
+    check(!send(mixed,P53StartOrder.EXIT,3),"mixed_transport_exit_cannot_recover");
+    System.out.println("P67_OWNED_PIPES_AUTH_START_SEQUENCE_AND_REVOCATION=PASS");
   }
   public static void main(String[] args) throws Exception {
     Control control = new Control();
@@ -114,6 +162,7 @@ public final class P67AuthenticatedHandoffTest {
     try { new P67AuthenticatedHandoff(UID, "bad", VERIFIER, new Control()); }
     catch(IllegalArgumentException expected){constructorDenied=true;}
     check(constructorDenied,"session_shape_rejected");
+    testOwnedStreamHandoff();
     System.out.println("P67_AUTHENTICATED_P53_P37_JVM_TESTS=PASS assertions="+checks);
     System.out.println("P67_HELLO_IS_NOT_CHILD_STARTED_OR_READY=PASS");
     System.out.println("P67_PROXY_ONLY_AFTER_AUTH_CHILD_STARTED=PASS");

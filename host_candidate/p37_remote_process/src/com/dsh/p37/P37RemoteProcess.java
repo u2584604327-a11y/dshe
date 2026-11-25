@@ -9,6 +9,7 @@ import java.io.Closeable;
 import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Source-only, host-side Java Process facade for a remote isolated Android Node.
@@ -28,6 +29,7 @@ public final class P37RemoteProcess extends Process {
     private final InputStream output;
     private final InputStream error;
     private final boolean merged;
+    private final AtomicBoolean closed = new AtomicBoolean();
 
     private Stdio(OutputStream input, InputStream output, InputStream error,
         boolean merged) {
@@ -46,6 +48,7 @@ public final class P37RemoteProcess extends Process {
       return new Stdio(input, output, new ByteArrayInputStream(new byte[0]), true);
     }
     @Override public void close() throws IOException {
+      if (!closed.compareAndSet(false, true)) return;
       IOException failure = null;
       for (Closeable stream : new Closeable[] {input, output, error}) {
         try { stream.close(); }

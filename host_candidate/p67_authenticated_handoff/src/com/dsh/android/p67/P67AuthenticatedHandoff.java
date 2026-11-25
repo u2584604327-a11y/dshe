@@ -2,6 +2,7 @@ package com.dsh.android.p67;
 
 import com.dsh.android.p53.P53StartOrder;
 import com.dsh.p37.P37RemoteProcess;
+import java.io.IOException;
 
 /**
  * Source-only authenticated host handoff joining the EXISTING P53 frame order
@@ -18,6 +19,7 @@ public final class P67AuthenticatedHandoff {
   private final P37RemoteProcess.IsolatedUidVerifier verifier;
   private final P37RemoteProcess.RemoteControl remoteControl;
   private final boolean mergeErrorToOutput;
+  private final P37RemoteProcess.Stdio ownedPipes;
   private final P53StartOrder ordering = new P53StartOrder();
   private P37RemoteProcess process;
   private boolean terminal;
@@ -38,6 +40,32 @@ public final class P67AuthenticatedHandoff {
       P37RemoteProcess.IsolatedUidVerifier frameworkVerifier,
       P37RemoteProcess.RemoteControl trustedStopControl,
       boolean trustedHostRequestsMergedStderr) {
+    this(frameworkIsolatedUid, hostGeneratedSession, frameworkVerifier,
+         trustedStopControl, trustedHostRequestsMergedStderr, null);
+  }
+
+  /** Takes ownership of host-created pipes after constructor validation.
+   * The worker receives the opposite endpoints through the scoped launch.
+   * UID, session and start ordering are validated before Process creation.
+   */
+  public P67AuthenticatedHandoff(
+      int frameworkIsolatedUid, String hostGeneratedSession,
+      P37RemoteProcess.IsolatedUidVerifier frameworkVerifier,
+      P37RemoteProcess.RemoteControl trustedStopControl,
+      P37RemoteProcess.Stdio hostOwnedPipes) {
+    this(frameworkIsolatedUid, hostGeneratedSession, frameworkVerifier,
+         trustedStopControl, false, requirePipes(hostOwnedPipes));
+  }
+  private static P37RemoteProcess.Stdio requirePipes(P37RemoteProcess.Stdio pipes) {
+    if (pipes == null) throw new IllegalArgumentException("P67_HOST_PIPES_REQUIRED");
+    return pipes;
+  }
+  private P67AuthenticatedHandoff(
+      int frameworkIsolatedUid, String hostGeneratedSession,
+      P37RemoteProcess.IsolatedUidVerifier frameworkVerifier,
+      P37RemoteProcess.RemoteControl trustedStopControl,
+      boolean trustedHostRequestsMergedStderr,
+      P37RemoteProcess.Stdio hostOwnedPipes) {
     if (frameworkIsolatedUid < 0 || frameworkVerifier == null ||
         trustedStopControl == null || hostGeneratedSession == null ||
         !hostGeneratedSession.matches("[a-f0-9]{64}") ||
@@ -49,6 +77,7 @@ public final class P67AuthenticatedHandoff {
     verifier = frameworkVerifier;
     remoteControl = trustedStopControl;
     mergeErrorToOutput = trustedHostRequestsMergedStderr;
+    ownedPipes = hostOwnedPipes;
   }
 
   private boolean verify(int frameworkUid, String incomingSession) {
@@ -65,6 +94,10 @@ public final class P67AuthenticatedHandoff {
     if (terminal) return;
     terminal = true;
     if (process != null) process.onTransportLost();
+    else if (ownedPipes != null) {
+      try { ownedPipes.close(); } catch (IOException ignored) { }
+      try { remoteControl.requestForceStop(); } catch (RuntimeException ignored) { }
+    }
   }
 
   private static boolean validPayload(int kind, byte[] frameBytes) {
@@ -106,9 +139,9 @@ public final class P67AuthenticatedHandoff {
         return false;
       }
       try {
-        process = new P37RemoteProcess(
-            expectedUid, hostSession, verifier, remoteControl,
-            mergeErrorToOutput);
+        process = ownedPipes == null ? new P37RemoteProcess(
+            expectedUid, hostSession, verifier, remoteControl, mergeErrorToOutput) :
+            new P37RemoteProcess(expectedUid, hostSession, verifier, remoteControl, ownedPipes);
         startConfirmed = true;
         return true;
       } catch (RuntimeException invalid) {

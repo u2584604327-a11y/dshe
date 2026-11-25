@@ -50,6 +50,7 @@ public final class P48HostProcessProbe {
   private P37RemoteProcess proxy;
   private final boolean p68Mode;
   private P68AndroidBinderIntake p68;
+  private P68AndroidBinderIntake.HostPipes processPipes;
   private boolean complete,failed,started,childStartedAck;
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()) {
     @Override public void handleMessage(Message m) {
@@ -194,7 +195,9 @@ public final class P48HostProcessProbe {
         @Override public void requestGracefulStop(){sendControl(P48FixedIsolatedChild.STOP);}
         @Override public void requestForceStop(){sendControl(P48FixedIsolatedChild.KILL);}
       };
-      p68=verifiedReceiptReceiver==null ?
+      if(processPipes!=null)
+        p68=new P68AndroidBinderIntake(session,control,processPipes,p184OwnerEpoch);
+      else p68=verifiedReceiptReceiver==null ?
           new P68AndroidBinderIntake(session,control) :
           new P68AndroidBinderIntake(session,control,false,p184OwnerEpoch);
     }
@@ -219,6 +222,7 @@ public final class P48HostProcessProbe {
       }
       proxy=(P37RemoteProcess)p68.processAfterAuthenticatedChildStart();
       childStartedAck=true;
+      if(processPipes!=null)listener.report("P68_AUTHENTICATED_OWNED_PROCESS_PIPES=PASS");
       new Thread(()->collect(proxy.getInputStream(),stdout),
                  "p68-host-stdout").start();
       new Thread(()->collect(proxy.getErrorStream(),stderr),
@@ -264,10 +268,19 @@ public final class P48HostProcessProbe {
     Bundle b=new Bundle();b.putString("session",session);
     b.putString("p50_mode",exactOriginalArm64Node?
         "p50-exact-original-node":"p48-fixed-id");
+    if(verifiedReceiptReceiver!=null) {
+      try {
+        processPipes=P68AndroidBinderIntake.HostPipes.create();
+        b.putBundle("process_pipes",processPipes.workerBundle());
+      }catch(IOException|RuntimeException failedPipes) {
+        failClosed("P68_HOST_PROCESS_PIPE_CREATION_FAILED");return;
+      }
+    }
     m.setData(b);
     m.replyTo=inbox;
     try{isolated.send(m);}
     catch(Exception e){failClosed("P48_INIT_SEND_FAILED");return;}
+    finally{if(processPipes!=null)processPipes.closeWorkerCopies();}
     main.postDelayed(()->{
       if(!failed&&!complete)failClosed("P48_ISOLATED_CHILD_DEADLINE");
     },14000);
@@ -333,11 +346,13 @@ public final class P48HostProcessProbe {
     failed=true;
     if(p68!=null)p68.disconnected();
     if(proxy!=null)proxy.onTransportLost();
+    if(processPipes!=null)processPipes.close();
     listener.fail(code);
   }
   public void close(){
     if(p68!=null)p68.disconnected();
     if(proxy!=null&&proxy.isAlive())proxy.destroyForcibly();
     if(!complete&&!failed)failClosed("P48_HOST_CLOSED");
+    if(processPipes!=null)processPipes.close();
   }
 }

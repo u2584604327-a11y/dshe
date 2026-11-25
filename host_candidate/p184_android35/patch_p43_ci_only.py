@@ -16,7 +16,7 @@ HELPER="host_candidate/p184_android35/android/com/dsh/android/p184/P184AndroidRe
 RECEIPT="host_candidate/p184_verified_child_receipt/src/com/dsh/android/p68/P184ChildStartReceipt.java"
 EXPECTED={ACTIVITY:"8a83ef4c53c8e527f604023ab5eec2be8f2e12a9",
           BUILDER:"62ad8b62d5c0bfadf7d3b98294fd8713fb8f686f",
-          P48:"69095b4d2020b1ddcd37c413a6065dce47073e5a",
+          P48:"6d83649118f56b06e4b408397115e0b87f15ebd4",
           RECEIPT:"3dac8177db81cb48ec85612b6eb31ff61ed4ee98"}
 def git(*args):
     return subprocess.check_output(["git",*args],text=True,stderr=subprocess.STDOUT).strip()

@@ -1,10 +1,16 @@
 name: P302 Android35 isolated FD 64KiB and replay, synthetic only, release DENY
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, reopened]
     paths:
       - 'host_candidate/p302_android35_fd_stream/**'
-      - '.github/workflows/p302-android35-isolated-fd-diagnostic.yml'
+      - '.github/workflows/p302-android35-isolated-fd-stream.yml'
+  # The long-lived PR diff includes this fixture on every synchronize event.
+  # Compare pushed source changes so unrelated fixes don't repeat this proof.
+  push:
+    branches: ['dsh/p96-original-engine-stream-owner-narrow-20261030']
+    paths: ['host_candidate/p302_android35_fd_stream/**']
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -13,9 +19,15 @@ concurrency:
 jobs:
   p302-android35-synthetic-only:
     if: >-
-      github.event.pull_request.number == 80 &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+      github.repository == 'u2584604327-a11y/dshe' &&
+      (
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.number == 80 &&
+         github.event.pull_request.head.repo.full_name == github.repository &&
+         github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030') ||
+        ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+         github.ref == 'refs/heads/dsh/p96-original-engine-stream-owner-narrow-20261030')
+      )
     runs-on: ubuntu-24.04
     timeout-minutes: 28
     steps:

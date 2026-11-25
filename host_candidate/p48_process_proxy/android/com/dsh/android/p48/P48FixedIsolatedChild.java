@@ -5,6 +5,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
+import com.dsh.android.p68.P68AndroidBinderIntake.WorkerPipes;
 
 /**
  * P48 tightly-scoped ORIGINAL-APK isolated child-process proof only.
@@ -19,12 +20,17 @@ public final class P48FixedIsolatedChild {
   private long sequence;
   private volatile java.lang.Process child;
   private volatile boolean stopped;
+  private final WorkerPipes pipes;
 
   public P48FixedIsolatedChild(Messenger host,String session) {
+    this(host,session,null);
+  }
+  public P48FixedIsolatedChild(Messenger host,String session,WorkerPipes ownedPipes) {
     if(host==null || session==null || !session.matches("[a-f0-9]{64}") ||
        !android.os.Process.isIsolated())
       throw new IllegalArgumentException("P48_TRUSTED_ISOLATED_ONLY");
     this.host=host;this.session=session;
+    pipes=ownedPipes;
   }
   private synchronized void emit(int what,byte[] bytes,int code){
     if(stopped && what!=EXIT && what!=FAIL)return;
@@ -38,6 +44,7 @@ public final class P48FixedIsolatedChild {
       stopped=true;
       java.lang.Process p=child;
       if(p!=null)p.destroyForcibly();
+      if(pipes!=null)pipes.close();
     }
   }
   public void start(){
@@ -47,6 +54,7 @@ public final class P48FixedIsolatedChild {
   }
   public void stop(boolean kill){
     stopped=true;
+    if(pipes!=null)pipes.close();
     java.lang.Process p=child;
     if(p!=null){
       if(kill)p.destroyForcibly();else p.destroy();
@@ -67,6 +75,7 @@ public final class P48FixedIsolatedChild {
     try {
       if(!android.os.Process.isIsolated())
         throw new SecurityException("P48_ISOLATED_UID_REQUIRED");
+      if(stopped)throw new IOException("P48_STOP_BEFORE_EXEC");
       // Fixed synthetic POSIX UID witness, NOT a general command API.
       p=new ProcessBuilder("/system/bin/id","-u")
           .directory(new File("/")).start();
@@ -75,6 +84,14 @@ public final class P48FixedIsolatedChild {
       // P53: irreversible ordering: Binder HELLO is only a session
       // greeting, never a claim that ProcessBuilder.start() succeeded.
       emit(CHILD_STARTED,null,0);
+      if(pipes!=null) {
+        pipes.attach(p);
+        if(!p.waitFor(8,TimeUnit.SECONDS))throw new IOException("P48_CHILD_TIMEOUT");
+        if(!pipes.finishAfterChildExit(3500)||stopped)
+          throw new IOException("P48_CHILD_PIPE_DRAIN_FAILED");
+        emit(EXIT,null,p.exitValue());
+        return;
+      }
       // /system/bin/id emits a short UID and no stderr. waitFor is bounded
       // before draining; this executable never outputs more than 128 bytes.
       if(!p.waitFor(8,TimeUnit.SECONDS)) {
@@ -95,6 +112,7 @@ public final class P48FixedIsolatedChild {
       emit(FAIL,null,125);
     }finally {
       if(p!=null&&p.isAlive())p.destroyForcibly();
+      if(pipes!=null)pipes.close();
       child=null;
     }
   }
