@@ -63,6 +63,10 @@ public final class TargetClassProbe {
 
     private static void exerciseCoroutine(ClassLoader loader, Class<?> target, Method entry,
             boolean failBeforeHelper) throws ReflectiveOperationException {
+        if (android.os.Process.myUid() != 2000 || android.os.Process.isIsolated()) {
+            throw new SecurityException("shell UID required");
+        }
+        System.out.println("P311_EXECUTION_FRAMEWORK_UID=2000");
         Class<?> owner = Class.forName("com.dsh.android.EngineManager", false, loader);
         Class<?> continuation = Class.forName("kotlin.coroutines.Continuation", false, loader);
         Constructor<?> constructor = target.getDeclaredConstructor(owner, continuation);

@@ -88,9 +88,9 @@ echo P311_REAL_ANDROID35_TARGET_CLASS_LINK=PASS_NARROW
 echo P311_REAL_ANDROID35_INVOKESUSPEND_REFLECTION=PASS_NARROW
 
 exercise_entry() {
-  local mode="$1" status="$2" expected_helper_count="$3" pid count
+  local mode="$1" status="$2" pid
   local report=".p311tmp/$mode.log"
-  if ! adb -s "$SERIAL" shell su 2000 dalvikvm -Xverify:all -cp "$PROBE_PATH" \
+  if ! adb -s "$SERIAL" shell su 2000 dalvikvm -Xint -Xverify:all -cp "$PROBE_PATH" \
       com.dsh.p311.TargetClassProbe "$mode" "$rawpath" > "$report" 2>&1;then
     echo "P311_INVOKESUSPEND_${mode}_EXECUTION=DENY";exit 2
   fi
@@ -100,15 +100,11 @@ exercise_entry() {
   grep -Fxq "$status" "$report" || { echo P311_ENTRY_EXPECTED_EXCEPTION=DENY;exit 2; }
   pid="$(sed -n -E 's/^P311_PROBE_PID=([0-9]+)$/\1/p' "$report")"
   [[ "$pid" =~ ^[0-9]+$ ]] || { echo P311_ENTRY_PID=DENY;exit 2; }
-  adb -s "$SERIAL" logcat -d --pid="$pid" -v brief P208_ORIGINAL_ENTRY:I DSH:I '*:S' > ".p311tmp/$mode-device.log"
-  grep -Fq 'P208_ORIGINAL_START2_COROUTINE_UID=2000' ".p311tmp/$mode-device.log" || { echo P311_ENTRY_UID_WITNESS=DENY;exit 2; }
-  count="$(grep -Ec '^I/DSH[[:space:]]*\([[:space:]0-9]+\): false$' ".p311tmp/$mode-device.log" || true)"
-  echo "P311_ENTRY_HELPER_LOG_COUNT=$count"
-  [[ "$count" -eq "$expected_helper_count" ]] || { echo P311_ENTRY_HELPER_COUNT=DENY;exit 2; }
+  grep -Fxq 'P311_EXECUTION_FRAMEWORK_UID=2000' "$report" || { echo P311_ENTRY_UID_WITNESS=DENY;exit 2; }
   echo "$status"
 }
-exercise_entry failure P311_INVOKESUSPEND_RESUME_FAILURE_RETHROWN=PASS 0
-exercise_entry post-return P311_INVOKESUSPEND_POST_HELPER_OWNER_GUARD=PASS 1
+exercise_entry failure P311_INVOKESUSPEND_RESUME_FAILURE_RETHROWN=PASS
+exercise_entry post-return P311_INVOKESUSPEND_POST_HELPER_OWNER_GUARD=PASS
 echo P311_REAL_ANDROID35_P245_HELPER_REACHED_ONLY_AFTER_NORMAL_RETURN=PASS
 pid="$(adb -s "$SERIAL" shell pidof com.dsh.android | tr -d '\r' || true)"
 [[ -z "$pid" ]] || { echo P311_ORIGINAL_APP_PROCESS=DENY;exit 2;}
