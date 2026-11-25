@@ -54,7 +54,7 @@ public final class P50OriginalNodeFixedChild {
   private long sequence=0;
   private boolean started;
   private WorkerPipes modulePipes;
-  private boolean freshConfig;
+  private boolean freshConfig,httpServices;
 
   // Fixed supervisor diagnostics, never authority, paths or exception text.
   public static String failureStageName(int stage) {
@@ -85,6 +85,15 @@ public final class P50OriginalNodeFixedChild {
       Messenger authenticatedHost,String session,WorkerPipes pipes) {
     P50OriginalNodeFixedChild result=originalDefaultConfig(context,authenticatedHost,session,pipes);
     result.freshConfig=true;return result;
+  }
+
+  /** Distinct host-network test only. Never authorizes production P47. */
+  public static P50OriginalNodeFixedChild originalHttpServices(Context context,
+      Messenger authenticatedHost,String session,WorkerPipes pipes) {
+    if(context==null||pipes==null||!"com.dsh.p51.networkprobe".equals(context.getPackageName()))
+      throw new SecurityException("HTTP_COMPONENT_TEST_ONLY");
+    P50OriginalNodeFixedChild result=new P50OriginalNodeFixedChild(context,authenticatedHost,session);
+    result.modulePipes=pipes;result.httpServices=true;return result;
   }
 
   public P50OriginalNodeFixedChild(Context context, Messenger host, String session) {
@@ -229,6 +238,8 @@ public final class P50OriginalNodeFixedChild {
       ProcessBuilder pb=modulePipes==null?
           new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--eval",script):
           new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--input-type=module","--eval",script);
+      if(httpServices)pb=new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--permission",
+          "--allow-fs-read=/dsh-runtime","--allow-fs-read=/dsh-home","--input-type=module","--eval",script);
       pb.directory(new File("/"));
       Map<String,String> env=pb.environment();
       env.clear();
@@ -285,11 +296,11 @@ public final class P50OriginalNodeFixedChild {
   }
   private String loadModuleBootstrap()throws Exception {
     byte[] bytes;
-    try(InputStream input=context.getAssets().open("p50-original-modules.mjs");
+    try(InputStream input=context.getAssets().open(httpServices?"engine-http-services.mjs":"p50-original-modules.mjs");
         ByteArrayOutputStream output=new ByteArrayOutputStream()) {
       byte[] chunk=new byte[4096];int n;
       while((n=input.read(chunk))!=-1) {
-        if(n>32768-output.size())throw new IOException("P50_BOOTSTRAP_BOUND");
+        if(n>(httpServices?65536:32768)-output.size())throw new IOException("P50_BOOTSTRAP_BOUND");
         output.write(chunk,0,n);
       }
       bytes=output.toByteArray();
@@ -297,9 +308,10 @@ public final class P50OriginalNodeFixedChild {
     StringBuilder hash=new StringBuilder(64);
     for(byte b:MessageDigest.getInstance("SHA-256").digest(bytes))
       hash.append(String.format(Locale.ROOT,"%02x",b&255));
-    if(!MODULE_BOOTSTRAP_SHA.equals(hash.toString()))
+    if(!(httpServices?HTTP_BOOTSTRAP_SHA:MODULE_BOOTSTRAP_SHA).equals(hash.toString()))
       throw new SecurityException("P50_BOOTSTRAP_HASH_MISMATCH");
     return new String(bytes,StandardCharsets.UTF_8);
   }
+  private static final String HTTP_BOOTSTRAP_SHA="14d9e696e0705e5ce8ed2ca25054a9926bf1028bbb151cf4905e730c6be13315";
   private static final String MODULE_BOOTSTRAP_SHA="bc0c4c874e617016de0bd909c7c665795a7d6ff728e8245677f4e71074bbf140";
 }

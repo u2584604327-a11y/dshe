@@ -1,0 +1,102 @@
+name: Original isolated ARM64 HTTP components TEST-ONLY APK
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/engine_runtime/**'
+      - 'host_candidate/p50_original_arm64_node/**'
+      - 'host_candidate/p49_original_node_stage.py'
+      - '.github/workflows/engine-runtime-http-apk.yml'
+permissions:
+  contents: read
+concurrency:
+  group: original-http-test-apk-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  build-distinct-http-test-apk:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PYTHONDONTWRITEBYTECODE: '1'
+      P47_NO_HOST_FALLBACK: '1'
+      P49_NODE_STAGE: '1'
+      P51_SIDE_BY_SIDE: '1'
+      P181_THREE_ORIGINAL_START_DENY: '1'
+      HTTP_COMPONENT_TEST: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Strict explicit manifest negatives and existing SDK prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          python host_candidate/engine_runtime/test_http_manifest.py
+          python -m pip install --no-cache-dir -r host_candidate/requirements.txt
+          sudo apt-get -qq update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get -qq install -y apktool
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          test -s "$sdk/platforms/android-35/android.jar"
+          test -x "$sdk/build-tools/35.0.0/apksigner"
+      - name: Build original-derived distinct network test in disposable CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python host_candidate/engine_runtime/prepare_http_sidecar.py
+          if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > "$RUNNER_TEMP/http-apk-builder.log" 2>&1; then
+            echo HTTP_TEST_APK_BUILD=FAILED_NOT_PUBLISHED
+            grep -E 'HTTP_TEST_|P49_|P47_|RuntimeError|Exception|Traceback|error:' "$RUNNER_TEMP/http-apk-builder.log" | tail -n 25 | cut -c 1-220 || true
+            exit 1
+          fi
+          original=.p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          apk=.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          python host_candidate/engine_runtime/verify_http_apk.py "$original" "$apk"
+          python host_candidate/p50_original_arm64_node/verify_config_dex.py "$original" "$apk"
+          bt="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools/35.0.0"
+          "$bt/apksigner" verify "$apk"
+          "$bt/zipalign" -c -P 16 4 "$apk"
+          "$bt/apksigner" verify --print-certs "$original" > "$RUNNER_TEMP/original-http-cert.txt"
+          "$bt/apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/http-test-cert.txt"
+          old="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/original-http-cert.txt")"
+          new="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/http-test-cert.txt")"
+          test -n "$old" && test -n "$new" && test "$old" != "$new"
+      - name: Prepare separate TEST-ONLY APK and exact provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/http-test-delivery"
+          cp .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk "$RUNNER_TEMP/http-test-delivery/DSH-HTTP-COMPONENTS-ARM64-TEST-ONLY.apk"
+          cp "$RUNNER_TEMP/http-test-cert.txt" "$RUNNER_TEMP/http-test-delivery/TEST-ONLY-SIGNATURE.txt"
+          (cd "$RUNNER_TEMP/http-test-delivery" && sha256sum DSH-HTTP-COMPONENTS-ARM64-TEST-ONLY.apk > SHA256SUMS.txt)
+          printf 'TEST-ONLY; not v139; not an upgrade.\nPackage: com.dsh.p51.networkprobe\nHost permission: INTERNET only. Worker: isolated UID, no network permission.\nCommit: %s\nOriginal main profile/EngineManager: NOT_WIRED.\n' "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/http-test-delivery/SOURCE.txt"
+          echo HTTP_TEST_ANDROID_ARM64_INSTALL_AND_RUNTIME=PENDING_DEVICE >> "$GITHUB_STEP_SUMMARY"
+          echo ORIGINAL_DSH_HTTP_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-http-components-arm64-test-only
+          path: ${{ runner.temp }}/http-test-delivery/
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Destroy ephemeral signing and all disposable build inputs
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p43tmp "$RUNNER_TEMP/http-test-delivery" "$RUNNER_TEMP/http-apk-builder.log" "$RUNNER_TEMP/http-test-cert.txt" "$RUNNER_TEMP/original-http-cert.txt"
+          echo ORIGINAL_DSH_AND_USER_DATA=UNTOUCHED >> "$GITHUB_STEP_SUMMARY"
+          echo LONG_TERM_SIGNING_KEY=NOT_USED >> "$GITHUB_STEP_SUMMARY"
+          echo FORMAL_V139=BLOCKED >> "$GITHUB_STEP_SUMMARY"

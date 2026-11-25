@@ -3,8 +3,9 @@
 This is working transport code, not an installed production supervisor or a
 READY claim. `HttpProcessTransport` has package-private construction, accepts
 an already authenticated Process and never launches one. Production P47 stays
-unchanged and fail-closed. No classes or JS from this directory are currently
-packaged into P51 or the original DSH APK.
+unchanged and fail-closed. The original permissionless P51 config package and production DSH remain
+unchanged. A separately identified network-component test build can package
+this transport; it is not an original DSH installation or upgrade.
 
 The host binds **only 127.0.0.1** at the original launch plan's requested port;
 port 0 uses the kernel-assigned port. There is no hardcoded 3080, wildcard,
@@ -157,3 +158,42 @@ existing-user configuration broker or durable storage implementation. Before
 Android use, a verified worker must pin the composed bootstrap's exact bytes
 and original ELF closure, authenticate child creation, then transfer the owned
 pipes/receipt to this host adapter. That production registration remains absent.
+
+## Android network component acceptance
+
+`prepare_http_sidecar.py` builds only in the existing PR80 disposable CI. It
+keeps the original P51 permissionless contract unchanged and uses a different
+package, `com.dsh.p51.networkprobe`, with **INTERNET only on its host**. It has
+only a default Android Application, its test Activity and a nonexported isolated
+Service; every original DSH component is disabled. No shared UID, storage,
+account, root, Shizuku or ADB permission is added. The host's fixed loopback
+client uses NO_PROXY and never accepts a caller URL or launches a process.
+
+The worker accepts one START lease from the framework sendingUid matching the
+installed host UID, a fresh session/epoch, request sequence 1 and a 12-second
+monotonic lease. Controls require the same UID/session/epoch and the next
+request sequence. P50's fixed factory verifies isolated execution, actual ARM64
+kernel, absence of worker INTERNET permission, original Node/dependency hashes
+and the exact generated bootstrap before spawning. CHILD_STARTED is emitted
+only after ProcessBuilder.start inside that isolated worker. Binder death,
+unbind and owner destruction cancel the child.
+
+The controller consumes the exact P68/P184 Process receipt before sending the
+version-2 sealed resources. It tests real 401/303/Cookie authentication, the
+independently pinned rendered frontend and 939,867-byte JS asset, hostile Host
+403, authenticated child exit 0 and bounded shutdown. Auth URL and cookies never
+appear in status or clipboard. This single-generation Android acceptance does
+**not** claim Android SSE/restart, browser rendering, main EngineManager,
+existing-user storage, chat or B3/B4. Its output retains NOT_WIRED/BLOCKED.
+
+The authenticated FINISH frame follows log acknowledgments. The host stops
+control writes and closes upstream stdin before the isolated supervisor drains
+FDs and reports the actual process exit. FINISH alone is not process success.
+
+P49's existing default/config allowlists remain strict. An explicit mutually
+exclusive HTTP-test mode requires the new strict manifest and only one exact
+38145-byte bootstrap, SHA256
+`14d9e696e0705e5ce8ed2ca25054a9926bf1028bbb151cf4905e730c6be13315`.
+Original assets/ELF/secondary DEX remain byte-preserved and the three original
+EngineManager launch seams still route to the repository P47 DENY gate. A new
+one-day test signer cannot upgrade com.dsh.android; no long-term key is used.

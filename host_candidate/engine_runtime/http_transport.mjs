@@ -8,7 +8,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 const CHUNK = 16384, WINDOW = 65536, MAX_CONNECTIONS = 16;
 const H = { OPEN: 1, DATA: 2, END: 3, CLOSE: 4, ACK: 5, APP_DATA: 6, APP_END: 7, LOG_ACK: 8, SHUTDOWN: 9, LOG_CLOSE: 10 };
-const N = { LISTEN: 16, DATA: 17, END: 18, CLOSE: 19, ACK: 20, LOG: 21, STOP: 22, APP_ACK: 24 };
+const N = { LISTEN: 16, DATA: 17, END: 18, CLOSE: 19, ACK: 20, LOG: 21, STOP: 22, APP_ACK: 24, FINISH: 25 };
 const empty = Buffer.alloc(0);
 function error(code) { return Object.assign(new Error(code), {code}); }
 function int(value) { const bytes = Buffer.alloc(4); bytes.writeUInt32BE(value); return bytes; }
@@ -238,7 +238,7 @@ export async function installHttpTransport({input = process.stdin, output = proc
       if (closed) return; normalStop = true;
       for (const socket of sockets.values()) socket.destroy();
       await Promise.all(logStreams.map(stream => stream.destroyed ? Promise.resolve() : new Promise((resolve, reject) => stream.end(cause => cause ? reject(cause) : resolve()))));
-      await send(N.STOP, 0); await writeTail;
+      await send(N.FINISH, 0); await writeTail;
       closed = true; key.fill(0); input.destroy(); applicationInput.destroy();
       http.Server.prototype.listen = originalListen;
       Object.defineProperty(process, 'stdin', originalStdinDescriptor);

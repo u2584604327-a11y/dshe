@@ -20,7 +20,7 @@ final class HttpProcessTransport extends Process implements Closeable {
   static final int OPEN=1, DATA=2, END=3, CLOSE=4, ACK=5,
       APP_DATA=6, APP_END=7, LOG_ACK=8, SHUTDOWN=9, LOG_CLOSE=10;
   static final int LISTEN=16, RESPONSE=17, RESPONSE_END=18, RESPONSE_CLOSE=19,
-      REQUEST_ACK=20, LOG=21, STOP=22, APP_ACK=24;
+      REQUEST_ACK=20, LOG=21, STOP=22, APP_ACK=24, FINISH=25;
   private final Process child;
   private final ServerSocket listener=new ServerSocket();
   private final byte[] key=new byte[32],session,epochBytes;
@@ -30,7 +30,7 @@ final class HttpProcessTransport extends Process implements Closeable {
   private final boolean mergedError;
   private final Object appInputLock=new Object();
   private final AtomicBoolean closed=new AtomicBoolean(),accepting=new AtomicBoolean();
-  private final AtomicBoolean stdinOpen=new AtomicBoolean(true);
+  private final AtomicBoolean stdinOpen=new AtomicBoolean(true),peerFinished=new AtomicBoolean();
   private final AtomicInteger allocated=new AtomicInteger();
   private final ConcurrentHashMap<Integer,Peer> peers=new ConcurrentHashMap<>();
   private final ArrayBlockingQueue<Frame> writes=new ArrayBlockingQueue<>(256);
@@ -99,18 +99,18 @@ final class HttpProcessTransport extends Process implements Closeable {
     mac.update(direction);mac.update(session);mac.update(epochBytes);mac.update(header);return mac.doFinal(data);
   }
   private void send(int type,int id,byte[] data)throws IOException{
-    if(closed.get()||data.length>CHUNK||!writes.offer(new Frame(type,id,data)))throw new IOException("TRANSPORT_CLOSED_OR_BOUND");
+    if(closed.get()||peerFinished.get()||data.length>CHUNK||!writes.offer(new Frame(type,id,data)))throw new IOException("TRANSPORT_CLOSED_OR_BOUND");
   }
-  private void sendOrFail(int type,int id,byte[] data){try{send(type,id,data);}catch(IOException e){fail("WRITE_QUEUE");}}
+  private void sendOrFail(int type,int id,byte[] data){if(peerFinished.get())return;try{send(type,id,data);}catch(IOException e){if(!peerFinished.get())fail("WRITE_QUEUE");}}
   private void writeFrames(){
     try{
       while(!closed.get()){
-        Frame frame=writes.poll(1,TimeUnit.SECONDS);if(frame==null)continue;
+        Frame frame=writes.poll(1,TimeUnit.SECONDS);if(frame==null)continue;if(peerFinished.get())return;
         if(sending==Long.MAX_VALUE)throw new IOException("SEQUENCE_EXHAUSTED");
         byte[] header=ByteBuffer.allocate(21).putInt(0x44484631).put((byte)frame.type).putLong(++sending).putInt(frame.id).putInt(frame.data.length).array();
         output.write(header);output.write(mac((byte)'H',header,frame.data));output.write(frame.data);output.flush();
       }
-    }catch(Exception error){if(!closed.get())fail("WRITE_TRANSPORT");}
+    }catch(Exception error){if(!closed.get()&&!peerFinished.get())fail("WRITE_TRANSPORT");}
   }
   private void readFrames(){
     try{
@@ -122,6 +122,7 @@ final class HttpProcessTransport extends Process implements Closeable {
         if(seq<=0||seq!=received+1||received==Long.MAX_VALUE||id<0||length<0||length>CHUNK)throw new IOException("FRAME_SHAPE");
         byte[] data=new byte[length];input.readFully(data);
         if(!MessageDigest.isEqual(signature,mac((byte)'N',header,data)))throw new IOException("FRAME_AUTH");
+        if(peerFinished.get())throw new IOException("FRAME_AFTER_FINISH");
         received=seq;
         if(type==LISTEN){
           if(id!=0||length!=4||integer(data)!=port()||listenSeen||stopping.get()||!accepting.compareAndSet(false,true))throw new IOException("LISTEN_REPLAY");
@@ -130,6 +131,15 @@ final class HttpProcessTransport extends Process implements Closeable {
         if(type==LOG){if(id>1||length==0)throw new IOException("LOG_SHAPE");log(id).accept(data,id,true);continue;}
         if(type==APP_ACK){if(id!=0)throw new IOException("STDIN_CREDIT_ID");credit(appCredit,data);continue;}
         if(type==STOP){if(id!=0||length!=0)throw new IOException("STOP_SHAPE");stopListener();continue;}
+        if(type==FINISH){
+          if(id!=0||length!=0)throw new IOException("FINISH_SHAPE");
+          peerFinished.set(true);stopListener();stdinOpen.set(false);appCredit.revoke();writes.clear();
+          // Authenticated final frame follows application-log acknowledgments.
+          // Release upstream stdin before the isolated supervisor drains pipes
+          // and publishes the actual child exit. No writes race that closure.
+          try{output.close();}catch(IOException ignored){}
+          continue;
+        }
         if(type!=RESPONSE&&type!=RESPONSE_END&&type!=RESPONSE_CLOSE&&type!=REQUEST_ACK)throw new IOException("FRAME_TYPE");
         if(!listenSeen||id==0||id>allocated.get())throw new IOException("CONNECTION_ID");
         Peer peer=peers.get(id);if(peer==null)continue; // late traffic for a closed, never-reused id
@@ -237,7 +247,7 @@ final class HttpProcessTransport extends Process implements Closeable {
     void run(){
       try{while(true){LogPart part=pending.poll(1,TimeUnit.SECONDS);if(part==null){if(closed.get()&&nativeErrorDone.getCount()==0)break;continue;}
         writer.write(part.data);writer.flush();synchronized(this){if(!discarded.get())buffered-=part.data.length;}
-        if(part.credit&&!closed.get()&&!discarded.get())send(LOG_ACK,part.channel,integer(part.data.length));
+        if(part.credit&&!closed.get()&&!discarded.get()&&!peerFinished.get())send(LOG_ACK,part.channel,integer(part.data.length));
       }}catch(Exception bad){if(!closed.get()&&!discarded.get())fail("LOG_CONSUMER");}
       finally{try{writer.close();}catch(IOException ignored){}}
     }
@@ -279,7 +289,7 @@ final class HttpProcessTransport extends Process implements Closeable {
   @Override public int exitValue(){return child.exitValue();}
   @Override public boolean isAlive(){return child.isAlive();}
   @Override public void destroy(){
-    if(closed.get()||!stopping.compareAndSet(false,true))return;
+    if(closed.get()||peerFinished.get()||!stopping.compareAndSet(false,true))return;
     stopListener();stdinOpen.set(false);appCredit.revoke();
     sendOrFail(SHUTDOWN,0,new byte[0]);
     try{deadlines.schedule(()->{if(child.isAlive())close();},5,TimeUnit.SECONDS);}

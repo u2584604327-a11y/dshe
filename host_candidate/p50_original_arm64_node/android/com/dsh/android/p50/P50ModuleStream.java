@@ -17,9 +17,17 @@ public final class P50ModuleStream {
    */
   public static P77TarAudit.Result writeOriginal(InputStream compressed,OutputStream childStdin)
       throws IOException {
+    return write(compressed,childStdin,false);
+  }
+  /** Resource seal followed by a separate authenticated control preface. The
+   * caller retains stdin; this cannot change the legacy config EOF contract. */
+  public static P77TarAudit.Result writeOriginalForService(InputStream compressed,OutputStream childStdin)
+      throws IOException {return write(compressed,childStdin,true);}
+  private static P77TarAudit.Result write(InputStream compressed,OutputStream childStdin,boolean continues)
+      throws IOException {
     if(compressed==null||childStdin==null)throw new IllegalArgumentException("P50_STREAM_REQUIRED");
     final DataOutputStream output=new DataOutputStream(childStdin);
-    output.write("DSHMOD01".getBytes(StandardCharsets.US_ASCII));
+    output.write((continues?"DSHMOD02":"DSHMOD01").getBytes(StandardCharsets.US_ASCII));
     return P77TarAudit.inspectGzipTo(compressed,new P77TarAudit.MemberSink(){
       long remaining;
       boolean member;

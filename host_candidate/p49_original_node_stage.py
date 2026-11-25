@@ -94,7 +94,8 @@ def data_offset(apk,entry):
     fields=struct.unpack("<IHHHHHIIIHH",raw)
     return entry.header_offset+30+fields[-2]+fields[-1]
 
-def verify(original,apk,original_default_config=False):
+def verify(original,apk,original_default_config=False,original_http_services=False):
+    fail(not (original_default_config and original_http_services),"EXCLUSIVE_TEST_ASSET_MODE")
     original=pathlib.Path(original);apk=pathlib.Path(apk)
     fail(hash_file(original)==ORIGINAL_APK_SHA,"ORIGINAL_SHA_AFTER_STAGE_DRIFT")
     with zipfile.ZipFile(original) as orig,zipfile.ZipFile(apk) as derived:
@@ -135,6 +136,16 @@ def verify(original,apk,original_default_config=False):
                  "bc0c4c874e617016de0bd909c7c665795a7d6ff728e8245677f4e71074bbf140",
                  "MODULE_BOOTSTRAP_SHA_OR_LENGTH")
             allowed_assets.add(bootstrap)
+        if original_http_services:
+            from engine_runtime.http_manifest import verify_apk
+            verify_apk(apk)
+            bootstrap="assets/engine-http-services.mjs"
+            fail(bootstrap not in base and bootstrap in allnames,"HTTP_BOOTSTRAP_MISSING")
+            payload=derived.read(bootstrap)
+            fail(len(payload)==38145 and hash_bytes(payload)==
+                 "14d9e696e0705e5ce8ed2ca25054a9926bf1028bbb151cf4905e730c6be13315",
+                 "HTTP_BOOTSTRAP_SHA_OR_LENGTH")
+            allowed_assets.add(bootstrap)
         fail({x for x in allnames if x.startswith(("lib/","assets/")) and
               x not in base and not x.endswith("/")}==
              set(required)|allowed_assets,"UNAUTHORIZED_EXTRA_ASSET_OR_LIB")
@@ -159,9 +170,10 @@ if __name__=="__main__":
     p.add_argument("mode",choices=["prepare","embed","verify"])
     p.add_argument("a");p.add_argument("b")
     p.add_argument("--original-default-config",action="store_true")
+    p.add_argument("--original-http-services",action="store_true")
     args=p.parse_args()
-    if args.original_default_config and args.mode!="verify":
+    if (args.original_default_config or args.original_http_services) and args.mode!="verify":
         p.error("--original-default-config is verify-only")
     if args.mode=="prepare":prepare(args.a,args.b)
     elif args.mode=="embed":embed(args.a,args.b)
-    else:verify(args.a,args.b,args.original_default_config)
+    else:verify(args.a,args.b,args.original_default_config,args.original_http_services)
