@@ -32,6 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - uses: actions/setup-java@v4
         with:
@@ -89,31 +90,55 @@ jobs:
             .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk \
             .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk > .p245tmp/p244.log
           grep -Fxq 'P244_35C_TO_3RC_SAME_WIDTH_ENCODING_CANDIDATE=YES' .p245tmp/p244.log
-      - name: Assemble, restore and inspect unsigned uninstalled DEX
+      - name: Reproduce historical DENY and verify the safe-literal DEX
         run: |
           set -euo pipefail
-          trap 'python3 -B host_candidate/p245_build_only_probe/p245_build_only_probe.py --restore >/dev/null 2>&1 || true' EXIT
-          python3 -B host_candidate/p245_build_only_probe/p245_build_only_probe.py --patch
-          apktool b .p43tmp/decoded -o .p245tmp/P245-UNSIGNED-DO-NOT-INSTALL.apk
-          python3 -B host_candidate/p245_build_only_probe/p245_build_only_probe.py --restore
+          gate=host_candidate/p245_build_only_probe/p245_build_only_probe.py
+          literals=host_candidate/p279_counterfactual/p279_counterfactual.py
+          signed=.p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          base=.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
+          trap 'python3 -B "$literals" --restore >/dev/null 2>&1 || true; python3 -B "$gate" --restore >/dev/null 2>&1 || true' EXIT
+          python3 -B "$gate" --patch
+          apktool b .p43tmp/decoded -o .p245tmp/with-new-literals.apk
+          python3 -B "$literals" --apply
+          apktool b .p43tmp/decoded -o .p245tmp/with-reused-literals.apk
+          python3 -B "$literals" --restore
+          python3 -B "$gate" --restore
           trap - EXIT
-          python3 - <<'PY'
+          python3 - "$base" <<'PY'
+          from pathlib import Path
+          import sys
           import zipfile
-          b='.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk'
-          c='.p245tmp/P245-UNSIGNED-DO-NOT-INSTALL.apk'
-          with zipfile.ZipFile(b) as base,zipfile.ZipFile(c,'a') as candidate:
-            assert 'classes3.dex' not in candidate.namelist()
-            candidate.writestr('classes3.dex',base.read('classes3.dex'),compress_type=zipfile.ZIP_STORED)
-          print('P245_VERBATIM_CLASSES3=PASS')
+          sys.path.insert(0, 'host_candidate/p245_build_only_probe')
+          from strict_dex import SIGNATURE_ENTRY
+          with zipfile.ZipFile(sys.argv[1]) as base:
+              for flavor in ('with-new-literals', 'with-reused-literals'):
+                  temp = Path('.p245tmp')
+                  with zipfile.ZipFile(temp / (flavor + '.apk')) as rebuilt:
+                      assert rebuilt.namelist().count('classes.dex') == 1
+                      primary = rebuilt.read('classes.dex')
+                  with zipfile.ZipFile(temp / (flavor + '-UNSIGNED-DO-NOT-INSTALL.apk'), 'x') as output:
+                      for entry in base.infolist():
+                          if not SIGNATURE_ENTRY.fullmatch(entry.filename):
+                              data = primary if entry.filename == 'classes.dex' else base.read(entry)
+                              output.writestr(entry, data)
           PY
-          python3 -B host_candidate/p245_build_only_probe/p245_build_only_probe.py \
-            --verify .p245tmp/P245-UNSIGNED-DO-NOT-INSTALL.apk | tee "$RUNNER_TEMP/p245-final.log"
-          grep -Fxq 'P245_STATIC_BUILD_ONLY=PASS' "$RUNNER_TEMP/p245-final.log"
-          grep -Fxq 'P245_ART_VERIFIER_ACCEPTANCE=NOT_ATTESTED' "$RUNNER_TEMP/p245-final.log"
-          grep -Fxq 'P245_V139=STRUCTURAL_BLOCKED' "$RUNNER_TEMP/p245-final.log"
+          expect_original_denial() {
+            local result=0
+            python3 -B "$gate" --verify "$1" > "$RUNNER_TEMP/p245-original.log" 2>&1 || result=$?
+            cat "$RUNNER_TEMP/p245-original.log"
+            test "$result" -eq 2
+            grep -Fxq "P245_BUILD_ONLY_DENY_CODE=P209_NODE_BOOTSTRAP_DENY_$2" "$RUNNER_TEMP/p245-original.log"
+          }
+          expect_original_denial .p245tmp/with-new-literals-UNSIGNED-DO-NOT-INSTALL.apk ORIGINAL_EXCEPTION_SEMANTICS
+          candidate=.p245tmp/with-reused-literals-UNSIGNED-DO-NOT-INSTALL.apk
+          expect_original_denial "$candidate" HELPER_TYPED_READ_AND_CATCH
+          python3 -B host_candidate/p245_build_only_probe/strict_dex.py \
+            --signed-original "$signed" --base "$base" --candidate "$candidate"
+          python3 -B host_candidate/p245_build_only_probe/test_strict_dex.py "$base" "$candidate"
       - name: Destroy all temporary outputs, never install or upload
         if: always()
         run: |
-          rm -rf .p43tmp .p208tmp .p209tmp .p245tmp
+          rm -rf .p43tmp .p208tmp .p209tmp .p245tmp .p279tmp
           echo P245_NO_EMULATOR_ADB_PHONE_OR_RELEASE=YES
           echo P245_V139_STRUCTURAL_BLOCKED=YES
