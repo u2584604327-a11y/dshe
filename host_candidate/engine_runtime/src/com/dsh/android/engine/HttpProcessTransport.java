@@ -39,6 +39,7 @@ final class HttpProcessTransport extends Process implements Closeable {
   private final Object appInputLock=new Object();
   private final AtomicBoolean closed=new AtomicBoolean(),accepting=new AtomicBoolean();
   private final AtomicBoolean stdinOpen=new AtomicBoolean(true),peerFinished=new AtomicBoolean();
+  private final AtomicBoolean peerEof=new AtomicBoolean();
   private final AtomicInteger allocated=new AtomicInteger();
   private final ConcurrentHashMap<Integer,Peer> peers=new ConcurrentHashMap<>();
   private final ArrayBlockingQueue<Frame> writes=new ArrayBlockingQueue<>(256);
@@ -120,19 +121,19 @@ final class HttpProcessTransport extends Process implements Closeable {
     mac.update(direction);mac.update(session);mac.update(epochBytes);mac.update(header);return mac.doFinal(data);
   }
   private void send(int type,int id,byte[] data)throws IOException{
-    if(closed.get()||peerFinished.get()||data.length>CHUNK||!writes.offer(new Frame(type,id,data)))throw new IOException("TRANSPORT_CLOSED_OR_BOUND");
+    if(closed.get()||peerFinished.get()||peerEof.get()||data.length>CHUNK||!writes.offer(new Frame(type,id,data)))throw new IOException("TRANSPORT_CLOSED_OR_BOUND");
   }
-  private void sendOrFail(int type,int id,byte[] data){if(peerFinished.get())return;try{send(type,id,data);}catch(IOException e){if(!peerFinished.get())fail("WRITE_QUEUE");}}
+  private void sendOrFail(int type,int id,byte[] data){if(peerFinished.get()||peerEof.get())return;try{send(type,id,data);}catch(IOException e){if(!peerFinished.get()&&!peerEof.get())fail("WRITE_QUEUE");}}
   private void writeFrames(){
     try{
-      while(!closed.get()){
+      while(!closed.get()&&!peerEof.get()){
         Frame frame=writes.poll(1,TimeUnit.SECONDS);if(frame==null)continue;if(peerFinished.get())return;
         if(sending==Long.MAX_VALUE)throw new IOException("SEQUENCE_EXHAUSTED");
         byte[] header=ByteBuffer.allocate(21).putInt(0x44484631).put((byte)frame.type).putLong(++sending).putInt(frame.id).putInt(frame.data.length).array();
         try{output.write(header);output.write(mac((byte)'H',header,frame.data));output.write(frame.data);output.flush();}
         finally{if(frame.type==FS_INIT_DATA)Arrays.fill(frame.data,(byte)0);}
       }
-    }catch(Exception error){if(!closed.get()&&!peerFinished.get())fail("WRITE_TRANSPORT");}
+    }catch(Exception error){if(!closed.get()&&!peerFinished.get()&&!peerEof.get())fail("WRITE_TRANSPORT");}
   }
   private void readFrames(){
     try{
@@ -171,16 +172,23 @@ final class HttpProcessTransport extends Process implements Closeable {
         else {if(length!=0)throw new IOException("TERMINAL_PAYLOAD");if(type==RESPONSE_END)peer.end();else if(!peer.ending)peer.close(false);}
       }
     }catch(EOFException ended){
+      peerEof.set(true);stopListener();stdinOpen.set(false);appCredit.revoke();discardFrames();
+      // Closing a buffered pipe can itself block behind a stalled writer.
+      // Keep a separate cancellation deadline alive while releasing it.
+      ScheduledFuture<?> eofDeadline;
+      try{eofDeadline=deadlines.schedule(()->{if(child.isAlive())fail("PREMATURE_EOF");else close();},2,TimeUnit.SECONDS);}
+      catch(RejectedExecutionException disposed){return;}
       // EOF releases this exact producer before waiting for the authenticated
       // supervisor's EXIT. Otherwise its pipe drain can wait on this writer.
       try{output.close();}catch(IOException ignored){}
       try{if(child.waitFor(2,TimeUnit.SECONDS)){nativeErrorDone.await(2,TimeUnit.SECONDS);close();}else fail("PREMATURE_EOF");}
       catch(InterruptedException interrupted){Thread.currentThread().interrupt();fail("WAIT_INTERRUPTED");}
+      finally{eofDeadline.cancel(false);}
     }catch(Exception error){if(!closed.get())fail(error instanceof IOException&&error.getMessage()!=null&&error.getMessage().matches("[A-Z_]{1,64}")?error.getMessage():"READ_PROTOCOL");}
   }
   private void sendOwnedFrame(int type,int id,byte[] data,long deadline)throws IOException{
     try{
-      while(!closed.get()&&!peerFinished.get()){
+      while(!closed.get()&&!peerFinished.get()&&!peerEof.get()){
         long remaining=deadline-System.nanoTime();if(remaining<=0)throw new IOException("STORE_WIRE_TIMEOUT");
         if(writes.offer(new Frame(type,id,data),Math.min(100,Math.max(1,TimeUnit.NANOSECONDS.toMillis(remaining))),TimeUnit.MILLISECONDS))return;
       }
@@ -196,12 +204,15 @@ final class HttpProcessTransport extends Process implements Closeable {
       for(int offset=0;offset<state.bytes.length;offset+=CHUNK)
         sendOwnedFrame(FS_INIT_DATA,0,Arrays.copyOfRange(state.bytes,offset,Math.min(offset+CHUNK,state.bytes.length)),deadline);
       synchronized(snapshotLock){sendOwnedFrame(FS_INIT_END,0,new byte[0],deadline);snapshotInitializationQueued=true;}
-    }catch(Exception failure){if(!closed.get())fail("STORE_INITIALIZATION");}
+    }catch(Exception failure){if(!closed.get()&&!peerEof.get())fail("STORE_INITIALIZATION");}
     finally{if(state!=null)Arrays.fill(state.bytes,(byte)0);}
   }
   private void receiveSnapshot(int type,int id,byte[] data)throws IOException{
     synchronized(snapshotLock){
-      if(profileStore==null||closed.get()||stopping.get()||!snapshotInitializationQueued)throw new IOException("STORE_WIRE_NOT_AUTHORIZED");
+      // Graceful stop closes public admission immediately, but the exact old
+      // owner may flush its shutdown state until EXIT/forced revocation. A new
+      // generation cannot acquire this root before awaitClosed completes.
+      if(profileStore==null||closed.get()||peerEof.get()||!snapshotInitializationQueued)throw new IOException("STORE_WIRE_NOT_AUTHORIZED");
       if(type==FS_BEGIN){
         if(snapshotIncoming!=null||snapshotTransaction==Integer.MAX_VALUE||id!=snapshotTransaction+1||data.length!=44)throw new IOException("STORE_WIRE_BEGIN");
         ByteBuffer meta=ByteBuffer.wrap(data);long expected=meta.getLong();int size=meta.getInt();
@@ -339,7 +350,7 @@ final class HttpProcessTransport extends Process implements Closeable {
     stopping.set(true);accepting.set(false);try{listener.close();}catch(IOException ignored){}
     for(Peer peer:peers.values())peer.close(false);
   }
-  private void fail(String category){failure=category;close();}
+  private void fail(String category){synchronized(this){if(closed.get()||!failure.equals("NONE"))return;failure=category;}close();}
   private void discardFrames(){Frame frame;while((frame=writes.poll())!=null)if(frame.type==FS_INIT_DATA)Arrays.fill(frame.data,(byte)0);}
   @Override public void close(){
     if(!closed.compareAndSet(false,true))return;
@@ -348,9 +359,9 @@ final class HttpProcessTransport extends Process implements Closeable {
     deadlines.shutdownNow();try{listener.close();}catch(IOException ignored){}
     for(Peer peer:peers.values())peer.close(false);discardFrames();
     // Closing the authenticated Process owns cancellation of blocked native I/O.
-    if(child.isAlive())child.destroyForcibly();
-    try{child.getOutputStream().close();}catch(IOException ignored){}
-    try{input.close();}catch(IOException ignored){}
+    try{if(child.isAlive())child.destroyForcibly();}catch(RuntimeException cancellation){if(failure.equals("NONE"))failure="CHILD_CANCELLATION";}
+    try{child.getOutputStream().close();}catch(IOException|RuntimeException ignored){}
+    try{input.close();}catch(IOException|RuntimeException ignored){}
     synchronized(snapshotLock){
       if(snapshotIncoming!=null){Arrays.fill(snapshotIncoming,(byte)0);snapshotIncoming=null;}
       if(snapshotExpectedHash!=null){Arrays.fill(snapshotExpectedHash,(byte)0);snapshotExpectedHash=null;}

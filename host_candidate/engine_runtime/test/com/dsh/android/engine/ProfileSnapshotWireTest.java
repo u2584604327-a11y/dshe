@@ -14,7 +14,7 @@ public final class ProfileSnapshotWireTest {
  static void clean(Path root)throws Exception{for(String name:new String[]{"snapshot.bin","owner.lock"})Files.deleteIfExists(root.resolve(name));Files.delete(root);}
  static void drain(InputStream in){Thread t=new Thread(()->{try{byte[] bytes=new byte[1024];while(in.read(bytes)!=-1){}}catch(IOException ignored){}});t.setDaemon(true);t.start();}
  static void generation(Path root,int initial,int commits)throws Exception{
-  Process child=start(peer,adapter,Integer.toString(initial));
+  Process child=start(peer,adapter,Integer.toString(initial),"FLUSH_ON_STOP");
   HttpProtocolNegativeTest.DrainedExit supervised=new HttpProtocolNegativeTest.DrainedExit(child);
   HttpProcessTransport process=new HttpProcessTransport(supervised,OWNER,System.nanoTime(),0,false,new DurableSessionSnapshot(root,OWNER));
   drain(process.getInputStream());drain(process.getErrorStream());
@@ -32,8 +32,8 @@ public final class ProfileSnapshotWireTest {
    yes(process.exitValue()==0&&process.failure().equals("NONE/NONE"),"actual_exit_without_false_protocol_failure_"+process.failure());
   }finally{process.close();yes(process.awaitClosed(5,TimeUnit.SECONDS),"owner_handles_closed_before_restart");}
   try(DurableSessionSnapshot restored=new DurableSessionSnapshot(root,OWNER)){
-   byte[] data=new byte[96*1024];for(int i=0;i<data.length;i++)data[i]=(byte)(i+initial+commits);
-   yes(restored.read().version==initial+commits,"acknowledged_version_on_disk");
+   byte[] data=new byte[96*1024];for(int i=0;i<data.length;i++)data[i]=(byte)(i+initial+commits+1);
+   yes(restored.read().version==initial+commits+1,"shutdown_flush_acknowledged_version_on_disk");
    yes(Arrays.equals(restored.read().bytes,DurableSessionSnapshotTest.snapshot("/dsh-home/record",data)),"acknowledged_exact_bytes_on_disk");
   }
  }
@@ -63,10 +63,20 @@ public final class ProfileSnapshotWireTest {
    yes(diagnostic.toString("US-ASCII").contains("DSH_RUNTIME_TRANSPORT_DENY="+expected),"malicious_ack_reason_"+mode);
   }finally{child.destroyForcibly();child.waitFor();}
  }
+ static void blockedEof(String peer)throws Exception{
+  Path root=root();try{
+   DurableSessionSnapshot store=new DurableSessionSnapshot(root,OWNER);store.commit(0,DurableSessionSnapshotTest.snapshot("/dsh-home/record",new byte[1024*1024]));
+   Process child=start(peer,"EOF_BLOCKED");HttpProcessTransport process=new HttpProcessTransport(child,OWNER,System.nanoTime(),0,false,store);
+   drain(process.getInputStream());drain(process.getErrorStream());
+   try{yes(child.waitFor(6,TimeUnit.SECONDS),"eof_stalled_native_writer_cancelled");yes(process.awaitClosed(3,TimeUnit.SECONDS),"eof_stalled_native_writer_handles_disposed");yes(process.failure().startsWith("PREMATURE_EOF/"),"eof_stalled_native_writer_failure_"+process.failure());}
+   finally{process.close();}
+  }finally{clean(root);}
+ }
  public static void main(String[] args)throws Exception{
   node=args[0];adapter=args[1];peer=args[2];attack=args[3];Path root=root(),other=root();
   try{
-   generation(root,0,2);generation(root,2,1);generation(other,0,1);
+   blockedEof(args[4]);
+   generation(root,0,2);generation(root,3,1);generation(other,0,1);
    for(String[] test:new String[][]{{"UNGRANTED","STORE_WIRE_NOT_AUTHORIZED"},{"STALE","STORE_STALE_VERSION"},{"PATH","SNAPSHOT_PATH"},{"HASH","STORE_WIRE_SEAL"},{"REPLAY","STORE_WIRE_BEGIN"},{"OVERRUN","STORE_WIRE_DATA"},{"TRUNCATED","STORE_WIRE_COMMIT"}}){Path negative=root();try{deny(negative,test[0],test[1]);}finally{clean(negative);}}
    for(String[] test:new String[][]{{"VERSION","E_DSH_STORE_COMMIT_REJECTED"},{"ID","E_DSH_STORE_ACK"},{"REPLAY","E_DSH_IPC_FRAME"},{"BAD_MAC","E_DSH_IPC_AUTH"},{"OLD_EPOCH","E_DSH_IPC_AUTH"}})badAck(test[0],test[1]);
    System.out.println("HOST_SNAPSHOT_STDIO_SYNC_COMMIT_DURABLE_RESTART_AND_NEGATIVES=PASS checks="+checks);

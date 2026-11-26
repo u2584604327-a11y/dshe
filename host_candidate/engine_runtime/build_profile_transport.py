@@ -41,9 +41,9 @@ def build():
     base=once(base,'    port, requestedPort, reading,',
               '    port, requestedPort, reading, filesystem: Object.freeze({ready:storageReady.promise,commit:commitSnapshot}),')
     base=once(base,'    input.destroy();\n    // Fixed diagnostic',
-              '    source.stop(cause);storageReady.reject(cause);try{onFailure();}catch{}\n    input.destroy();\n    queueMicrotask(()=>process.exit(125));\n    // Fixed diagnostic')
+              '    clearTimeout(profileInitTimer);storageIncoming?.fill(0);storageDigest?.fill(0);\n    source.stop(cause);storageReady.reject(cause);try{onFailure();}catch{}\n    input.destroy();\n    queueMicrotask(()=>process.exit(125));\n    // Fixed diagnostic')
     base=once(base,'      closed = true; key.fill(0); input.destroy(); applicationInput.destroy();',
-              '      closed = true; key.fill(0); source.stop(); input.destroy(); applicationInput.destroy();')
+              '      closed = true; key.fill(0); clearTimeout(profileInitTimer);storageIncoming?.fill(0);storageDigest?.fill(0); source.stop(); input.destroy(); applicationInput.destroy();')
     base=once(base,'async function installProfileTransport(', 'export async function installProfileTransport(')
     return ("import fs from 'node:fs';\nimport {createHash} from 'node:crypto';\n"+wire+'\n'+base).encode()
 

@@ -28,4 +28,9 @@ const server=http.createServer((req,res)=>{
   res.end(String(version));
 });
 server.listen(transport.requestedPort,'127.0.0.1');
-process.on('SIGTERM',()=>process.exit(0)); // actual original-main shutdown has no FINISH frame
+process.on('SIGTERM',()=>{
+  // Real shutdown persistence must still be allowed for this exact old owner
+  // while public admission is already closed and no new owner can enter.
+  if(process.argv[4]==='FLUSH_ON_STOP'){const bytes=snapshot(version+1);transport.filesystem.commit(bytes);bytes.fill(0);}
+  process.exit(0); // actual original-main shutdown has no FINISH frame
+});

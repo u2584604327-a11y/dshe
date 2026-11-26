@@ -4,6 +4,7 @@ const PF={INIT_BEGIN:11,INIT_DATA:12,INIT_END:13,ACK:14,BEGIN:26,DATA:27,COMMIT:
 const storageReady=Promise.withResolvers();storageReady.promise.catch(()=>{});
 let storageVersion=0n,storageInitialized=false,storageIncoming=null,storageOffset=0,storageDigest;
 let transactionId=0,transactionActive=false,transactionAck=null,profileDeadline;
+const profileInitTimer=setTimeout(()=>{if(!storageInitialized)fail(error('E_DSH_STORE_INIT_TIMEOUT'));},15000);
 const deferred=[];let deferredBytes=0,drainingDeferred=false;
 function decodeProfileFrame(packet){
   const header=packet.subarray(0,21),signature=packet.subarray(21,53);
@@ -28,7 +29,7 @@ function acceptStorageFrame(frame){
   if(type===PF.INIT_END){
     if(!storageIncoming||id!==0||length||storageOffset!==storageIncoming.length||
        !timingSafeEqual(storageDigest,createHash('sha256').update(storageIncoming).digest()))throw error('E_DSH_STORE_INIT_SEAL');
-    storageInitialized=true;const bytes=storageIncoming;storageIncoming=null;storageDigest.fill(0);
+    storageInitialized=true;clearTimeout(profileInitTimer);const bytes=storageIncoming;storageIncoming=null;storageDigest.fill(0);
     storageReady.resolve({version:storageVersion,bytes});return true;
   }
   if(type===PF.ACK){
@@ -60,7 +61,8 @@ function commitSnapshot(bytes){
     while(transactionAck===null){
       const frame=decodeProfileFrame(source.packetSync(profileDeadline));
       if(acceptStorageFrame(frame))continue;
-      if(frame.type===H.SHUTDOWN){applyProfileFrame(frame);throw error('E_DSH_STORE_OWNER_STOPPED');}
+      // Finish this authenticated commit before delivering graceful shutdown.
+      // The host's independent stop deadline still forcibly revokes a stall.
       if(deferredBytes+53+frame.length>2*1024*1024)throw error('E_DSH_STORE_DEFERRED_BOUND');
       deferred.push(frame);deferredBytes+=53+frame.length;
     }

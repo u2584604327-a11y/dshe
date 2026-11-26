@@ -168,7 +168,7 @@ def main():
         extended=work/'profile-transport.mjs';extended.write_bytes(profile_transport())
         subprocess.run(['java','-cp',classpath,'com.dsh.android.engine.ProfileSnapshotWireTest',node,
                         str(extended),str(ROOT/'test/owned_snapshot_peer.mjs'),
-                        str(ROOT/'test/snapshot_attack_peer.mjs')],check=True,timeout=45)
+                        str(ROOT/'test/snapshot_attack_peer.mjs'),str(ROOT/'test/malformed_peer.mjs')],check=True,timeout=45)
         from build_profile_storage_bootstrap import build as storage_bootstrap, wrapped
         codec=wrapped('session_snapshot.mjs',['decodeSessionSnapshot','encodeSessionSnapshot'],["import path from 'node:path';"])
         owner=wrapped('session_filesystem.mjs',['installSessionFilesystem'],[
@@ -182,9 +182,36 @@ def main():
         for memory in (False,True):
             subprocess.run([node,'--permission','--input-type=module','--eval',unit],cwd='/',
                            env={'DSH_FS_TEST_MEMORY':'1'} if memory else {},check=True,timeout=10)
+        watchers=wrapped('virtual_watch.mjs',['installVirtualWatchers'],[
+            "import fs from 'node:fs';","import path from 'node:path';","import {EventEmitter} from 'node:events';",
+            "import {syncBuiltinESMExports} from 'node:module';"])
+        watch_unit=CORE.read_text().split('async function run() {\n')[0]
+        watch_unit+="\nimport {randomBytes} from 'node:crypto';\nimport {EventEmitter} from 'node:events';\nimport assert from 'node:assert/strict';\n"
+        watch_unit+=codec+owner+watchers+(ROOT/'test/virtual_watch.test.mjs').read_text()
+        subprocess.run([node,'--permission','--input-type=module','--eval',watch_unit],cwd='/',env={},check=True,timeout=10)
         storage=work/'profile-storage.mjs';storage.write_bytes(storage_bootstrap())
         subprocess.run(['java','-cp',classpath,'com.dsh.android.engine.OriginalProfileStorageTest',node,
                         str(storage),str(module_stream)],check=True,timeout=70)
+        # Execute the full original runCli and actual workspace RPC/WebSocket,
+        # with an explicit HOST-ONLY dlopen spy. The real bootstrap gets none
+        # of these process overrides or --expose-internals permissions.
+        from build_original_main_bootstrap import build as original_main
+        from build_http_bootstrap import once
+        main_source=original_main(args.apk.resolve()).decode()
+        require('host-control-spy' not in main_source and '--expose-internals' not in main_source and
+                'process.dlopen=' not in main_source,'MAIN_BOOTSTRAP_CONTAINS_HOST_TEST_ESCAPE')
+        main_file=work/'original-main.mjs';main_file.write_text(main_source)
+        subprocess.run([node,'--check',str(main_file)],check=True,timeout=10)
+        spy=(ROOT/'test/host_main_native_control.mjs').read_text()
+        control=work/'original-main-host-control.mjs'
+        control.write_text(once(main_source,'  const pageSize=4096;',spy+'\n  const pageSize=4096;'))
+        import original_native_bundle as native_bundle
+        native_files=native_bundle.verified_bundle(args.apk.resolve())
+        native_home=work/'main-native-control';native_home.mkdir(mode=0o700)
+        native_file=native_home/'libdsh_original_require_builtin.so'
+        native_file.write_bytes(native_files[native_bundle.NATIVE]);native_file.chmod(0o444)
+        subprocess.run(['java','-cp',classpath,'com.dsh.android.engine.OriginalMainHostControlTest',node,
+                        str(control),str(module_stream),str(native_home),str(original)],check=True,timeout=90)
         # Recompile the byte-identified pre-fix source as an independent legacy
         # control. No original/baseline source or production gate is changed.
         actual=host_root/'p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java'
