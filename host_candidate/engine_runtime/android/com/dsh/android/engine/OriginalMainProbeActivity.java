@@ -1,7 +1,7 @@
 package com.dsh.android.engine;
 import android.app.Activity;import android.content.*;import android.os.*;import android.widget.*;
 import com.dsh.android.p50.P50ModuleStream;import com.dsh.p37.P37RemoteProcess;
-import java.io.*;import java.net.*;import java.nio.charset.StandardCharsets;import java.nio.file.*;import java.nio.file.attribute.*;import java.security.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.*;
+import java.io.*;import java.nio.charset.StandardCharsets;import java.nio.file.*;import java.nio.file.attribute.*;import java.security.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.*;
 
 /** Physical ARM64 original runCli + actual workspace/RPC/WS/restart test.
  * A separate package, fresh test-owned storage, never original DSH data or
@@ -46,30 +46,19 @@ public final class OriginalMainProbeActivity extends Activity {
           HttpProcessTransport active;
           try{active=new HttpProcessTransport(raw,bound.session,bound.epoch,port,false,store);}catch(Exception bad){store.close();throw bad;}
           transport=active;if(closed.get()){active.close();return;}
-          BlockingQueue<String> output=new ArrayBlockingQueue<>(96);
-          Thread stdout=new Thread(()->{try{String row;int total=0;while((row=OriginalMainHttpChecks.line(active.getInputStream()))!=null){if((total+=row.length())>65536||!output.offer(row))throw new IOException("MAIN_LOG_BOUND");}}catch(Exception bad){output.offer("MAIN_LOG_FAILURE");}},"original-main-private-stdout");stdout.setDaemon(true);stdout.start();
           Thread stderr=new Thread(()->{try{String row;int total=0;while((row=OriginalMainHttpChecks.line(active.getErrorStream()))!=null){if((total+=row.length())>65536)break;if(row.matches("ORIGINAL_MAIN_DENY=[A-Z0-9_]{1,64}"))childError.set(row.substring(row.indexOf('=')+1));}}catch(Exception ignored){}},"original-main-fixed-diagnostics");stderr.setDaemon(true);stderr.start();
-          if(!active.awaitListening(15,TimeUnit.SECONDS))throw new IOException("MAIN_LISTEN");port=active.port();
-          long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(15);String target=null;boolean returned=false;
-          while(target==null||!returned){long remaining=deadline-System.nanoTime();if(remaining<=0)throw new IOException("MAIN_STARTUP_OUTPUT");String row=output.poll(remaining,TimeUnit.NANOSECONDS);if(row==null||row.equals("MAIN_LOG_FAILURE"))throw new IOException("MAIN_OUTPUT_MISSING");
-            if(row.startsWith("dsh web: http://127.0.0.1:")){URL url=new URL(row.substring(9));if(url.getPort()!=port||!"127.0.0.1".equals(url.getHost())||!"/".equals(url.getPath())||url.getUserInfo()!=null||url.getRef()!=null||url.getQuery()==null||!url.getQuery().matches("token=[A-Za-z0-9_-]{43}"))throw new IOException("MAIN_PRIVATE_URL");target=url.getFile();}
-            if(row.equals("ORIGINAL_MAIN_ENTRY_RETURNED_NOT_READY_ATTESTATION"))returned=true;
-          }
+          OriginalMainStartup startup=OriginalMainStartup.await(active);port=startup.port();
           post("ORIGINAL_MAIN_RUNCLI=INVOKED");setStage("AUTHENTICATION");
-          require(OriginalMainHttpChecks.request(port,"/",null,null).status==401,"MAIN_UNAUTHENTICATED");
-          if(generation==1){require(OriginalMainHttpChecks.request(port,"/",oldCookie,null).status==401,"MAIN_OLD_COOKIE");require(OriginalMainHttpChecks.request(port,oldToken,null,null).status==401,"MAIN_OLD_TOKEN");}
-          OriginalMainHttpChecks.Reply login=OriginalMainHttpChecks.request(port,target,null,null);
-          require(login.status==303&&login.cookie!=null&&login.cookie.contains("HttpOnly")&&login.cookie.contains("SameSite=Strict"),"MAIN_LOGIN");String cookie=login.cookie.split(";")[0];
-          setStage("FRONTEND");OriginalMainHttpChecks.Reply frontend=OriginalMainHttpChecks.request(port,"/",cookie,null);require(frontend.status==200,"MAIN_FRONTEND");
-          java.util.regex.Matcher script=java.util.regex.Pattern.compile("src=\"([.]/assets/[^\"]+[.]js)\"").matcher(new String(frontend.body,StandardCharsets.UTF_8));require(script.find(),"MAIN_FRONTEND_SCRIPT");
-          OriginalMainHttpChecks.Reply js=OriginalMainHttpChecks.request(port,script.group(1).substring(1),null,null);require(js.status==200&&"4bc914bfbb6adbdd63953a29f63835eb7127defd2a973149d64cdab489f1a9a5".equals(hash(js.body)),"MAIN_ORIGINAL_JS_BYTES");
+          if(generation==1)startup.verifyRetiredCredentials(oldToken,oldCookie);
+          String cookie=startup.authenticate();
+          setStage("FRONTEND");startup.verifyFrontend(cookie);
           setStage("ORIGINAL_WORKSPACE_RPC");String body="{\"type\":\"client-request\",\"rpcId\":\"main-test\",\"method\":\"workspace/create\",\"payload\":{\"args\":{\"request\":{\"path\":\"/dsh-workspace\"}}}}";
           OriginalMainHttpChecks.Reply reply=OriginalMainHttpChecks.request(port,"/api/workspace/create",cookie,body);String value=new String(reply.body,StandardCharsets.UTF_8).replaceAll("\\s+","");
           require(reply.status==200&&value.contains("\"ok\":true")&&value.contains("\"created\":"+(generation==0))&&value.contains("/dsh-workspace"),"MAIN_WORKSPACE_RESTORE");
           setStage("ORIGINAL_WORKSPACE_WEBSOCKET");OriginalMainHttpChecks.workspaceStream(port,cookie);
           setStage("HOST_FENCE");OriginalMainHttpChecks.hostFence(port,cookie);
           setStage("STOP_AND_DISPOSE");active.destroy();require(active.waitFor(8,TimeUnit.SECONDS)&&active.exitValue()==0&&raw.terminalReason()==P37RemoteProcess.TerminalReason.REMOTE_EXIT,"MAIN_ACTUAL_EXIT");active.close();require(active.awaitClosed(5,TimeUnit.SECONDS)&&active.failure().equals("NONE/NONE"),"MAIN_OWNER_RELEASE");
-          oldCookie=cookie;oldToken=target;transport=null;
+          oldCookie=cookie;oldToken=startup.privateTarget();transport=null;
           post("ORIGINAL_MAIN_AUTH_FRONTEND_WORKSPACE_RPC_AND_WS=PASS generation="+generation);post("ORIGINAL_MAIN_ACTUAL_CHILD_EXIT=0 generation="+generation);
         }finally{HttpProcessTransport current=transport;if(current!=null){current.close();current.awaitClosed(5,TimeUnit.SECONDS);transportFault.set(current.failure());transport=null;}bound.close();session=null;}
       }
@@ -82,7 +71,6 @@ public final class OriginalMainProbeActivity extends Activity {
     finally{if(root!=null)try{Files.deleteIfExists(root.resolve("snapshot.bin"));Files.deleteIfExists(root.resolve("owner.lock"));Files.delete(root);}catch(IOException ignored){}}
   }
   private static void require(boolean value,String code)throws IOException{if(!value)throw new IOException(code);}
-  private static String hash(byte[] bytes)throws Exception{return hex(MessageDigest.getInstance("SHA-256").digest(bytes));}
   private static String hex(byte[] bytes){StringBuilder result=new StringBuilder();for(byte b:bytes)result.append(String.format(Locale.ROOT,"%02x",b&255));return result.toString();}
   private static String randomId(){byte[] random=new byte[32];new SecureRandom().nextBytes(random);String id=hex(random);Arrays.fill(random,(byte)0);return id;}
   private void report(String line){if(!closed.get()){status.append(line).append('\n');text.setText(status.toString());}}

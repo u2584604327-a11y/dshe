@@ -112,6 +112,9 @@ final class HttpProcessTransport extends Process implements Closeable {
     }catch(IOException|RuntimeException error){close();throw error;}
   }
   int port(){return listener.getLocalPort();}
+  boolean ownsListener(int port){
+    return port>0&&port==port()&&accepting.get()&&!stopping.get()&&!closed.get()&&child.isAlive();
+  }
   String failure(){return failure+"/"+peerFault;}
   boolean awaitListening(long timeout,TimeUnit unit)throws InterruptedException{return listened.await(timeout,unit)&&accepting.get()&&!closed.get();}
   /** A new owner must wait for resource disposal, not merely OS child exit. */

@@ -47,6 +47,7 @@ def patches(sources):
         'host_candidate/engine_runtime/src/com/dsh/android/engine/DurableSessionSnapshot.java',
         'host_candidate/engine_runtime/src/com/dsh/android/engine/SessionSnapshotCodec.java',
         'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalMainHttpChecks.java',
+        'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalMainStartup.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainTestSession.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainIsolatedService.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainProbeActivity.java',

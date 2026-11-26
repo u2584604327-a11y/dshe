@@ -41,8 +41,18 @@ def main():
         if main:needed+=['Lcom/dsh/android/engine/OriginalMainProbeActivity;',
                          'Lcom/dsh/android/engine/OriginalMainTestSession;',
                          'Lcom/dsh/android/engine/OriginalMainIsolatedService;',
-                         'Lcom/dsh/android/engine/OriginalMainHttpChecks;']
+                         'Lcom/dsh/android/engine/OriginalMainHttpChecks;',
+                         'Lcom/dsh/android/engine/OriginalMainStartup;']
         require(all(any(key[0]==name for key in methods) for name in needed),'HTTP_CLASSES_MISSING')
+        if main:
+            body=[method for key,method in methods.items()
+                  if key[0]=='Lcom/dsh/android/engine/OriginalMainProbeActivity;' and key[1]=='verify']
+            require(len(body)==1,'MAIN_TEST_VERIFICATION_METHOD')
+            refs=[view.instruction(raw)[1] for raw in view.rows(body[0]).values()]
+            calls=[ref[1] for ref in refs if isinstance(ref,tuple) and len(ref)==4 and
+                   ref[0]==b'Lcom/dsh/android/engine/OriginalMainStartup;' and
+                   ref[1] in (b'await',b'authenticate',b'verifyFrontend')]
+            require(calls==[b'await',b'authenticate',b'verifyFrontend'],'MAIN_TEST_PRIVATE_STARTUP_CALLS')
         for key,method in methods.items():
             if key[0] in ([needed[1]]+needed[5:]) and method.get_code():
                 require(not any(view.instruction(raw)[1]==(b'Ljava/lang/ProcessBuilder;',b'start',(),b'Ljava/lang/Process;')
@@ -73,6 +83,7 @@ def main():
         denied(negative,True,'MAIN_BOOTSTRAP_SHA_OR_LENGTH' if main else 'HTTP_BOOTSTRAP_SHA_OR_LENGTH')
     print('HTTP_TEST_ACTUAL_APK_BINDER_UID_FIXED_CHILD_AND_NO_HOST_EXEC=PASS_STATIC')
     print('HTTP_TEST_EXPLICIT_BOOTSTRAP_AND_DEFAULT_ALLOWLIST_NEGATIVES=PASS')
+    if main:print('MAIN_TEST_PRIVATE_STARTUP_AUTH_AND_FRONTEND_CALLS_IN_ACTUAL_APK=PASS_STATIC')
     print('HTTP_TEST_ARM64_NODE_HTTP_RUNTIME=REQUIRES_DEVICE')
 
 
