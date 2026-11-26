@@ -77,7 +77,7 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
     started=true;
     Thread prepare=new Thread(()->{
       try{
-        originalEngine=P50OriginalEngineConfig.prepare(host,session);
+        originalEngine=P50OriginalEngineConfig.prepare(host,session,epoch);
         main.post(()->{if(!closed.get())startTransport();else originalEngine.close();});
       }catch(Exception denied){main.post(()->deny("ORIGINAL_ENGINE_PREPARATION"));}
     },"dsh-original-config-prepare");
@@ -123,7 +123,7 @@ public final class P50OriginalModuleProbe implements AutoCloseable {
       try{
         // Original runDumpConfig creates its own two reader threads, performs
         // its own timed wait, and constructs its own original DumpResult.
-        Object result=originalEngine.invoke(child,receipt,epoch);
+        Object result=originalEngine.invoke(child,receipt);
         int exit=(Integer)P50OriginalEngineConfig.value(result,"getExitCode");
         byte[] output=((String)P50OriginalEngineConfig.value(result,"getStdout")).getBytes(StandardCharsets.UTF_8);
         String error=(String)P50OriginalEngineConfig.value(result,"getStderr");

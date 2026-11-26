@@ -21,28 +21,34 @@ public final class P50OriginalEngineConfig implements AutoCloseable {
   private static final ThreadLocal<Lease> SLOT=new ThreadLocal<>();
   private final Object engine;
   private final Method run;
-  private final ProcessBuilder expected;
+  private final List<String> argv;
+  private final Map<String,String> environment;
+  private final File directory;
   private final String session;
-  private File privateRoot;
-  private volatile boolean closed;
+  private final long epoch;
+  private final File privateRoot;
+  private boolean started,closed;
+  private Lease active;
   private static final class Lease {
+    final P50OriginalEngineConfig owner;
     final P37RemoteProcess process;
-    final List<String> argv;
-    final Map<String,String> env;
-    final File directory;
     final long deadline=System.nanoTime()+12000000000L;
     boolean claimed;
-    Lease(P37RemoteProcess process,ProcessBuilder expected){
-      this.process=process;argv=new ArrayList<>(expected.command());
-      env=new HashMap<>(expected.environment());directory=expected.directory();
+    Lease(P50OriginalEngineConfig owner,P37RemoteProcess process){
+      this.owner=owner;this.process=process;
     }
   }
-  private P50OriginalEngineConfig(Object engine,Method run,ProcessBuilder expected,String session){
-    this.engine=engine;this.run=run;this.expected=expected;this.session=session;
+  private P50OriginalEngineConfig(Object engine,Method run,ProcessBuilder expected,String session,
+      long epoch,File privateRoot){
+    this.engine=engine;this.run=run;
+    argv=new ArrayList<>(expected.command());
+    environment=new HashMap<>(expected.environment());
+    directory=expected.directory();
+    this.session=session;this.epoch=epoch;this.privateRoot=privateRoot;
   }
-  public static P50OriginalEngineConfig prepare(Context host,String session)throws Exception {
+  public static P50OriginalEngineConfig prepare(Context host,String session,long epoch)throws Exception {
     if(host==null||!"com.dsh.p51.isolatedprobe".equals(host.getPackageName())||
-        session==null||!session.matches("[0-9a-f]{64}"))
+        session==null||!session.matches("[0-9a-f]{64}")||epoch<=0)
       throw new SecurityException("ORIGINAL_CONFIG_FRESH_SIDECAR_ONLY");
     // A new directory per invocation. No read, replace or delete in original DSH.
     File root=new File(host.getCacheDir(),"original-config-"+UUID.randomUUID());
@@ -103,27 +109,38 @@ public final class P50OriginalEngineConfig implements AutoCloseable {
     env.put("PATH",p+"/bin:"+p+"/bin/applets:/system/bin:/system/xbin");
     env.put("SSL_CERT_FILE",p+"/etc/tls/cert.pem");env.put("CURL_CA_BUNDLE",p+"/etc/tls/cert.pem");
     env.put("NODE_OPTIONS","--max-old-space-size=1024");
-    P50OriginalEngineConfig result=new P50OriginalEngineConfig(engine,run,expected,session);
-    result.privateRoot=root;prepared=true;return result;
+    P50OriginalEngineConfig result=new P50OriginalEngineConfig(engine,run,expected,session,epoch,root);
+    prepared=true;return result;
     }finally{if(!prepared)deleteOwnLayout(root);}
 
   }
   /** A real receipt is the only route into a thread-bound, one-use lease. */
-  public Object invoke(P37RemoteProcess process,P184ChildStartReceipt receipt,long epoch)throws Exception {
-    if(closed||SLOT.get()!=null||process==null||receipt==null||!receipt.consume(process,session,epoch)){
-      if(process!=null)process.destroyForcibly();
+  private synchronized Lease begin(P37RemoteProcess process,P184ChildStartReceipt receipt){
+    if(closed||started||SLOT.get()!=null||process==null||receipt==null||
+        !receipt.consume(process,session,epoch))
       throw new SecurityException("ORIGINAL_CONFIG_AUTHENTICATED_RECEIPT");
-    }
-    Lease lease=new Lease(process,expected);SLOT.set(lease);
+    started=true;
+    active=new Lease(this,process);
+    return active;
+  }
+  public Object invoke(P37RemoteProcess process,P184ChildStartReceipt receipt)throws Exception {
+    Lease lease=begin(process,receipt);
+    SLOT.set(lease);
     boolean succeeded=false;
     try{
       Object result=run.invoke(engine);
-      if(!lease.claimed||result==null||
-          !result.getClass().getName().equals("com.dsh.android.EngineManager$DumpResult"))throw new IOException("ORIGINAL_CONFIG_CALL_OR_HANDOFF_DENIED");
-      succeeded=true;return result;
+      synchronized(this){
+        if(closed||!lease.claimed||result==null||result.getClass()!=run.getReturnType())
+          throw new IOException("ORIGINAL_CONFIG_CALL_OR_HANDOFF_DENIED");
+        succeeded=true;
+      }
+      return result;
     }finally{
       SLOT.remove();
       if(!succeeded)process.destroyForcibly();
+      boolean dispose;
+      synchronized(this){active=null;dispose=closed;}
+      if(dispose&&privateRoot!=null)deleteOwnLayout(privateRoot);
     }
   }
   /** Called only from the disposable typed P47 config bridge, never main/probe. */
@@ -136,16 +153,22 @@ public final class P50OriginalEngineConfig implements AutoCloseable {
       for(StackTraceElement frame:Thread.currentThread().getStackTrace())
         if(frame.getClassName().equals("com.dsh.android.EngineManager")&&
             frame.getMethodName().equals("runDumpConfig"))originalCaller=true;
-      P37RemoteProcess.TerminalReason state=lease.process.terminalReason();
-      if((state!=P37RemoteProcess.TerminalReason.RUNNING&&state!=P37RemoteProcess.TerminalReason.REMOTE_EXIT)||
-          !originalCaller||builder==null||System.nanoTime()-lease.deadline>=0||lease.claimed||
-          !lease.argv.equals(builder.command())||!lease.env.equals(builder.environment())||
-          !lease.directory.equals(builder.directory())||builder.redirectErrorStream()||
-          builder.redirectInput()!=ProcessBuilder.Redirect.PIPE||
-          builder.redirectOutput()!=ProcessBuilder.Redirect.PIPE||builder.redirectError()!=ProcessBuilder.Redirect.PIPE)
+      if(!originalCaller||!lease.owner.acceptLaunch(lease,builder))
         throw new IOException("ORIGINAL_CONFIG_LAUNCH_DRIFT");
-      lease.claimed=true;accepted=true;return lease.process;
+      accepted=true;return lease.process;
     }finally{if(!accepted)lease.process.destroyForcibly();}
+  }
+  private synchronized boolean acceptLaunch(Lease lease,ProcessBuilder builder){
+    P37RemoteProcess.TerminalReason state=lease.process.terminalReason();
+    if(closed||active!=lease||lease.claimed||System.nanoTime()-lease.deadline>=0||
+        (state!=P37RemoteProcess.TerminalReason.RUNNING&&state!=P37RemoteProcess.TerminalReason.REMOTE_EXIT)||
+        builder==null||!argv.equals(builder.command())||!environment.equals(builder.environment())||
+        !directory.equals(builder.directory())||builder.redirectErrorStream()||
+        builder.redirectInput()!=ProcessBuilder.Redirect.PIPE||
+        builder.redirectOutput()!=ProcessBuilder.Redirect.PIPE||builder.redirectError()!=ProcessBuilder.Redirect.PIPE)
+      return false;
+    lease.claimed=true;
+    return true;
   }
   public static Object value(Object result,String getter)throws Exception{
     if(!Arrays.asList("getExitCode","getStdout","getStderr").contains(getter)||result==null||
@@ -156,7 +179,16 @@ public final class P50OriginalEngineConfig implements AutoCloseable {
   }
   /** Delete only this invocation's fixed files and empty directories. Never a
    * recursive profile/cache purge, and never the installed DSH's storage. */
-  @Override public void close(){closed=true;if(privateRoot!=null)deleteOwnLayout(privateRoot);}
+  @Override public void close(){
+    Lease lease;
+    synchronized(this){
+      if(closed)return;
+      closed=true;
+      lease=active;
+    }
+    if(lease!=null)lease.process.destroyForcibly();
+    else if(privateRoot!=null)deleteOwnLayout(privateRoot);
+  }
   private static void deleteOwnLayout(File root){
     for(String relative:new String[]{"files/termux/usr/bin/node","files/engine/"+ENTRY}){
       File file=new File(root,relative);file.delete();
