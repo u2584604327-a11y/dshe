@@ -144,8 +144,31 @@ def main():
         subprocess.run(['javac','--release','8','-cp',str(args.android_jar.resolve()),'-sourcepath',os.pathsep.join(roots),
                         '-d',str(classes),*map(str,sources)],check=True)
         classpath=str(classes)+os.pathsep+str(args.android_jar.resolve())
+        # Independent old-order counterfactual: keep the current implementation
+        # and remove only the EOF producer release. This is not a historical
+        # byte-identical source claim. Real OS exit stays required in both.
+        fixed=(ROOT/'src/com/dsh/android/engine/HttpProcessTransport.java').read_text()
+        eof=('      // EOF releases this exact producer before waiting for the authenticated\n'
+             '      // supervisor\'s EXIT. Otherwise its pipe drain can wait on this writer.\n'
+             '      try{output.close();}catch(IOException ignored){}\n')
+        require(fixed.count(eof)==1,'EOF_DRAIN_REPRODUCTION_ANCHOR')
+        counter=work/'old-eof-order';counter.mkdir();source=counter/'HttpProcessTransport.java';source.write_text(fixed.replace(eof,''))
+        subprocess.run(['javac','--release','8','-cp',classpath,'-d',str(counter),str(source)],check=True)
+        refusal=subprocess.run(['java','-cp',str(counter)+os.pathsep+classpath,'com.dsh.android.engine.HttpProtocolNegativeTest',
+                                node,str(ROOT/'test/malformed_peer.mjs'),'EXIT_DRAIN_ONLY'],capture_output=True,text=True,timeout=12)
+        require(refusal.returncode!=0 and 'clean_unframed_exit_not_false_supervisor_failure_PREMATURE_EOF' in refusal.stderr,
+                'EOF_DRAIN_OLD_ORDER_NOT_REPRODUCED')
+        print('HTTP_EOF_WAIT_BEFORE_STDIN_CLOSE_FALSE_DENY=REPRODUCED_COUNTERFACTUAL')
         verify_snapshot_lock_reproduction(work)
         subprocess.run(['java','-cp',classpath,'com.dsh.android.engine.DurableSessionSnapshotTest'],check=True,timeout=25)
+        # Main-profile-only extension; approved HTTP/native bootstraps below
+        # remain byte-identical. These are real host pipes and durable files,
+        # synthetic snapshots, never Android/original-main acceptance.
+        from build_profile_transport import build as profile_transport
+        extended=work/'profile-transport.mjs';extended.write_bytes(profile_transport())
+        subprocess.run(['java','-cp',classpath,'com.dsh.android.engine.ProfileSnapshotWireTest',node,
+                        str(extended),str(ROOT/'test/owned_snapshot_peer.mjs'),
+                        str(ROOT/'test/snapshot_attack_peer.mjs')],check=True,timeout=45)
         # Recompile the byte-identified pre-fix source as an independent legacy
         # control. No original/baseline source or production gate is changed.
         actual=host_root/'p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java'

@@ -6,6 +6,35 @@ public final class HttpProtocolNegativeTest {
  static int checks;static void yes(boolean b,String n){checks++;if(!b)throw new AssertionError(n);}
  static byte[] zeros=new byte[32];
  static Process start(ProcessBuilder builder)throws IOException{builder.environment().clear();return builder.start();}
+ /** Models the supervisor's real rule: EXIT is published only after both
+  * actual OS exit and release of this producer's stdin. No exit is invented. */
+ static final class DrainedExit extends Process {
+  final Process actual;final CountDownLatch producerClosed=new CountDownLatch(1);final OutputStream producer;
+  DrainedExit(Process actual){this.actual=actual;producer=new FilterOutputStream(actual.getOutputStream()){
+   @Override public void close()throws IOException{try{super.close();}finally{producerClosed.countDown();}}
+  };}
+  public InputStream getInputStream(){return actual.getInputStream();}
+  public InputStream getErrorStream(){return actual.getErrorStream();}
+  public OutputStream getOutputStream(){return producer;}
+  public int waitFor()throws InterruptedException{int code=actual.waitFor();producerClosed.await();return code;}
+  public boolean waitFor(long time,TimeUnit unit)throws InterruptedException{
+   long start=System.nanoTime(),limit=unit.toNanos(time);if(!actual.waitFor(time,unit))return false;
+   return producerClosed.await(Math.max(0,limit-(System.nanoTime()-start)),TimeUnit.NANOSECONDS);
+  }
+  public int exitValue(){if(producerClosed.getCount()!=0)throw new IllegalThreadStateException();return actual.exitValue();}
+  public boolean isAlive(){return actual.isAlive()||producerClosed.getCount()!=0;}
+  public void destroy(){actual.destroy();}
+  public Process destroyForcibly(){actual.destroyForcibly();return this;}
+ }
+ static void unframedExit(String node,String peer)throws Exception{
+  DrainedExit child=new DrainedExit(start(new ProcessBuilder(node,"--permission","--allow-fs-read="+peer,peer,"EOF_EXIT")));
+  HttpProcessTransport transport=new HttpProcessTransport(child,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",1,0);
+  try{
+   yes(child.waitFor(5,TimeUnit.SECONDS),"eof_releases_exact_stdin_before_supervisor_exit");
+   yes(child.exitValue()==7,"eof_still_requires_actual_child_exit_code");
+   yes(transport.failure().equals("NONE/NONE"),"clean_unframed_exit_not_false_supervisor_failure_"+transport.failure());
+  }finally{transport.close();}
+ }
  static void hostRejects(String node,String peer,String mode,String expected)throws Exception{
   Process child=start(new ProcessBuilder(node,"--permission","--allow-fs-read="+peer,peer,mode));
   HttpProcessTransport transport=new HttpProcessTransport(child,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",1,0);
@@ -54,6 +83,9 @@ public final class HttpProtocolNegativeTest {
   }finally{process.close();}
  }
  public static void main(String[] a)throws Exception{
+  unframedExit(a[0],a[1]);
+  if(a.length==3&&a[2].equals("EXIT_DRAIN_ONLY"))return;
+  hostRejects(a[0],a[1],"EOF_ALIVE","PREMATURE_EOF");
   startupExit(a[0],a[2],a[3]);
   for(String mode:new String[]{"BAD_MAC","OLD_SESSION","REPLAY","OVERSIZE","UNSOLICITED","DUP_LISTEN","CREDIT","RESERVED_CREDIT"})
    hostRejects(a[0],a[1],mode,mode.equals("BAD_MAC")||mode.equals("OLD_SESSION")?"FRAME_AUTH":

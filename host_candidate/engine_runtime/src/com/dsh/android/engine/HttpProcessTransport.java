@@ -22,6 +22,14 @@ final class HttpProcessTransport extends Process implements Closeable {
   static final int LISTEN=16, RESPONSE=17, RESPONSE_END=18, RESPONSE_CLOSE=19,
       REQUEST_ACK=20, LOG=21, STOP=22, APP_ACK=24, FINISH=25;
   private final Process child;
+  private final DurableSessionSnapshot profileStore;
+  private final Object snapshotLock=new Object();
+  private byte[] snapshotIncoming,snapshotExpectedHash;
+  private int snapshotOffset,snapshotTransaction;
+  private long snapshotExpectedVersion,snapshotDeadline;
+  private volatile boolean snapshotInitializationQueued;
+  private static final int FS_INIT_BEGIN=11,FS_INIT_DATA=12,FS_INIT_END=13,FS_ACK=14,
+      FS_BEGIN=26,FS_DATA=27,FS_COMMIT=28;
   private final ServerSocket listener=new ServerSocket();
   private final byte[] key=new byte[32],session,epochBytes;
   private final DataInputStream input;
@@ -38,6 +46,7 @@ final class HttpProcessTransport extends Process implements Closeable {
   private final LogSink[] logs={new LogSink(0),new LogSink(1)};
   private final ScheduledExecutorService deadlines=Executors.newSingleThreadScheduledExecutor(daemonFactory("dsh-http-deadline"));
   private final CountDownLatch listened=new CountDownLatch(1),nativeErrorDone=new CountDownLatch(1);
+  private final CountDownLatch cleanupDone=new CountDownLatch(1);
   private long sending,received;
   private volatile String failure="NONE",peerFault="NONE";
   private volatile boolean listenSeen;
@@ -56,10 +65,15 @@ final class HttpProcessTransport extends Process implements Closeable {
     this(authenticatedChild,hostSession,ownerEpoch,requestedPort,false);
   }
   HttpProcessTransport(Process authenticatedChild,String hostSession,long ownerEpoch,int requestedPort,boolean mergedError)throws IOException{
+    this(authenticatedChild,hostSession,ownerEpoch,requestedPort,mergedError,null);
+  }
+  /** Only a trusted receipt/owner factory may provide this directory capability.
+   * The old HTTP/component constructors grant no snapshot authority. */
+  HttpProcessTransport(Process authenticatedChild,String hostSession,long ownerEpoch,int requestedPort,boolean mergedError,DurableSessionSnapshot profileStore)throws IOException{
     if(authenticatedChild==null||!authenticatedChild.isAlive()||hostSession==null||
        !hostSession.matches("[0-9a-f]{64}")||ownerEpoch<=0||requestedPort<0||requestedPort>65535)
       throw new IOException("AUTHENTICATED_RUNTIME_REQUIRED");
-    child=authenticatedChild;this.requestedPort=requestedPort;this.mergedError=mergedError;
+    child=authenticatedChild;this.profileStore=profileStore;this.requestedPort=requestedPort;this.mergedError=mergedError;
     session=new byte[32];for(int i=0;i<32;i++)session[i]=(byte)Integer.parseInt(hostSession.substring(i*2,i*2+2),16);
     epochBytes=ByteBuffer.allocate(8).putLong(ownerEpoch).array();
     new SecureRandom().nextBytes(key);
@@ -71,9 +85,17 @@ final class HttpProcessTransport extends Process implements Closeable {
       listener.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[]{127,0,0,1}),requestedPort),16);
       output.writeBytes("DSHHTTP1");output.write(key);output.write(session);output.write(epochBytes);
       output.writeInt(requestedPort);output.writeInt(listener.getLocalPort());output.flush();
+      // Register deadlines before any reader can observe immediate child exit
+      // and close this executor. Fast startup failure is a valid Process exit.
+      deadlines.schedule(()->{if(!listenSeen)fail("LISTEN_DEADLINE");},90,TimeUnit.SECONDS);
+      deadlines.scheduleWithFixedDelay(()->{
+        long now=System.nanoTime();for(Peer peer:peers.values())if(peer.writeStarted>0&&now-peer.writeStarted>TimeUnit.SECONDS.toNanos(60))peer.close(true);
+        synchronized(snapshotLock){if(snapshotIncoming!=null&&now-snapshotDeadline>=0)fail("STORE_WIRE_TIMEOUT");}
+      },1,1,TimeUnit.SECONDS);
       thread("dsh-app-stdout",()->logs[0].run());if(!mergedError)thread("dsh-app-stderr",()->logs[1].run());
       thread("dsh-http-frame-writer",this::writeFrames);
       thread("dsh-http-frame-reader",this::readFrames);
+      if(profileStore!=null)thread("dsh-owner-snapshot-initialization",this::sendInitialSnapshot);
       thread("dsh-http-child-stderr",()->{
         try(InputStream err=child.getErrorStream()){
           // Unframed native diagnostics are not application output or authority.
@@ -85,15 +107,14 @@ final class HttpProcessTransport extends Process implements Closeable {
         finally{nativeErrorDone.countDown();}
       });
       thread("dsh-http-process-exit",()->{try{child.waitFor();stopListener();}catch(InterruptedException e){Thread.currentThread().interrupt();fail("WAIT_INTERRUPTED");}});
-      deadlines.schedule(()->{if(!listenSeen)fail("LISTEN_DEADLINE");},90,TimeUnit.SECONDS);
-      deadlines.scheduleWithFixedDelay(()->{
-        long now=System.nanoTime();for(Peer peer:peers.values())if(peer.writeStarted>0&&now-peer.writeStarted>TimeUnit.SECONDS.toNanos(60))peer.close(true);
-      },1,1,TimeUnit.SECONDS);
+
     }catch(IOException|RuntimeException error){close();throw error;}
   }
   int port(){return listener.getLocalPort();}
   String failure(){return failure+"/"+peerFault;}
   boolean awaitListening(long timeout,TimeUnit unit)throws InterruptedException{return listened.await(timeout,unit)&&accepting.get()&&!closed.get();}
+  /** A new owner must wait for resource disposal, not merely OS child exit. */
+  boolean awaitClosed(long timeout,TimeUnit unit)throws InterruptedException{return cleanupDone.await(timeout,unit);}
   private byte[] mac(byte direction,byte[] header,byte[] data)throws GeneralSecurityException{
     Mac mac=Mac.getInstance("HmacSHA256");mac.init(new SecretKeySpec(key,"HmacSHA256"));
     mac.update(direction);mac.update(session);mac.update(epochBytes);mac.update(header);return mac.doFinal(data);
@@ -108,7 +129,8 @@ final class HttpProcessTransport extends Process implements Closeable {
         Frame frame=writes.poll(1,TimeUnit.SECONDS);if(frame==null)continue;if(peerFinished.get())return;
         if(sending==Long.MAX_VALUE)throw new IOException("SEQUENCE_EXHAUSTED");
         byte[] header=ByteBuffer.allocate(21).putInt(0x44484631).put((byte)frame.type).putLong(++sending).putInt(frame.id).putInt(frame.data.length).array();
-        output.write(header);output.write(mac((byte)'H',header,frame.data));output.write(frame.data);output.flush();
+        try{output.write(header);output.write(mac((byte)'H',header,frame.data));output.write(frame.data);output.flush();}
+        finally{if(frame.type==FS_INIT_DATA)Arrays.fill(frame.data,(byte)0);}
       }
     }catch(Exception error){if(!closed.get()&&!peerFinished.get())fail("WRITE_TRANSPORT");}
   }
@@ -124,6 +146,7 @@ final class HttpProcessTransport extends Process implements Closeable {
         if(!MessageDigest.isEqual(signature,mac((byte)'N',header,data)))throw new IOException("FRAME_AUTH");
         if(peerFinished.get())throw new IOException("FRAME_AFTER_FINISH");
         received=seq;
+        if(type==FS_BEGIN||type==FS_DATA||type==FS_COMMIT){try{receiveSnapshot(type,id,data);}finally{Arrays.fill(data,(byte)0);}continue;}
         if(type==LISTEN){
           if(id!=0||length!=4||integer(data)!=port()||listenSeen||stopping.get()||!accepting.compareAndSet(false,true))throw new IOException("LISTEN_REPLAY");
           listenSeen=true;listened.countDown();thread("dsh-http-accept",this::accept);continue;
@@ -133,7 +156,7 @@ final class HttpProcessTransport extends Process implements Closeable {
         if(type==STOP){if(id!=0||length!=0)throw new IOException("STOP_SHAPE");stopListener();continue;}
         if(type==FINISH){
           if(id!=0||length!=0)throw new IOException("FINISH_SHAPE");
-          peerFinished.set(true);stopListener();stdinOpen.set(false);appCredit.revoke();writes.clear();
+          peerFinished.set(true);stopListener();stdinOpen.set(false);appCredit.revoke();discardFrames();
           // Authenticated final frame follows application-log acknowledgments.
           // Release upstream stdin before the isolated supervisor drains pipes
           // and publishes the actual child exit. No writes race that closure.
@@ -148,9 +171,55 @@ final class HttpProcessTransport extends Process implements Closeable {
         else {if(length!=0)throw new IOException("TERMINAL_PAYLOAD");if(type==RESPONSE_END)peer.end();else if(!peer.ending)peer.close(false);}
       }
     }catch(EOFException ended){
+      // EOF releases this exact producer before waiting for the authenticated
+      // supervisor's EXIT. Otherwise its pipe drain can wait on this writer.
+      try{output.close();}catch(IOException ignored){}
       try{if(child.waitFor(2,TimeUnit.SECONDS)){nativeErrorDone.await(2,TimeUnit.SECONDS);close();}else fail("PREMATURE_EOF");}
       catch(InterruptedException interrupted){Thread.currentThread().interrupt();fail("WAIT_INTERRUPTED");}
     }catch(Exception error){if(!closed.get())fail(error instanceof IOException&&error.getMessage()!=null&&error.getMessage().matches("[A-Z_]{1,64}")?error.getMessage():"READ_PROTOCOL");}
+  }
+  private void sendOwnedFrame(int type,int id,byte[] data,long deadline)throws IOException{
+    try{
+      while(!closed.get()&&!peerFinished.get()){
+        long remaining=deadline-System.nanoTime();if(remaining<=0)throw new IOException("STORE_WIRE_TIMEOUT");
+        if(writes.offer(new Frame(type,id,data),Math.min(100,Math.max(1,TimeUnit.NANOSECONDS.toMillis(remaining))),TimeUnit.MILLISECONDS))return;
+      }
+      throw new IOException("STORE_WIRE_CLOSED");
+    }catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new InterruptedIOException("STORE_WIRE_INTERRUPTED");}
+  }
+  private void sendInitialSnapshot(){
+    DurableSessionSnapshot.State state=null;
+    try{
+      state=profileStore.read();long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(15);
+      byte[] hash=MessageDigest.getInstance("SHA-256").digest(state.bytes);
+      sendOwnedFrame(FS_INIT_BEGIN,0,ByteBuffer.allocate(44).putLong(state.version).putInt(state.bytes.length).put(hash).array(),deadline);
+      for(int offset=0;offset<state.bytes.length;offset+=CHUNK)
+        sendOwnedFrame(FS_INIT_DATA,0,Arrays.copyOfRange(state.bytes,offset,Math.min(offset+CHUNK,state.bytes.length)),deadline);
+      synchronized(snapshotLock){sendOwnedFrame(FS_INIT_END,0,new byte[0],deadline);snapshotInitializationQueued=true;}
+    }catch(Exception failure){if(!closed.get())fail("STORE_INITIALIZATION");}
+    finally{if(state!=null)Arrays.fill(state.bytes,(byte)0);}
+  }
+  private void receiveSnapshot(int type,int id,byte[] data)throws IOException{
+    synchronized(snapshotLock){
+      if(profileStore==null||closed.get()||stopping.get()||!snapshotInitializationQueued)throw new IOException("STORE_WIRE_NOT_AUTHORIZED");
+      if(type==FS_BEGIN){
+        if(snapshotIncoming!=null||snapshotTransaction==Integer.MAX_VALUE||id!=snapshotTransaction+1||data.length!=44)throw new IOException("STORE_WIRE_BEGIN");
+        ByteBuffer meta=ByteBuffer.wrap(data);long expected=meta.getLong();int size=meta.getInt();
+        if(expected<0||size<12||size>SessionSnapshotCodec.MAX_BYTES)throw new IOException("STORE_WIRE_BOUND");
+        snapshotTransaction=id;snapshotExpectedVersion=expected;snapshotIncoming=new byte[size];snapshotOffset=0;
+        snapshotExpectedHash=new byte[32];meta.get(snapshotExpectedHash);snapshotDeadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(15);return;
+      }
+      if(snapshotIncoming==null||id!=snapshotTransaction||System.nanoTime()-snapshotDeadline>=0)throw new IOException("STORE_WIRE_TRANSACTION");
+      if(type==FS_DATA){if(data.length==0||data.length>snapshotIncoming.length-snapshotOffset)throw new IOException("STORE_WIRE_DATA");
+        System.arraycopy(data,0,snapshotIncoming,snapshotOffset,data.length);snapshotOffset+=data.length;return;}
+      if(type!=FS_COMMIT||data.length!=0||snapshotOffset!=snapshotIncoming.length)throw new IOException("STORE_WIRE_COMMIT");
+      try{
+        if(!MessageDigest.isEqual(snapshotExpectedHash,MessageDigest.getInstance("SHA-256").digest(snapshotIncoming)))throw new IOException("STORE_WIRE_SEAL");
+        long next=profileStore.commit(snapshotExpectedVersion,snapshotIncoming);
+        sendOwnedFrame(FS_ACK,id,ByteBuffer.allocate(9).putLong(next).put((byte)0).array(),snapshotDeadline);
+      }catch(GeneralSecurityException unavailable){throw new IOException("STORE_SHA_UNAVAILABLE");}
+      finally{Arrays.fill(snapshotIncoming,(byte)0);snapshotIncoming=null;Arrays.fill(snapshotExpectedHash,(byte)0);snapshotExpectedHash=null;}
+    }
   }
   /** Count only bytes actually submitted, not a reservation for a blocked
    * socket read. A compromised peer cannot manufacture credit for unsent data. */
@@ -271,15 +340,24 @@ final class HttpProcessTransport extends Process implements Closeable {
     for(Peer peer:peers.values())peer.close(false);
   }
   private void fail(String category){failure=category;close();}
+  private void discardFrames(){Frame frame;while((frame=writes.poll())!=null)if(frame.type==FS_INIT_DATA)Arrays.fill(frame.data,(byte)0);}
   @Override public void close(){
-    if(!closed.compareAndSet(false,true))return;accepting.set(false);listened.countDown();stdinOpen.set(false);appCredit.revoke();
+    if(!closed.compareAndSet(false,true))return;
+    try{
+    accepting.set(false);listened.countDown();stdinOpen.set(false);appCredit.revoke();
     deadlines.shutdownNow();try{listener.close();}catch(IOException ignored){}
-    for(Peer peer:peers.values())peer.close(false);writes.clear();
+    for(Peer peer:peers.values())peer.close(false);discardFrames();
     // Closing the authenticated Process owns cancellation of blocked native I/O.
     if(child.isAlive())child.destroyForcibly();
     try{child.getOutputStream().close();}catch(IOException ignored){}
     try{input.close();}catch(IOException ignored){}
+    synchronized(snapshotLock){
+      if(snapshotIncoming!=null){Arrays.fill(snapshotIncoming,(byte)0);snapshotIncoming=null;}
+      if(snapshotExpectedHash!=null){Arrays.fill(snapshotExpectedHash,(byte)0);snapshotExpectedHash=null;}
+      if(profileStore!=null)try{profileStore.close();}catch(IOException failure){if(this.failure.equals("NONE"))this.failure="STORE_CLOSE";}
+    }
     Arrays.fill(key,(byte)0);
+    }finally{cleanupDone.countDown();}
   }
   @Override public OutputStream getOutputStream(){return applicationInput;}
   @Override public InputStream getInputStream(){return logs[0].reader;}
