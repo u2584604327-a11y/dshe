@@ -1,0 +1,101 @@
+package com.dsh.android.engine;
+import android.content.*;import android.os.*;
+import com.dsh.android.p48.P48FixedIsolatedChild;
+import com.dsh.android.p68.P68AndroidBinderIntake;
+import com.dsh.android.p68.P184ChildStartReceipt;
+import com.dsh.p37.P37RemoteProcess;
+import java.io.*;import java.security.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.*;
+
+/** One authenticated, separately named Android isolated instance, TEST ONLY.
+ * No argv/path/owner supplied by an Intent or Binder payload; no production
+ * P47 registration. The physical main test can reuse the exact runtime wire.
+ */
+final class OriginalMainTestSession implements AutoCloseable {
+  private final Context context;private final Handler main=new Handler(Looper.getMainLooper());
+  private final AtomicBoolean closed=new AtomicBoolean();
+  private final CompletableFuture<P37RemoteProcess> started=new CompletableFuture<>();
+  final String session;final long epoch=SystemClock.elapsedRealtimeNanos();
+  private long requestSequence=1;private boolean bound,linked,handedOut;
+  private Messenger worker;private P68AndroidBinderIntake.HostPipes pipes;
+  private P68AndroidBinderIntake intake;private P37RemoteProcess process;
+  private volatile String failure="NONE";
+  private final IBinder.DeathRecipient died=()->main.post(()->reject("BINDER_DEATH"));
+  private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()){
+    @Override public void handleMessage(Message message){
+      if(closed.get()||intake==null)return;
+      try{
+        P68AndroidBinderIntake.Result result=intake.accept(message);
+        if(result==P68AndroidBinderIntake.Result.REJECTED){reject("WORKER_PROTOCOL");return;}
+        if(result==P68AndroidBinderIntake.Result.FAIL){reject("SUPERVISOR_"+com.dsh.android.p50.P50OriginalNodeFixedChild.failureStageName(message.arg1));return;}
+        if(result!=P68AndroidBinderIntake.Result.CHILD_STARTED)return;
+        if(handedOut){reject("CHILD_REPLAY");return;}handedOut=true;
+        P37RemoteProcess received=(P37RemoteProcess)intake.processAfterAuthenticatedChildStart();
+        P184ChildStartReceipt receipt=intake.takeVerifiedChildStartReceipt();
+        if(received==null||receipt==null||!receipt.consume(received,session,epoch)){reject("CHILD_RECEIPT");return;}
+        process=received;if(closed.get()||!started.complete(received))received.destroyForcibly();
+      }catch(RuntimeException bad){reject("BINDER_FRAME");}
+    }
+  });
+  private final ServiceConnection connection=new ServiceConnection(){
+    @Override public void onServiceConnected(ComponentName name,IBinder binder){
+      if(closed.get())return;
+      if(!context.getPackageName().equals(name.getPackageName())||!OriginalMainIsolatedService.class.getName().equals(name.getClassName())){reject("SERVICE_COMPONENT");return;}
+      worker=new Messenger(binder);
+      try{
+        binder.linkToDeath(died,0);linked=true;pipes=P68AndroidBinderIntake.HostPipes.create();
+        intake=new P68AndroidBinderIntake(session,new P37RemoteProcess.RemoteControl(){
+          public void requestGracefulStop(){control(P48FixedIsolatedChild.STOP);}
+          public void requestForceStop(){control(P48FixedIsolatedChild.KILL);}
+        },pipes,epoch);
+        Bundle data=new Bundle();data.putString("session",session);data.putLong("epoch",epoch);data.putLong("request_seq",1);
+        data.putLong("issued_ms",SystemClock.elapsedRealtime());data.putBundle("process_pipes",pipes.workerBundle());
+        Message request=Message.obtain(null,P48FixedIsolatedChild.START);request.setData(data);request.replyTo=inbox;worker.send(request);
+      }catch(IOException|RemoteException|RuntimeException bad){reject("START_TRANSFER");}
+      finally{if(pipes!=null){if(!pipes.closeWorkerCopies())reject("PIPE_OWNERSHIP");if(closed.get())pipes.close();}}
+    }
+    @Override public void onServiceDisconnected(ComponentName name){reject("SERVICE_DISCONNECTED");}
+    @Override public void onBindingDied(ComponentName name){reject("BINDING_DIED");}
+    @Override public void onNullBinding(ComponentName name){reject("NULL_BINDING");}
+  };
+  OriginalMainTestSession(Context host){
+    if(host==null||Build.VERSION.SDK_INT<35||android.os.Process.isIsolated()||
+       !"com.dsh.p51.networkprobe".equals(host.getPackageName())||
+       host.checkSelfPermission("android.permission.INTERNET")!=android.content.pm.PackageManager.PERMISSION_GRANTED)
+      throw new SecurityException("MAIN_TEST_CONTEXT_REQUIRED");
+    context=host.getApplicationContext();byte[] random=new byte[32];new SecureRandom().nextBytes(random);
+    StringBuilder id=new StringBuilder();for(byte b:random)id.append(String.format(Locale.ROOT,"%02x",b&255));session=id.toString();Arrays.fill(random,(byte)0);
+  }
+  void bind(){main.post(()->{
+    if(closed.get())return;
+    try{
+      // A new instance name forces a distinct lease/isolated process for each
+      // generation; old Binder callbacks remain bound to this exact object.
+      bound=context.bindIsolatedService(new Intent(context,OriginalMainIsolatedService.class),Context.BIND_AUTO_CREATE,
+          "main_"+session,task->main.post(task),connection);
+      if(!bound)reject("BIND_REJECTED");
+    }catch(RuntimeException denied){reject("BIND_EXCEPTION");}
+  });}
+  P37RemoteProcess awaitChild()throws Exception{
+    if(Looper.myLooper()==Looper.getMainLooper())throw new IllegalStateException("MAIN_TEST_BACKGROUND_REQUIRED");
+    try{return started.get(15,TimeUnit.SECONDS);}
+    catch(InterruptedException interrupted){Thread.currentThread().interrupt();close();throw new InterruptedIOException("MAIN_TEST_CHILD_INTERRUPTED");}
+    catch(ExecutionException|TimeoutException bad){close();throw new IOException("MAIN_TEST_CHILD_"+failure);}
+  }
+  String failure(){return failure;}
+  private synchronized void control(int kind){
+    if(worker==null)return;Bundle data=new Bundle();data.putString("session",session);data.putLong("epoch",epoch);data.putLong("request_seq",++requestSequence);
+    Message request=Message.obtain(null,kind);request.setData(data);try{worker.send(request);}catch(RemoteException ignored){}
+  }
+  private void reject(String fixed){if(!closed.get())failure=fixed;started.completeExceptionally(new IOException("MAIN_TEST_SESSION_DENIED"));close();}
+  @Override public void close(){
+    if(!closed.compareAndSet(false,true))return;
+    started.completeExceptionally(new IOException("MAIN_TEST_SESSION_CLOSED"));
+    if(process!=null&&process.isAlive())process.destroyForcibly();
+    if(pipes!=null)pipes.close();
+    main.post(()->{
+      if(intake!=null)intake.disconnected();
+      if(linked&&worker!=null){worker.getBinder().unlinkToDeath(died,0);linked=false;}
+      if(bound){try{context.unbindService(connection);}catch(IllegalArgumentException ignored){}bound=false;}
+    });
+  }
+}

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""CI-only separate host-network HTTP component APK. No production identity,
-original app components, broad permissions or production P47 registration.
+"""CI-only separate host-network full original main TEST APK. No production
+identity, original app data, broad permissions or production P47 registration.
 """
 from pathlib import Path
 import json
@@ -32,24 +32,28 @@ def patches(sources):
         '    { test "${P51_SIDE_BY_SIDE:-0}" = 1 && test "${HTTP_COMPONENT_TEST:-0}" = 1 && test "${GITHUB_ACTIONS:-false}" = true; }; } || {')
     # The original permissionless P51 manifest/gate is never modified.
     if builder.count('host_candidate/p51_side_by_side/p51_manifest.py')!=3:raise RuntimeError('HTTP_TEST_MANIFEST_CALL_COUNT')
-    builder=builder.replace('host_candidate/p51_side_by_side/p51_manifest.py','host_candidate/engine_runtime/http_manifest.py')
+    builder=builder.replace('host_candidate/p51_side_by_side/p51_manifest.py','host_candidate/engine_runtime/main_manifest.py')
     builder=once(builder,'apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"',
-        'python host_candidate/engine_runtime/prepare_native_http.py prepare "$ORIGINAL" "$DIR/decoded"\n'
+        'python host_candidate/engine_runtime/prepare_main_runtime.py prepare "$ORIGINAL" "$DIR/decoded"\n'
         'apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"')
     builder=once(builder,
         '  python host_candidate/p49_original_node_stage.py embed "$DIR/with-p43-dex.apk" "$DIR/p49"',
         '  python host_candidate/p49_original_node_stage.py embed "$DIR/with-p43-dex.apk" "$DIR/p49"\n'
-        '  python host_candidate/engine_runtime/prepare_native_http.py embed "$ORIGINAL" "$DIR/with-p43-dex.apk"')
+        '  python host_candidate/engine_runtime/prepare_main_runtime.py embed "$ORIGINAL" "$DIR/with-p43-dex.apk"')
     anchor='  host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java \\\n'
     builder=once(builder,anchor,anchor+''.join('  '+name+' \\\n' for name in [
         'host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50ModuleStream.java',
         'host_candidate/engine_runtime/src/com/dsh/android/engine/HttpProcessTransport.java',
         'host_candidate/engine_runtime/src/com/dsh/android/engine/DurableSessionSnapshot.java',
         'host_candidate/engine_runtime/src/com/dsh/android/engine/SessionSnapshotCodec.java',
+        'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalMainHttpChecks.java',
+        'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainTestSession.java',
+        'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainIsolatedService.java',
+        'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainProbeActivity.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalHttpIsolatedService.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalHttpProbeActivity.java']))
     builder=once(builder,'    "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"\nfi\nif test "${P47_NO_HOST_FALLBACK:-0}" = 1;',
-        '    "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" --original-http-services\nfi\nif test "${P47_NO_HOST_FALLBACK:-0}" = 1;')
+        '    "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk" --original-main-profile\nfi\nif test "${P47_NO_HOST_FALLBACK:-0}" = 1;')
     builder=once(builder,'''  test ! -s "$DIR/candidate-perms.txt" || {
     echo 'P51_BLOCKED_SIDE_BY_SIDE_HAS_PERMISSIONS';exit 1;
   }''','''  test "$(cat "$DIR/candidate-perms.txt")" = "uses-permission: name='android.permission.INTERNET'" || {
@@ -71,9 +75,9 @@ def main():
     if not git('remote','get-url','origin').removesuffix('.git').endswith('/'+REPO):raise RuntimeError('HTTP_TEST_WRONG_REPOSITORY')
     for name,pin in PINS.items():
         if git('hash-object',name)!=pin:raise RuntimeError('HTTP_TEST_PIN_CHANGED')
-    digest="c78ea5b631d5716d9cf3aa324613637f5a88919f0744058b382f4b8e503f30b1"
+    digest="ed3596480e9d45c93bc96d205966016e1f65b16635cd35a462c35f2d1e6a8106"
     java=Path('host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java').read_text()
-    if 'HTTP_BOOTSTRAP_SHA="'+digest+'"' not in java:raise RuntimeError('HTTP_TEST_COMPOSED_BOOTSTRAP_PIN')
+    if 'MAIN_TEST_BOOTSTRAP_SHA="'+digest+'"' not in java:raise RuntimeError('HTTP_TEST_COMPOSED_BOOTSTRAP_PIN')
     for name,text in patches({name:Path(name).read_text() for name in PINS}).items():Path(name).write_text(text)
     if set(git('diff','--name-only').splitlines())!=set(PINS):raise RuntimeError('HTTP_TEST_PATCH_SCOPE')
     print('HTTP_TEST_SEPARATE_NETWORK_COMPONENT_BUILD=PREPARED_NOT_PRODUCTION')

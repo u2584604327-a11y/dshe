@@ -1,4 +1,4 @@
-name: Original isolated ARM64 HTTP components TEST-ONLY APK
+name: Original isolated ARM64 main runtime TEST-ONLY APK
 on:
   pull_request:
     types: [opened, synchronize]
@@ -59,12 +59,12 @@ jobs:
           python host_candidate/engine_runtime/prepare_http_sidecar.py
           if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > "$RUNNER_TEMP/http-apk-builder.log" 2>&1; then
             echo HTTP_TEST_APK_BUILD=FAILED_NOT_PUBLISHED
-            grep -E 'HTTP_TEST_|P49_|P47_|RuntimeError|Exception|Traceback|error:' "$RUNNER_TEMP/http-apk-builder.log" | tail -n 25 | cut -c 1-220 || true
+            grep -E 'MAIN_TEST_|HTTP_TEST_|P49_|P47_|RuntimeError|ValueError|Exception|Traceback|error:' "$RUNNER_TEMP/http-apk-builder.log" | tail -n 25 | cut -c 1-220 || true
             exit 1
           fi
           original=.p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
           apk=.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
-          python host_candidate/engine_runtime/verify_http_apk.py "$original" "$apk"
+          python host_candidate/engine_runtime/verify_http_apk.py "$original" "$apk" --original-main-profile
           python host_candidate/p50_original_arm64_node/verify_config_dex.py "$original" "$apk"
           bt="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools/35.0.0"
           "$bt/apksigner" verify "$apk"
@@ -79,15 +79,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/http-test-delivery"
-          cp .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk "$RUNNER_TEMP/http-test-delivery/DSH-HTTP-COMPONENTS-ARM64-TEST-ONLY.apk"
+          cp .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk "$RUNNER_TEMP/http-test-delivery/DSH-ORIGINAL-MAIN-ARM64-TEST-ONLY.apk"
           cp "$RUNNER_TEMP/http-test-cert.txt" "$RUNNER_TEMP/http-test-delivery/TEST-ONLY-SIGNATURE.txt"
-          (cd "$RUNNER_TEMP/http-test-delivery" && sha256sum DSH-HTTP-COMPONENTS-ARM64-TEST-ONLY.apk > SHA256SUMS.txt)
-          printf 'TEST-ONLY; not v139; not an upgrade.\nPackage: com.dsh.p51.networkprobe\nHost permission: INTERNET only. Worker: isolated UID, no network permission.\nCommit: %s\nOriginal main profile/EngineManager: NOT_WIRED.\n' "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/http-test-delivery/SOURCE.txt"
+          (cd "$RUNNER_TEMP/http-test-delivery" && sha256sum DSH-ORIGINAL-MAIN-ARM64-TEST-ONLY.apk > SHA256SUMS.txt)
+          printf 'TEST-ONLY; not v139; not an upgrade.\nPackage: com.dsh.p51.networkprobe\nHost permission: INTERNET only. Worker: isolated UID, no network permission.\nCommit: %s\nOriginal main runCli: PENDING_ARM64_DEVICE. Original Android EngineManager/P47: NOT_WIRED.\n' "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/http-test-delivery/SOURCE.txt"
           echo HTTP_TEST_ANDROID_ARM64_INSTALL_AND_RUNTIME=PENDING_DEVICE >> "$GITHUB_STEP_SUMMARY"
           echo ORIGINAL_DSH_HTTP_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: original-http-components-arm64-test-only
+          name: original-main-runtime-arm64-test-only
           path: ${{ runner.temp }}/http-test-delivery/
           retention-days: 1
           compression-level: 0

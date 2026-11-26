@@ -54,7 +54,7 @@ public final class P50OriginalNodeFixedChild {
   private long sequence=0;
   private boolean started;
   private WorkerPipes modulePipes;
-  private boolean freshConfig,httpServices;
+  private boolean freshConfig,httpServices,webMainTest;
 
   // Fixed supervisor diagnostics, never authority, paths or exception text.
   public static String failureStageName(int stage) {
@@ -94,6 +94,14 @@ public final class P50OriginalNodeFixedChild {
       throw new SecurityException("HTTP_COMPONENT_TEST_ONLY");
     P50OriginalNodeFixedChild result=new P50OriginalNodeFixedChild(context,authenticatedHost,session);
     result.modulePipes=pipes;result.httpServices=true;return result;
+  }
+
+  /** Full original runCli in the separate fresh-owner test package only.
+   * Still no original EngineManager/P47/profile or production authority. */
+  public static P50OriginalNodeFixedChild originalWebMainTest(Context context,
+      Messenger authenticatedHost,String session,WorkerPipes pipes) {
+    P50OriginalNodeFixedChild result=originalHttpServices(context,authenticatedHost,session,pipes);
+    result.webMainTest=true;return result;
   }
 
   public P50OriginalNodeFixedChild(Context context, Messenger host, String session) {
@@ -304,11 +312,11 @@ public final class P50OriginalNodeFixedChild {
   }
   private String loadModuleBootstrap()throws Exception {
     byte[] bytes;
-    try(InputStream input=context.getAssets().open(httpServices?"engine-http-services.mjs":"p50-original-modules.mjs");
+    try(InputStream input=context.getAssets().open(webMainTest?"engine-original-main.mjs":httpServices?"engine-http-services.mjs":"p50-original-modules.mjs");
         ByteArrayOutputStream output=new ByteArrayOutputStream()) {
       byte[] chunk=new byte[4096];int n;
       while((n=input.read(chunk))!=-1) {
-        if(n>(httpServices?65536:32768)-output.size())throw new IOException("P50_BOOTSTRAP_BOUND");
+        if(n>(webMainTest?131072:httpServices?65536:32768)-output.size())throw new IOException("P50_BOOTSTRAP_BOUND");
         output.write(chunk,0,n);
       }
       bytes=output.toByteArray();
@@ -316,10 +324,11 @@ public final class P50OriginalNodeFixedChild {
     StringBuilder hash=new StringBuilder(64);
     for(byte b:MessageDigest.getInstance("SHA-256").digest(bytes))
       hash.append(String.format(Locale.ROOT,"%02x",b&255));
-    if(!(httpServices?HTTP_BOOTSTRAP_SHA:MODULE_BOOTSTRAP_SHA).equals(hash.toString()))
+    if(!(webMainTest?MAIN_TEST_BOOTSTRAP_SHA:httpServices?HTTP_BOOTSTRAP_SHA:MODULE_BOOTSTRAP_SHA).equals(hash.toString()))
       throw new SecurityException("P50_BOOTSTRAP_HASH_MISMATCH");
     return new String(bytes,StandardCharsets.UTF_8);
   }
   private static final String HTTP_BOOTSTRAP_SHA="c78ea5b631d5716d9cf3aa324613637f5a88919f0744058b382f4b8e503f30b1";
+  private static final String MAIN_TEST_BOOTSTRAP_SHA="ed3596480e9d45c93bc96d205966016e1f65b16635cd35a462c35f2d1e6a8106";
   private static final String MODULE_BOOTSTRAP_SHA="bc0c4c874e617016de0bd909c7c665795a7d6ff728e8245677f4e71074bbf140";
 }

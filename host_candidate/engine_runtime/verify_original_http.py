@@ -198,6 +198,11 @@ def main():
         from build_original_main_bootstrap import build as original_main
         from build_http_bootstrap import once
         main_source=original_main(args.apk.resolve()).decode()
+        from prepare_main_runtime import MAIN_SHA,MAIN_LENGTH
+        require(len(main_source.encode())==MAIN_LENGTH and hashlib.sha256(main_source.encode()).hexdigest()==MAIN_SHA,
+                'MAIN_TEST_FACTORY_BOOTSTRAP_PIN')
+        factory=(ROOT.parent/'p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java').read_text()
+        require('MAIN_TEST_BOOTSTRAP_SHA="'+MAIN_SHA+'"' in factory,'MAIN_TEST_WORKER_BOOTSTRAP_PIN')
         require('host-control-spy' not in main_source and '--expose-internals' not in main_source and
                 'process.dlopen=' not in main_source,'MAIN_BOOTSTRAP_CONTAINS_HOST_TEST_ESCAPE')
         main_file=work/'original-main.mjs';main_file.write_text(main_source)

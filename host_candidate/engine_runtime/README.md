@@ -313,3 +313,43 @@ stdin-flush HTTP component package: 193 original modules, real authorization,
 frontend/JS byte checks, Host fence and child exit0 PASS. That report does not
 independently re-hash the installed APK, test Android SSE/restart, execute the
 main EngineManager coroutine, or validate this new native-enabled package.
+
+## Full original main and the next ARM64 test
+
+The current `prepare_http_sidecar.py` now selects `main_manifest.py` and the
+fixed `engine-original-main.mjs` bootstrap. The previous HTTP composition,
+manifest validator, source bytes and default/config asset modes remain
+independent controls. The main mode is an additional exclusive P49 allowlist,
+not a production permission flag. Its worker factory only accepts the separate
+`com.dsh.p51.networkprobe` test context and authenticates a real isolated child.
+
+The full original `runCli --profile web --port <owned port> --no-open` now uses
+bounded owner snapshots, actual host file and directory force, versioned
+synchronous acknowledgments, virtual watchers and the reviewed browser-session
+scope. Its promise file handles implement the original JSON backend's atomic
+publish path. Unsupported descriptor/stream/link operations still refuse;
+this is not a complete POSIX filesystem or an existing-user storage broker.
+The temporary native cache and local native build paths remain disabled.
+
+The host control runs the actual original main, authenticates the frontend,
+checks original frontend JS bytes, creates a workspace through the original
+RPC, subscribes to its original WebSocket baseline, then restarts at the same
+port with durable state and rejects old cookies/tokens. ARM64 dlopen in this
+control is an explicit spy returning actual **host** internal loader objects.
+It is never included in the generated bootstrap or accepted as Android proof.
+
+The Android main test uses a unique `bindIsolatedService` instance per
+session, real framework UID/P184 receipt, a new private TEST-owned root, and
+the same HTTP/WS client. It must be physically run before claiming ARM64 main
+success. The APK stays TEST ONLY, has a temporary different signer, cannot
+upgrade original DSH and never reads its private files. Its status continues
+`ORIGINAL_MAIN_ENGINE_START_COROUTINE=NOT_INVOKED` and `FORMAL_V139=BLOCKED`.
+Android-generated overlays, all three EngineManager launch paths, production
+owner authorization, model egress, browser/profile B3/B4 and original signing
+remain separate release requirements. Returning from `runCli` alone is not
+READY.
+
+The user's latest reported native-prerequisite result includes the real
+original binding/five internal APIs and 200 modules on the vivo 4 KiB ARM64
+device. This is reported device evidence, not an independent installed-APK
+hash measurement, full main run, Android restart or production attestation.

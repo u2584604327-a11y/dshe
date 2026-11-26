@@ -24,8 +24,13 @@ def require(value,code):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('original',type=Path);parser.add_argument('candidate',type=Path)
+    parser.add_argument('--original-main-profile',action='store_true')
     args=parser.parse_args()
-    verify_apk(args.candidate);stage.verify(args.original,args.candidate,False,True)
+    main=args.original_main_profile
+    if main:
+        from main_manifest import verify_apk as manifest_check
+    else:manifest_check=verify_apk
+    manifest_check(args.candidate);stage.verify(args.original,args.candidate,False,not main,main)
     with zipfile.ZipFile(args.candidate) as archive:
         view=DexView(archive.read('classes3.dex'));methods=index(view.dex)
         needed=['Lcom/dsh/android/engine/HttpProcessTransport;',
@@ -33,22 +38,27 @@ def main():
                 'Lcom/dsh/android/engine/OriginalHttpIsolatedService;',
                 'Lcom/dsh/android/engine/DurableSessionSnapshot;',
                 'Lcom/dsh/android/engine/SessionSnapshotCodec;']
+        if main:needed+=['Lcom/dsh/android/engine/OriginalMainProbeActivity;',
+                         'Lcom/dsh/android/engine/OriginalMainTestSession;',
+                         'Lcom/dsh/android/engine/OriginalMainIsolatedService;',
+                         'Lcom/dsh/android/engine/OriginalMainHttpChecks;']
         require(all(any(key[0]==name for key in methods) for name in needed),'HTTP_CLASSES_MISSING')
         for key,method in methods.items():
-            if key[0]==needed[1] and method.get_code():
+            if key[0] in ([needed[1]]+needed[5:]) and method.get_code():
                 require(not any(view.instruction(raw)[1]==(b'Ljava/lang/ProcessBuilder;',b'start',(),b'Ljava/lang/Process;')
                     for raw in view.rows(method).values()),'HTTP_HOST_EXEC_FALLBACK')
-        inbox=[method for key,method in methods.items() if key[0].startswith('Lcom/dsh/android/engine/OriginalHttpIsolatedService$') and key[1]=='handleMessage']
+        service='OriginalMainIsolatedService' if main else 'OriginalHttpIsolatedService'
+        inbox=[method for key,method in methods.items() if key[0].startswith('Lcom/dsh/android/engine/'+service+'$') and key[1]=='handleMessage']
         require(len(inbox)==1,'HTTP_WORKER_INBOX')
         refs=[view.instruction(raw)[1] for raw in view.rows(inbox[0]).values()]
         require((b'Landroid/os/Message;',b'sendingUid',b'I') in refs,'FRAMEWORK_BINDER_UID_NOT_READ')
-        require((b'Lcom/dsh/android/p50/P50OriginalNodeFixedChild;',b'originalHttpServices',
+        require((b'Lcom/dsh/android/p50/P50OriginalNodeFixedChild;',b'originalWebMainTest' if main else b'originalHttpServices',
                  (b'Landroid/content/Context;',b'Landroid/os/Messenger;',b'Ljava/lang/String;',b'Lcom/dsh/android/p68/P68AndroidBinderIntake$WorkerPipes;'),
                  b'Lcom/dsh/android/p50/P50OriginalNodeFixedChild;') in refs,'HTTP_FIXED_VERIFIED_CHILD_FACTORY')
     with tempfile.TemporaryDirectory(prefix='http-apk-negative-') as folder:
         negative=Path(folder)/'negative.apk'
         def denied(path,explicit,expected):
-            try:stage.verify(args.original,path,False,explicit)
+            try:stage.verify(args.original,path,False,explicit and not main,explicit and main)
             except RuntimeError as error:require(str(error)=='P49_BLOCKED_'+expected,'WRONG_HTTP_ASSET_REJECTION')
             else:raise RuntimeError('HTTP_ASSET_NEGATIVE_ACCEPTED')
         denied(args.candidate,False,'ADDITIONAL_ARM64_LIB_SET_CHANGED')
@@ -58,9 +68,9 @@ def main():
         with zipfile.ZipFile(args.candidate) as source,zipfile.ZipFile(negative,'w') as output:
             for item in source.infolist():
                 payload=source.read(item)
-                if item.filename=='assets/engine-http-services.mjs':payload=bytes([payload[0]^1])+payload[1:]
+                if item.filename==('assets/engine-original-main.mjs' if main else 'assets/engine-http-services.mjs'):payload=bytes([payload[0]^1])+payload[1:]
                 cloned=copy.copy(item);cloned.compress_type=zipfile.ZIP_STORED;output.writestr(cloned,payload)
-        denied(negative,True,'HTTP_BOOTSTRAP_SHA_OR_LENGTH')
+        denied(negative,True,'MAIN_BOOTSTRAP_SHA_OR_LENGTH' if main else 'HTTP_BOOTSTRAP_SHA_OR_LENGTH')
     print('HTTP_TEST_ACTUAL_APK_BINDER_UID_FIXED_CHILD_AND_NO_HOST_EXEC=PASS_STATIC')
     print('HTTP_TEST_EXPLICIT_BOOTSTRAP_AND_DEFAULT_ALLOWLIST_NEGATIVES=PASS')
     print('HTTP_TEST_ARM64_NODE_HTTP_RUNTIME=REQUIRES_DEVICE')

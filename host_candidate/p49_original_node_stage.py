@@ -94,8 +94,8 @@ def data_offset(apk,entry):
     fields=struct.unpack("<IHHHHHIIIHH",raw)
     return entry.header_offset+30+fields[-2]+fields[-1]
 
-def verify(original,apk,original_default_config=False,original_http_services=False):
-    fail(not (original_default_config and original_http_services),"EXCLUSIVE_TEST_ASSET_MODE")
+def verify(original,apk,original_default_config=False,original_http_services=False,original_main_profile=False):
+    fail(sum(map(bool,(original_default_config,original_http_services,original_main_profile)))<=1,"EXCLUSIVE_TEST_ASSET_MODE")
     original=pathlib.Path(original);apk=pathlib.Path(apk)
     fail(hash_file(original)==ORIGINAL_APK_SHA,"ORIGINAL_SHA_AFTER_STAGE_DRIFT")
     with zipfile.ZipFile(original) as orig,zipfile.ZipFile(apk) as derived:
@@ -121,8 +121,8 @@ def verify(original,apk,original_default_config=False,original_http_services=Fal
                  "/" not in alias and ".." not in alias,"INVALID_ALIAS")
             required["lib/arm64-v8a/"+alias]=lib["sha256"]
         fail(len(required)==11,"REQUIRED_ELF_COUNT")
-        if original_http_services:
-            # Only this explicitly separate isolated HTTP/native test admits
+        if original_http_services or original_main_profile:
+            # Only these explicitly separate isolated network tests admit
             # the original external supplement. Default/config stay at 11 ELF.
             from engine_runtime.original_native_bundle import ALIAS, MEMBERS, NATIVE
             required["lib/arm64-v8a/"+ALIAS]=MEMBERS[NATIVE][1]
@@ -151,6 +151,16 @@ def verify(original,apk,original_default_config=False,original_http_services=Fal
                  "c78ea5b631d5716d9cf3aa324613637f5a88919f0744058b382f4b8e503f30b1",
                  "HTTP_BOOTSTRAP_SHA_OR_LENGTH")
             allowed_assets.add(bootstrap)
+        if original_main_profile:
+            from engine_runtime.main_manifest import verify_apk
+            verify_apk(apk)
+            bootstrap="assets/engine-original-main.mjs"
+            fail(bootstrap not in base and bootstrap in allnames,"MAIN_BOOTSTRAP_MISSING")
+            payload=derived.read(bootstrap)
+            fail(len(payload)==82113 and hash_bytes(payload)==
+                 "ed3596480e9d45c93bc96d205966016e1f65b16635cd35a462c35f2d1e6a8106",
+                 "MAIN_BOOTSTRAP_SHA_OR_LENGTH")
+            allowed_assets.add(bootstrap)
         fail({x for x in allnames if x.startswith(("lib/","assets/")) and
               x not in base and not x.endswith("/")}==
              set(required)|allowed_assets,"UNAUTHORIZED_EXTRA_ASSET_OR_LIB")
@@ -176,9 +186,10 @@ if __name__=="__main__":
     p.add_argument("a");p.add_argument("b")
     p.add_argument("--original-default-config",action="store_true")
     p.add_argument("--original-http-services",action="store_true")
+    p.add_argument("--original-main-profile",action="store_true")
     args=p.parse_args()
-    if (args.original_default_config or args.original_http_services) and args.mode!="verify":
+    if (args.original_default_config or args.original_http_services or args.original_main_profile) and args.mode!="verify":
         p.error("--original-default-config is verify-only")
     if args.mode=="prepare":prepare(args.a,args.b)
     elif args.mode=="embed":embed(args.a,args.b)
-    else:verify(args.a,args.b,args.original_default_config,args.original_http_services)
+    else:verify(args.a,args.b,args.original_default_config,args.original_http_services,args.original_main_profile)
