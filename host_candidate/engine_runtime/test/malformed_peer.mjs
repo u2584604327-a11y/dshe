@@ -14,6 +14,22 @@ function frame(type,id,seq,data=Buffer.alloc(0),length=data.length){
  if(mode==='BAD_MAC')tag[0]^=1;return Buffer.concat([h,tag,data]);
 }
 const portData=Buffer.alloc(4);portData.writeUInt32BE(port);
+if(mode==='LOG_READER_CHANGE'){
+ process.stdout.write(frame(16,0,1,portData));
+ process.stdout.write(frame(21,0,2,Buffer.from('first log\n')));
+ async function receive(type,length){
+  const header=await take(53);
+  if(header[4]!==type||header.readUInt32BE(17)!==length)throw Error('LOG_READER_CONTROL');
+  return take(length);
+ }
+ await receive(8,4);
+ await receive(6,1);
+ process.stdout.write(frame(24,0,3,Buffer.from([0,0,0,1])));
+ process.stdout.write(frame(21,0,4,Buffer.from('second log\n')));
+ await receive(8,4);
+ await new Promise(resolve=>process.stdout.write(frame(25,0,5),resolve));
+ process.exit(0);
+}
 if(mode==='OVERSIZE')process.stdout.write(frame(16,0,1,Buffer.alloc(0),16385));
 else if(mode==='UNSOLICITED')process.stdout.write(frame(17,1,1,Buffer.from('x')));
 else{

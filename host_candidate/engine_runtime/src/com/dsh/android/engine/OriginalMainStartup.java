@@ -1,10 +1,12 @@
 package com.dsh.android.engine;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
@@ -12,6 +14,7 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Locale;
@@ -20,10 +23,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 /** Checks the original web service while its launch URL is still private. */
-final class OriginalMainStartup {
+public final class OriginalMainStartup {
     private static final String PREFIX = "dsh web: ";
     private static final String RETURNED = "ORIGINAL_MAIN_ENTRY_RETURNED_NOT_READY_ATTESTATION";
     private static final String FRONTEND_SCRIPT = "/assets/index-CN7NIWNw.js";
@@ -33,28 +37,44 @@ final class OriginalMainStartup {
     private final HttpProcessTransport process;
     private final int port;
     private final String target;
+    private final Capture capture;
+    private final AtomicBoolean verificationStarted = new AtomicBoolean();
 
-    private OriginalMainStartup(HttpProcessTransport process, int port, String target) {
+    private OriginalMainStartup(HttpProcessTransport process, int port, Capture capture) {
         this.process = process;
         this.port = port;
-        this.target = target;
+        this.capture = capture;
+        this.target = capture.target;
     }
 
-    /** Sole stdout reader for this check. Retain only the original startup URL. */
+    private static final class Capture {
+        final String target;
+        final String row;
+        final InputStream tail;
+
+        Capture(String target, String row, InputStream tail) {
+            this.target = target;
+            this.row = row;
+            this.tail = tail;
+        }
+    }
+
+    /** Read stdout privately through the startup marker, retaining its buffered tail. */
     static OriginalMainStartup await(HttpProcessTransport process)
             throws IOException, InterruptedException {
         int port = process.port();
-        CompletableFuture<String> output = new CompletableFuture<>();
-        Thread reader = new Thread(() -> collect(process.getInputStream(), port, output),
+        CompletableFuture<Capture> output = new CompletableFuture<>();
+        InputStream stdout = process.claimMainStartupOutput();
+        Thread reader = new Thread(() -> collect(stdout, port, output),
                 "dsh-private-startup-output");
         reader.setDaemon(true);
         reader.start();
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
         if (!process.awaitListening(15, TimeUnit.SECONDS)) throw denied("MAIN_LISTEN");
         try {
-            String target = output.get(deadline - System.nanoTime(), TimeUnit.NANOSECONDS);
+            Capture capture = output.get(deadline - System.nanoTime(), TimeUnit.NANOSECONDS);
             require(process.ownsListener(port), "MAIN_LISTENER_REVOKED");
-            return new OriginalMainStartup(process, port, target);
+            return new OriginalMainStartup(process, port, capture);
         } catch (TimeoutException failure) {
             throw denied("MAIN_STARTUP_OUTPUT_TIMEOUT");
         } catch (ExecutionException failure) {
@@ -63,9 +83,11 @@ final class OriginalMainStartup {
         }
     }
 
-    private static void collect(InputStream stdout, int port, CompletableFuture<String> output) {
-        try (InputStream input = new BufferedInputStream(stdout)) {
+    private static void collect(InputStream stdout, int port, CompletableFuture<Capture> output) {
+        InputStream input = new BufferedInputStream(stdout);
+        try {
             String candidate = null;
+            String launchLine = null;
             int bytes = 0;
             String row;
             while ((row = line(input, 8192)) != null) {
@@ -74,12 +96,11 @@ final class OriginalMainStartup {
                 if (row.startsWith(PREFIX)) {
                     require(candidate == null, "MAIN_DUPLICATE_STARTUP_URL");
                     candidate = launchTarget(row, port);
+                    launchLine = row;
                 }
                 if (RETURNED.equals(row)) {
                     require(candidate != null, "MAIN_STARTUP_URL_MISSING");
-                    output.complete(candidate);
-                    byte[] discard = new byte[4096];
-                    while (input.read(discard) != -1) { /* Drain to preserve transport credit. */ }
+                    output.complete(new Capture(candidate, launchLine, input));
                     return;
                 }
             }
@@ -87,6 +108,7 @@ final class OriginalMainStartup {
         } catch (IOException failure) {
             output.completeExceptionally(failure instanceof Denied ? failure : denied("MAIN_STARTUP_OUTPUT"));
         }
+        try { input.close(); } catch (IOException ignored) { /* Original failure remains primary. */ }
     }
 
     static String launchTarget(String row, int port) throws IOException {
@@ -99,9 +121,76 @@ final class OriginalMainStartup {
 
     int port() { return port; }
     String privateTarget() { return target; }
+    String privateUrl() { return "http://127.0.0.1:" + port + target; }
+
+    /** A proof can be issued only after this transport's actual HTTP checks. */
+    static final class ReadyProof {
+        private final HttpProcessTransport owner;
+        private final int port;
+        private final byte[] urlDigest;
+        private final int urlLength;
+
+        private ReadyProof(HttpProcessTransport owner, int port, String url) {
+            this.owner = owner;
+            this.port = port;
+            urlDigest = sha(url.getBytes(StandardCharsets.UTF_8));
+            urlLength = url.length();
+        }
+
+        boolean isCurrent(HttpProcessTransport transport) {
+            return owner == transport && owner.ownsListener(port);
+        }
+
+        boolean matches(HttpProcessTransport transport, String url) {
+            return url != null && url.length() == urlLength && isCurrent(transport)
+                    && MessageDigest.isEqual(urlDigest, sha(url.getBytes(StandardCharsets.UTF_8)))
+                    && isCurrent(transport);
+        }
+
+        InputStream verifiedOutput(Capture capture) {
+            final byte[] row = (capture.row + "\n").getBytes(StandardCharsets.US_ASCII);
+            InputStream prefix = new ByteArrayInputStream(row) {
+                @Override public synchronized int read() { return isCurrent(owner) ? super.read() : -1; }
+                @Override public synchronized int read(byte[] bytes, int offset, int size) {
+                    return isCurrent(owner) ? super.read(bytes, offset, size) : -1;
+                }
+                @Override public synchronized void close() { Arrays.fill(row, (byte) 0); }
+            };
+            return new SequenceInputStream(prefix, capture.tail);
+        }
+    }
+
+    String verifyForReady() throws IOException {
+        require(verificationStarted.compareAndSet(false, true), "MAIN_READY_PROOF_ALREADY_ATTEMPTED");
+        String cookie = authenticate();
+        verifyFrontend(cookie);
+        ReadyProof proof = new ReadyProof(process, port, privateUrl());
+        InputStream output = proof.verifiedOutput(capture);
+        try {
+            process.attachReadyProof(proof, output);
+        } catch (IOException failure) {
+            try { output.close(); } catch (IOException ignored) { /* Keep the admission error. */ }
+            throw failure;
+        }
+        return cookie;
+    }
+
+    /** Invoked at the original regex call, before it can release the Ready latch. */
+    public static boolean permitsVerifiedAnnouncement(Process process, CharSequence line) {
+        if (!(process instanceof HttpProcessTransport) || !(line instanceof String)) return false;
+        String announcement = (String) line;
+        return announcement.startsWith(PREFIX) && announcement.length() <= 128
+                && ((HttpProcessTransport) process).hasVerifiedReadyUrl(announcement.substring(PREFIX.length()));
+    }
+
+    /** Invoked again immediately before the original Ready state publisher. */
+    public static void requireVerifiedReady(Process process, String url) throws IOException {
+        require(process instanceof HttpProcessTransport
+                && ((HttpProcessTransport) process).hasVerifiedReadyUrl(url), "MAIN_READY_PROOF_REQUIRED");
+    }
 
     /** Use only a socket owned by this transport. No shared cookie jar or redirect. */
-    String authenticate() throws IOException {
+    private String authenticate() throws IOException {
         require(request("/", null, 16384).status == 401, "MAIN_UNAUTHENTICATED");
         Reply login = request(target, null, 16384);
         require(login.status == 303 && "./".equals(login.headers.get("location"))
@@ -123,7 +212,7 @@ final class OriginalMainStartup {
         return cookie;
     }
 
-    void verifyFrontend(String cookie) throws IOException {
+    private void verifyFrontend(String cookie) throws IOException {
         Reply index = request("/", cookie, 65536);
         require(index.status == 200 && new String(index.body, StandardCharsets.UTF_8)
                 .contains("src=\"." + FRONTEND_SCRIPT + "\""), "MAIN_FRONTEND");

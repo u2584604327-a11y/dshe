@@ -52,6 +52,9 @@ final class HttpProcessTransport extends Process implements Closeable {
   private volatile String failure="NONE",peerFault="NONE";
   private volatile boolean listenSeen;
   private final AtomicBoolean stopping=new AtomicBoolean();
+  private final AtomicReference<OriginalMainStartup.ReadyProof> readyProof=new AtomicReference<>();
+  private final AtomicBoolean mainOutputClaimed=new AtomicBoolean();
+  private volatile InputStream verifiedMainOutput;
   private static final class Frame {
     final int type,id;final byte[] data;
     Frame(int type,int id,byte[] data){this.type=type;this.id=id;this.data=data;}
@@ -114,6 +117,23 @@ final class HttpProcessTransport extends Process implements Closeable {
   int port(){return listener.getLocalPort();}
   boolean ownsListener(int port){
     return port>0&&port==port()&&accepting.get()&&!stopping.get()&&!closed.get()&&child.isAlive();
+  }
+  InputStream claimMainStartupOutput()throws IOException{
+    if(!mainOutputClaimed.compareAndSet(false,true))throw new IOException("MAIN_STARTUP_OUTPUT_ALREADY_CLAIMED");
+    return logs[0].reader;
+  }
+  synchronized void attachReadyProof(OriginalMainStartup.ReadyProof proof,InputStream output)throws IOException{
+    if(!mainOutputClaimed.get()||verifiedMainOutput!=null||!proof.isCurrent(this)||!readyProof.compareAndSet(null,proof))
+      throw new IOException("MAIN_READY_PROOF_NOT_CURRENT");
+    if(!proof.isCurrent(this)){
+      readyProof.compareAndSet(proof,null);
+      throw new IOException("MAIN_READY_PROOF_NOT_CURRENT");
+    }
+    verifiedMainOutput=output;
+  }
+  boolean hasVerifiedReadyUrl(String url){
+    OriginalMainStartup.ReadyProof proof=readyProof.get();
+    return proof!=null&&proof.matches(this,url)&&readyProof.get()==proof;
   }
   String failure(){return failure+"/"+peerFault;}
   boolean awaitListening(long timeout,TimeUnit unit)throws InterruptedException{return listened.await(timeout,unit)&&accepting.get()&&!closed.get();}
@@ -306,9 +326,67 @@ final class HttpProcessTransport extends Process implements Closeable {
     final byte[] data;final int channel;final boolean credit;
     LogPart(byte[] data,int channel,boolean credit){this.data=data;this.channel=channel;this.credit=credit;}
   }
+  /** Bounded log buffer whose lifetime does not depend on its reader thread. */
+  private class LogPipe extends InputStream {
+    private final byte[] bytes=new byte[WINDOW];
+    private int head,size;
+    private boolean inputClosed,outputClosed;
+
+    private void awaitChange()throws InterruptedIOException{
+      try{wait();}catch(InterruptedException interrupted){
+        Thread.currentThread().interrupt();throw new InterruptedIOException("LOG_PIPE_INTERRUPTED");
+      }
+    }
+    private boolean readable()throws IOException{
+      while(size==0&&!inputClosed&&!outputClosed)awaitChange();
+      if(inputClosed)throw new IOException("LOG_PIPE_INPUT_CLOSED");
+      return size!=0;
+    }
+    @Override public synchronized int read()throws IOException{
+      if(!readable())return -1;
+      int value=bytes[head]&255;
+      consume(1);
+      return value;
+    }
+    @Override public synchronized int read(byte[] target,int offset,int length)throws IOException{
+      Objects.requireNonNull(target);
+      if(offset<0||length<0||offset>target.length-length)throw new IndexOutOfBoundsException();
+      if(length==0)return 0;
+      if(!readable())return -1;
+      int count=Math.min(length,size),first=Math.min(count,bytes.length-head);
+      System.arraycopy(bytes,head,target,offset,first);
+      System.arraycopy(bytes,0,target,offset+first,count-first);
+      consume(count);
+      return count;
+    }
+    @Override public synchronized int available(){return size;}
+    private void consume(int count){
+      int first=Math.min(count,bytes.length-head);
+      Arrays.fill(bytes,head,head+first,(byte)0);
+      Arrays.fill(bytes,0,count-first,(byte)0);
+      head=(head+count)%bytes.length;size-=count;notifyAll();
+    }
+    synchronized void write(byte[] source)throws IOException{
+      int offset=0;
+      while(offset<source.length){
+        while(size==bytes.length&&!inputClosed&&!closed.get())awaitChange();
+        if(inputClosed||size==bytes.length)throw new IOException("LOG_PIPE_DISPOSED");
+        int end=(head+size)%bytes.length;
+        int count=Math.min(source.length-offset,bytes.length-size),first=Math.min(count,bytes.length-end);
+        System.arraycopy(source,offset,bytes,end,first);
+        System.arraycopy(source,offset+first,bytes,0,count-first);
+        size+=count;offset+=count;notifyAll();
+      }
+    }
+    synchronized void finish(){outputClosed=true;notifyAll();}
+    synchronized void wakeWriter(){notifyAll();}
+    @Override public synchronized void close()throws IOException{
+      inputClosed=true;Arrays.fill(bytes,(byte)0);size=0;notifyAll();
+    }
+  }
   private final class LogSink {
     final int channel;final AtomicBoolean discarded=new AtomicBoolean();
-    final PipedInputStream reader=new PipedInputStream(WINDOW){
+    final LogPipe reader=new LogPipe(){
       @Override public void close()throws IOException{
         super.close();if(!discarded.compareAndSet(false,true))return;
         synchronized(LogSink.this){pending.clear();buffered=0;}
@@ -319,20 +397,19 @@ final class HttpProcessTransport extends Process implements Closeable {
         }
       }
     };
-    final PipedOutputStream writer;
     final ArrayBlockingQueue<LogPart> pending=new ArrayBlockingQueue<>(16);
     int buffered;
-    LogSink(int channel){this.channel=channel;try{writer=new PipedOutputStream(reader);}catch(IOException error){throw new IllegalStateException(error);}}
+    LogSink(int channel){this.channel=channel;}
     synchronized void accept(byte[] data,int channel,boolean credit)throws IOException{
       if(discarded.get())return;
       if(data.length>(mergedError?2*WINDOW:WINDOW)-buffered||!pending.offer(new LogPart(data,channel,credit)))throw new IOException("LOG_BOUND");buffered+=data.length;
     }
     void run(){
       try{while(true){LogPart part=pending.poll(1,TimeUnit.SECONDS);if(part==null){if(closed.get()&&nativeErrorDone.getCount()==0)break;continue;}
-        writer.write(part.data);writer.flush();synchronized(this){if(!discarded.get())buffered-=part.data.length;}
+        reader.write(part.data);synchronized(this){if(!discarded.get())buffered-=part.data.length;}
         if(part.credit&&!closed.get()&&!discarded.get()&&!peerFinished.get())send(LOG_ACK,part.channel,integer(part.data.length));
       }}catch(Exception bad){if(!closed.get()&&!discarded.get())fail("LOG_CONSUMER");}
-      finally{try{writer.close();}catch(IOException ignored){}}
+      finally{reader.finish();}
     }
   }
   private final OutputStream applicationInput=new OutputStream(){
@@ -350,7 +427,7 @@ final class HttpProcessTransport extends Process implements Closeable {
     @Override public void close()throws IOException{synchronized(appInputLock){if(stdinOpen.compareAndSet(true,false)&&!closed.get()){appCredit.revoke();send(APP_END,0,new byte[0]);}}}
   };
   private void stopListener(){
-    stopping.set(true);accepting.set(false);try{listener.close();}catch(IOException ignored){}
+    stopping.set(true);accepting.set(false);readyProof.set(null);try{listener.close();}catch(IOException ignored){}
     for(Peer peer:peers.values())peer.close(false);
   }
   private void fail(String category){synchronized(this){if(closed.get()||!failure.equals("NONE"))return;failure=category;}close();}
@@ -358,7 +435,8 @@ final class HttpProcessTransport extends Process implements Closeable {
   @Override public void close(){
     if(!closed.compareAndSet(false,true))return;
     try{
-    accepting.set(false);listened.countDown();stdinOpen.set(false);appCredit.revoke();
+    accepting.set(false);readyProof.set(null);listened.countDown();stdinOpen.set(false);appCredit.revoke();
+    for(LogSink sink:logs)sink.reader.wakeWriter();
     deadlines.shutdownNow();try{listener.close();}catch(IOException ignored){}
     for(Peer peer:peers.values())peer.close(false);discardFrames();
     // Closing the authenticated Process owns cancellation of blocked native I/O.
@@ -374,7 +452,11 @@ final class HttpProcessTransport extends Process implements Closeable {
     }finally{cleanupDone.countDown();}
   }
   @Override public OutputStream getOutputStream(){return applicationInput;}
-  @Override public InputStream getInputStream(){return logs[0].reader;}
+  @Override public InputStream getInputStream(){
+    if(!mainOutputClaimed.get())return logs[0].reader;
+    InputStream ready=verifiedMainOutput;
+    return ready==null?new ByteArrayInputStream(new byte[0]):ready;
+  }
   @Override public InputStream getErrorStream(){return mergedError?new ByteArrayInputStream(new byte[0]):logs[1].reader;}
   @Override public int waitFor()throws InterruptedException{return child.waitFor();}
   @Override public boolean waitFor(long timeout,TimeUnit unit)throws InterruptedException{return child.waitFor(timeout,unit);}

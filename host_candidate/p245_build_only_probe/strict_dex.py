@@ -225,11 +225,10 @@ def compare_signed_code(left, right, signed, base, invoke_edits=None):
     edits = dict(invoke_edits or {})
     for (old_pc, old_raw), (new_pc, new_raw) in zip(lrows.items(), rrows.items()):
         if old_pc in edits:
-            old_encoding, original_ref, replacement_ref = edits.pop(old_pc)
-            expect = (b"\x71" + old_encoding[1:], replacement_ref)
-            need(old_raw[0] in (0x6e, 0x72) and len(old_raw) == len(new_raw) == 6 and
-                 signed.instruction(old_raw) == (old_encoding, original_ref) and
-                 base.instruction(new_raw) == expect, "SIGNED_APPROVED_INVOKE")
+            before, after = edits.pop(old_pc)
+            need(old_raw[0] in (0x6e, 0x71, 0x72) and new_raw[0] == 0x71 and
+                 len(old_raw) == len(new_raw) == 6 and signed.instruction(old_raw) == before and
+                 base.instruction(new_raw) == after, "SIGNED_APPROVED_INVOKE")
             continue
         if old_raw[0] != new_raw[0]:
             need((old_raw[0], new_raw[0]) == (0x1A, 0x1B), "SIGNED_ENCODING_CHANGE")

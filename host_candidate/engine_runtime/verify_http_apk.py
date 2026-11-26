@@ -25,6 +25,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('original',type=Path);parser.add_argument('candidate',type=Path)
     parser.add_argument('--original-main-profile',action='store_true')
+    parser.add_argument('--owned-ready',action='store_true')
     args=parser.parse_args()
     main=args.original_main_profile
     if main:
@@ -49,10 +50,12 @@ def main():
                   if key[0]=='Lcom/dsh/android/engine/OriginalMainProbeActivity;' and key[1]=='verify']
             require(len(body)==1,'MAIN_TEST_VERIFICATION_METHOD')
             refs=[view.instruction(raw)[1] for raw in view.rows(body[0]).values()]
+            expected=([b'await',b'verifyForReady',b'requireVerifiedReady'] if args.owned_ready else
+                      [b'await',b'authenticate',b'verifyFrontend'])
             calls=[ref[1] for ref in refs if isinstance(ref,tuple) and len(ref)==4 and
                    ref[0]==b'Lcom/dsh/android/engine/OriginalMainStartup;' and
-                   ref[1] in (b'await',b'authenticate',b'verifyFrontend')]
-            require(calls==[b'await',b'authenticate',b'verifyFrontend'],'MAIN_TEST_PRIVATE_STARTUP_CALLS')
+                   ref[1] in expected]
+            require(calls==expected,'MAIN_TEST_PRIVATE_STARTUP_CALLS')
         for key,method in methods.items():
             if key[0] in ([needed[1]]+needed[5:]) and method.get_code():
                 require(not any(view.instruction(raw)[1]==(b'Ljava/lang/ProcessBuilder;',b'start',(),b'Ljava/lang/Process;')

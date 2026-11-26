@@ -54,8 +54,18 @@ public final class OriginalMainProbeActivity extends Activity {
           OriginalMainStartup startup=OriginalMainStartup.await(active);port=startup.port();
           post("ORIGINAL_MAIN_RUNCLI=INVOKED");setStage("AUTHENTICATION");
           if(generation==1)startup.verifyRetiredCredentials(oldToken,oldCookie);
-          String cookie=startup.authenticate();
-          setStage("FRONTEND");startup.verifyFrontend(cookie);
+          setStage("OWNED_HTTP_READY_PROOF");
+          String cookie=startup.verifyForReady();
+          OriginalMainStartup.requireVerifiedReady(active,startup.privateUrl());
+          InputStream admittedOutput=active.getInputStream();
+          require(OriginalMainStartup.permitsVerifiedAnnouncement(active,OriginalMainHttpChecks.line(admittedOutput)),"MAIN_VERIFIED_STDOUT_HANDOFF");
+          Thread stdout=new Thread(()->{
+            try(InputStream input=admittedOutput){byte[] block=new byte[4096];while(input.read(block)!=-1){}}
+            catch(IOException ignored){}
+          },"original-main-verified-stdout");
+          stdout.setDaemon(true);
+          stdout.start();
+          post("ORIGINAL_MAIN_OWNED_READY_PROOF=PASS generation="+generation);
           setStage("ORIGINAL_WORKSPACE_RPC");String body="{\"type\":\"client-request\",\"rpcId\":\"main-test\",\"method\":\"workspace/create\",\"payload\":{\"args\":{\"request\":{\"path\":\"/dsh-workspace\"}}}}";
           OriginalMainHttpChecks.Reply reply=OriginalMainHttpChecks.request(port,"/api/workspace/create",cookie,body);String value=new String(reply.body,StandardCharsets.UTF_8).replaceAll("\\s+","");
           require(reply.status==200&&value.contains("\"ok\":true")&&value.contains("\"created\":"+(generation==0))&&value.contains("/dsh-workspace"),"MAIN_WORKSPACE_RESTORE");

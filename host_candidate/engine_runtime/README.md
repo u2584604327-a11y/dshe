@@ -369,6 +369,21 @@ base APK. It also checks the original Ready object's getter and diagnostic
 string using a fixed sample credential, before starting either test child.
 This tests representation of Ready rather than the original state transition.
 
+`--owned-ready` adds an explicit comparison for three further v138 calls.
+The original coroutine's URL matcher receives the actual Process. Its two
+Ready branches check the same Process and URL again before reading the
+state publisher. The host issues a proof only after the current loopback
+listener completes authentication and serves the pinned frontend script.
+The proof belongs to that single transport and expires when its listener
+stops. The original startup line becomes available to its reader after
+verification. Subsequent logs stay on the original stream with a bounded
+buffer that can survive a change of reader thread.
+
+The isolated main TEST exercises the real HTTP proof and stdout handoff.
+The DEX verifier checks the original callsites and helper body independently.
+The production launch gate still requires an authorized Android Supervisor
+to provide this Process to the original coroutine.
+
 Android-generated overlays, all three EngineManager launch paths, production
 owner authorization, model egress, browser/profile B3/B4 and original signing
 remain separate release requirements. Returning from `runCli` alone is not

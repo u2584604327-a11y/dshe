@@ -82,9 +82,26 @@ public final class HttpProtocolNegativeTest {
    yes(process.failure().equals("NONE/NONE"),"startup_exit_not_supervisor_failure");
   }finally{process.close();}
  }
+ static void logReaderChange(String node,String peer)throws Exception{
+  Process child=start(new ProcessBuilder(node,"--permission","--allow-fs-read="+peer,peer,"LOG_READER_CHANGE"));
+  HttpProcessTransport process=new HttpProcessTransport(child,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",1,0);
+  try{
+   InputStream output=process.getInputStream();
+   FutureTask<String> initial=new FutureTask<>(()->OriginalMainHttpChecks.line(output));
+   Thread reader=new Thread(initial,"first-log-reader");reader.setDaemon(true);reader.start();
+   yes("first log".equals(initial.get(4,TimeUnit.SECONDS)),"first_log_reader");
+   reader.join(2000);yes(!reader.isAlive(),"first_log_reader_ended");
+   process.getOutputStream().write(1);
+   yes(process.waitFor(5,TimeUnit.SECONDS)&&process.exitValue()==0,"log_delivered_with_no_current_reader");
+   yes("second log".equals(OriginalMainHttpChecks.line(output)),"next_thread_reads_preserved_log");
+   yes(output.read()==-1&&process.failure().equals("NONE/NONE"),"log_handoff_preserves_eof_and_exit");
+  }finally{process.close();}
+ }
  public static void main(String[] a)throws Exception{
+  if(a.length==3&&a[2].equals("LOG_READER_ONLY")){logReaderChange(a[0],a[1]);return;}
   unframedExit(a[0],a[1]);
   if(a.length==3&&a[2].equals("EXIT_DRAIN_ONLY"))return;
+  logReaderChange(a[0],a[1]);
   hostRejects(a[0],a[1],"EOF_ALIVE","PREMATURE_EOF");
   startupExit(a[0],a[2],a[3]);
   for(String mode:new String[]{"BAD_MAC","OLD_SESSION","REPLAY","OVERSIZE","UNSOLICITED","DUP_LISTEN","CREDIT","RESERVED_CREDIT"})

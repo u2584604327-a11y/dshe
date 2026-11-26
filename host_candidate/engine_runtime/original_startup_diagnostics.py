@@ -17,6 +17,15 @@ LIST = 'Ljava/util/List;'
 OBJECT = 'Ljava/lang/Object;'
 HIDDEN = '[launch credential withheld]'
 ORIGINAL_SHA = '3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5'
+ENGINE = PACKAGE + 'EngineManager;'
+STARTUP = PACKAGE + 'engine/OriginalMainStartup;'
+PROCESS = 'Ljava/lang/Process;'
+FLOW = 'Lkotlinx/coroutines/flow/MutableStateFlow;'
+REGEX = 'Lkotlin/text/Regex;'
+CHARSEQ = 'Ljava/lang/CharSequence;'
+MATCH = 'Lkotlin/text/MatchResult;'
+FIND = f'({REGEX}{CHARSEQ}II{OBJECT}){MATCH}'
+FIND_READY = f'({REGEX}{CHARSEQ}II{PROCESS}){MATCH}'
 
 # Receiver, original name and argument, return descriptor, invoke mnemonic.
 WRAPPERS = {
@@ -56,14 +65,23 @@ def ref(owner, name, params, returned):
     return owner.encode(), name.encode(), tuple(param.encode() for param in params), returned.encode()
 
 
-def sanitizing_calls():
+def sanitizing_calls(owned_ready=False):
     edits = {}
     for key, sites in SITES.items():
         edits[key] = {}
         for pc, encoded, wrapper, _ in sites:
             receiver, name, argument, returned, _ = WRAPPERS[wrapper]
-            edits[key][pc] = (bytes.fromhex(encoded), ref(receiver, name, (argument,), returned),
-                              ref(OWNER, wrapper, (receiver, STRING), returned))
+            old = bytes.fromhex(encoded)
+            edits[key][pc] = ((old, ref(receiver, name, (argument,), returned)),
+                              (b'\x71' + old[1:], ref(OWNER, wrapper, (receiver, STRING), returned)))
+    if owned_ready:
+        edits[READER][294] = (
+            (bytes.fromhex('71542d50'), ref(REGEX, 'find$default', (REGEX, CHARSEQ, 'I', 'I', OBJECT), MATCH)),
+            (bytes.fromhex('71582d50'), ref(OWNER, 'findReady', (REGEX, CHARSEQ, 'I', 'I', PROCESS), MATCH)))
+        for pc in (4656, 4732):
+            edits[START][pc] = (
+                (bytes.fromhex('71100000'), ref(ENGINE, 'access$get_state$p', (ENGINE,), FLOW)),
+                (bytes.fromhex('71203000'), ref(OWNER, 'readyState', (ENGINE, STRING), FLOW)))
     return edits
 
 
@@ -74,9 +92,10 @@ def wrapper_key(wrapper):
 
 REDACT = (OWNER, 'publicLine', f'({STRING}){STRING}')
 METHODS = {REDACT, *(wrapper_key(name) for name in WRAPPERS)}
+READY_METHODS = {(OWNER, 'findReady', FIND_READY), (OWNER, 'readyState', f'({ENGINE}{STRING}){FLOW}')}
 
 
-def wrapper_source():
+def wrapper_source(owned_ready=False):
     body = f'''.class public final {OWNER}
 .super Ljava/lang/Object;
 
@@ -104,10 +123,36 @@ def wrapper_source():
         body += {'V': '    return-void\n', 'Z': '    move-result p0\n    return p0\n',
                  BUILDER: '    move-result-object p0\n    return-object p0\n'}[returned]
         body += '.end method\n'
+    if owned_ready:
+        body += f'''
+.method public static findReady{FIND_READY}
+    .locals 1
+    invoke-static {{p4, p1}}, {STARTUP}->permitsVerifiedAnnouncement({PROCESS}{CHARSEQ})Z
+    move-result v0
+    if-eqz v0, :denied
+    const/4 p4, 0x0
+    invoke-static {{p0, p1, p2, p3, p4}}, {REGEX}->find$default{FIND}
+    move-result-object v0
+    return-object v0
+    :denied
+    const/4 v0, 0x0
+    return-object v0
+.end method
+
+.method public static readyState({ENGINE}{STRING}){FLOW}
+    .locals 1
+    invoke-static {{p0}}, {ENGINE}->access$getProcess$p({ENGINE}){PROCESS}
+    move-result-object v0
+    invoke-static {{v0, p1}}, {STARTUP}->requireVerifiedReady({PROCESS}{STRING})V
+    invoke-static {{p0}}, {ENGINE}->access$get_state$p({ENGINE}){FLOW}
+    move-result-object v0
+    return-object v0
+.end method
+'''
     return body
 
 
-def rewrite(key, source, sites):
+def rewrite(key, source, sites, owned_ready=False):
     _, method, signature = key
     matches = list(re.finditer(r'^\.method [^\n]* ' + re.escape(method + signature)
                                + r'\n.*?^\.end method$', source, re.M | re.S))
@@ -129,10 +174,24 @@ def rewrite(key, source, sites):
         if body.count(old) != count:
             raise ValueError('STARTUP_DIAGNOSTICS_INVOKE_ANCHOR')
         body = body.replace(old, new)
+    if owned_ready and key == READER:
+        old = f'    invoke-static {{p5, v2, v0, v5, v4}}, {REGEX}->find$default{FIND}\n'
+        new = f'    invoke-static {{p5, v2, v0, v5, p0}}, {OWNER}->findReady{FIND_READY}\n'
+        if body.count(old) != 1:
+            raise ValueError('OWNED_READY_ORIGINAL_REGEX_ANCHOR')
+        body = body.replace(old, new)
+    if owned_ready and key == START:
+        old = (f'    invoke-static {{v0}}, {ENGINE}->access$get_state$p({ENGINE}){FLOW}\n\n'
+               f'    move-result-object v0\n\n    new-instance v2, {ENGINE[:-1]}$State$Ready;\n')
+        new = (f'    invoke-static {{v0, v3}}, {OWNER}->readyState({ENGINE}{STRING}){FLOW}\n\n'
+               f'    move-result-object v0\n\n    new-instance v2, {ENGINE[:-1]}$State$Ready;\n')
+        if body.count(old) != 2:
+            raise ValueError('OWNED_READY_ORIGINAL_PUBLISH_ANCHOR')
+        body = body.replace(old, new)
     return source[:match.start()] + body + source[match.end():]
 
 
-def patch(original, root):
+def patch(original, root, owned_ready=False):
     with original.open('rb') as apk:
         if hashlib.file_digest(apk, 'sha256').hexdigest() != ORIGINAL_SHA:
             raise ValueError('STARTUP_DIAGNOSTICS_SOURCE_APK_SHA')
@@ -146,27 +205,30 @@ def patch(original, root):
         if file.is_symlink() or directory not in file.resolve(strict=True).parents:
             raise ValueError('STARTUP_DIAGNOSTICS_SOURCE_PATH')
         source = changed[file] if file in changed else file.read_text(encoding='utf-8')
-        changed[file] = rewrite(key, source, sites)
+        changed[file] = rewrite(key, source, sites, owned_ready)
     helper.parent.mkdir(parents=True, exist_ok=True)
     with helper.open('x', encoding='utf-8') as output:
-        output.write(wrapper_source())
+        output.write(wrapper_source(owned_ready))
     for file, source in changed.items():
         file.write_text(source, encoding='utf-8')
     print('ORIGINAL_STARTUP_DIAGNOSTICS_SCOPED_SMALI=PREPARED sites=9')
+    if owned_ready:
+        print('ORIGINAL_MAIN_OWNED_READY_SCOPED_SMALI=PREPARED sites=3')
 
 
-def verify_helper(strict, view, methods):
+def verify_helper(strict, view, methods, owned_ready=False):
     """Verify executable instructions and resolved refs of all new methods."""
     classes = [cls for cls in view.dex.get_classes() if cls.get_name() == OWNER]
     strict.need(len(classes) == 1 and classes[0].get_access_flags() == 0x11 and
                 classes[0].get_superclassname() == OBJECT and not classes[0].get_interfaces() and
                 not classes[0].get_fields(), 'STARTUP_DIAGNOSTICS_HELPER_CLASS')
 
-    def compare(key, inputs, expected):
+    def compare(key, inputs, expected, frame=None):
         method = methods[key]
         code = method.get_code()
         strict.need(method.get_access_flags() == 0x9 and code is not None and
-                    (code.get_registers_size(), code.get_ins_size(), code.get_outs_size()) == (2, inputs, 2) and
+                    (code.get_registers_size(), code.get_ins_size(), code.get_outs_size()) ==
+                    (frame or (2, inputs, 2)) and
                     not strict.decode(method, view.dex)[1], 'STARTUP_DIAGNOSTICS_HELPER_FRAME')
         rows = view.rows(method)
         strict.validate_targets(rows)
@@ -188,11 +250,27 @@ def verify_helper(strict, view, methods):
                 [(b'\x71\x10\x01\x00', redactor), (b'\x0c\x01', None),
                  (encoding + b'\x20\x10\x00', ref(receiver, name, (argument,), returned))]
                 + [(raw, None) for raw in ending])
+    if owned_ready:
+        permits = ref(STARTUP, 'permitsVerifiedAnnouncement', (PROCESS, CHARSEQ), 'Z')
+        find_default = ref(REGEX, 'find$default', (REGEX, CHARSEQ, 'I', 'I', OBJECT), MATCH)
+        compare((OWNER, 'findReady', FIND_READY), 5,
+                [(bytes.fromhex('71202500'), permits), (b'\x0a\x00', None), (b'\x38\x00', 7),
+                 (b'\x12\x05', None), (bytes.fromhex('71552143'), find_default),
+                 (b'\x0c\x00', None), (b'\x11\x00', None), (b'\x12\x00', None), (b'\x11\x00', None)],
+                frame=(6, 5, 5))
+        get_process = ref(ENGINE, 'access$getProcess$p', (ENGINE,), PROCESS)
+        get_state = ref(ENGINE, 'access$get_state$p', (ENGINE,), FLOW)
+        require = ref(STARTUP, 'requireVerifiedReady', (PROCESS, STRING), 'V')
+        compare((OWNER, 'readyState', f'({ENGINE}{STRING}){FLOW}'), 2,
+                [(bytes.fromhex('71100100'), get_process), (b'\x0c\x00', None),
+                 (bytes.fromhex('71202000'), require), (bytes.fromhex('71100100'), get_state),
+                 (b'\x0c\x00', None), (b'\x11\x00', None)], frame=(3, 2, 2))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('original', type=Path)
     parser.add_argument('decoded', type=Path)
+    parser.add_argument('--owned-ready', action='store_true')
     args = parser.parse_args()
-    patch(args.original, args.decoded)
+    patch(args.original, args.decoded, args.owned_ready)

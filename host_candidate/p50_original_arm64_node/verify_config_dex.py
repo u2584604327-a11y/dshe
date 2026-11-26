@@ -19,7 +19,7 @@ import strict_dex as strict
 HOST_START = (b'Ljava/lang/ProcessBuilder;', b'start', (), b'Ljava/lang/Process;')
 
 
-def verify(original, candidate, startup_diagnostics=False):
+def verify(original, candidate, startup_diagnostics=False, owned_ready=False):
     strict.logger.remove()
     with Path(original).open('rb') as source:
         strict.need(hashlib.file_digest(source, 'sha256').hexdigest() ==
@@ -28,10 +28,13 @@ def verify(original, candidate, startup_diagnostics=False):
     with zipfile.ZipFile(original) as source, zipfile.ZipFile(candidate) as result:
         signed = strict.DexView(source.read('classes.dex'))
         current = strict.DexView(result.read('classes.dex'))
+    startup_diagnostics = startup_diagnostics or owned_ready
     if startup_diagnostics:
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'engine_runtime'))
         import original_startup_diagnostics as diagnostics
-        edits, extras = diagnostics.sanitizing_calls(), diagnostics.METHODS
+        edits, extras = diagnostics.sanitizing_calls(owned_ready), diagnostics.METHODS
+        if owned_ready:
+            extras = extras | diagnostics.READY_METHODS
     else:
         edits, extras = {}, ()
     outside_bridges = {key: calls for key, calls in edits.items() if key != strict.START}
@@ -48,7 +51,7 @@ def verify(original, candidate, startup_diagnostics=False):
         pc, encoding = sites[0]
         calls = dict(edits.get(key, {}))
         strict.need(pc not in calls, 'CONFIG_TYPED_START_EDIT_COLLISION')
-        calls[pc] = (encoding, HOST_START, replacement)
+        calls[pc] = ((encoding, HOST_START), (b'\x71' + encoding[1:], replacement))
         strict.compare_signed_code(old[key], new[key], signed, current, calls)
         bridge = new[('Lcom/dsh/android/p40/P40ProcessBridge;', target,
                       '(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;')]
@@ -63,8 +66,10 @@ def verify(original, candidate, startup_diagnostics=False):
                     raw[1:] == [b'\x0c\x00', b'\x11\x00'] and
                     not strict.decode(bridge, current.dex)[1], 'CONFIG_EXACT_TYPED_BRIDGE')
     if startup_diagnostics:
-        diagnostics.verify_helper(strict, current, new)
+        diagnostics.verify_helper(strict, current, new, owned_ready)
         print('ORIGINAL_STARTUP_DIAGNOSTICS_NINE_CALLS_AND_HELPER=PASS_STATIC')
+        if owned_ready:
+            print('ORIGINAL_MAIN_OWNED_READY_REGEX_AND_TWO_PUBLICATIONS=PASS_STATIC')
         print('ORIGINAL_CONFIG_SIGNED_UNRELATED_METHODS=PASS count=' + str(counts['METHODS'] - len(outside_bridges)))
         print('ORIGINAL_CONFIG_THREE_TYPED_STARTS_AND_EXPLICIT_DIAGNOSTIC_SITES=PASS')
     else:
@@ -79,8 +84,9 @@ if __name__ == '__main__':
     parser.add_argument('candidate', type=Path)
     parser.add_argument('--negative-checks', action='store_true')
     parser.add_argument('--startup-diagnostics', action='store_true')
+    parser.add_argument('--owned-ready', action='store_true')
     args = parser.parse_args()
-    verify(args.original, args.candidate, args.startup_diagnostics)
+    verify(args.original, args.candidate, args.startup_diagnostics, args.owned_ready)
     if args.negative_checks:
         with zipfile.ZipFile(args.candidate) as archive:
             payload = archive.read('classes.dex')
@@ -113,17 +119,28 @@ if __name__ == '__main__':
             'TRY_RANGE': (try_offset + 4, struct.pack('<H', shortened)),
             'UNRELATED_LITERAL': (literal, bytes([payload[literal] ^ 0x10])),
         }
-        if args.startup_diagnostics:
+        if args.startup_diagnostics or args.owned_ready:
             import original_startup_diagnostics as diagnostics
             helper = methods[diagnostics.REDACT]
             reader = methods[diagnostics.READER]
-            replacement = diagnostics.sanitizing_calls()[diagnostics.READER][228][2]
+            replacement = diagnostics.sanitizing_calls()[diagnostics.READER][228][1][1]
             changed = [pc for pc, raw in view.rows(reader).items() if raw[0] == 0x71 and
                        view.instruction(raw)[1] == replacement]
             strict.need(len(changed) == 1, 'STARTUP_DIAGNOSTICS_NEGATIVE_ANCHOR')
             raw_argument = reader.get_code().get_off() + 16 + changed[0] + 4
             mutations['STARTUP_HISTORY_REGISTER'] = (raw_argument, bytes([payload[raw_argument] ^ 0x10]))
             mutations['STARTUP_HELPER_BRANCH'] = (helper.get_code().get_off() + 16, b'\x39')
+            if args.owned_ready:
+                replacement = diagnostics.sanitizing_calls(True)[diagnostics.READER][294][1][1]
+                announce = [pc for pc, raw in view.rows(reader).items() if raw[0] == 0x71 and
+                            view.instruction(raw)[1] == replacement]
+                strict.need(len(announce) == 1, 'OWNED_READY_MUTATION_ANCHOR')
+                argument = reader.get_code().get_off() + 16 + announce[0] + 1
+                mutations['OWNED_READY_PROCESS_REGISTER'] = (argument, bytes([payload[argument] ^ 0x01]))
+                key = (diagnostics.OWNER, 'findReady', diagnostics.FIND_READY)
+                gate_rows = view.rows(methods[key])
+                branch = next(pc for pc, raw in gate_rows.items() if raw[0] == 0x38)
+                mutations['OWNED_READY_HELPER_BRANCH'] = (methods[key].get_code().get_off() + 16 + branch, b'\x39')
         del rows, methods, view, dump
         gc.collect()
         with tempfile.TemporaryDirectory(prefix='original-config-negative-') as directory:
@@ -138,10 +155,12 @@ if __name__ == '__main__':
                 with zipfile.ZipFile(negative, 'w') as archive:
                     archive.writestr('classes.dex', changed)
                 try:
-                    verify(args.original, negative, args.startup_diagnostics)
+                    verify(args.original, negative, args.startup_diagnostics, args.owned_ready)
                 except strict.Deny as denied:
                     expected = {'STARTUP_HISTORY_REGISTER': 'P246_DENY_SIGNED_APPROVED_INVOKE',
-                                'STARTUP_HELPER_BRANCH': 'P246_DENY_STARTUP_DIAGNOSTICS_HELPER_BODY'}
+                                'STARTUP_HELPER_BRANCH': 'P246_DENY_STARTUP_DIAGNOSTICS_HELPER_BODY',
+                                'OWNED_READY_PROCESS_REGISTER': 'P246_DENY_SIGNED_APPROVED_INVOKE',
+                                'OWNED_READY_HELPER_BRANCH': 'P246_DENY_STARTUP_DIAGNOSTICS_HELPER_BODY'}
                     if label in expected and str(denied) != expected[label]:
                         raise RuntimeError('STARTUP_MUTATION_WRONG_DENIAL_' + label) from denied
                     print('ORIGINAL_CONFIG_DEX_MUTATION_' + label + '=DENY reason=' + str(denied))
