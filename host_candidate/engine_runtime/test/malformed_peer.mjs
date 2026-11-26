@@ -14,6 +14,11 @@ function frame(type,id,seq,data=Buffer.alloc(0),length=data.length){
  if(mode==='BAD_MAC')tag[0]^=1;return Buffer.concat([h,tag,data]);
 }
 const portData=Buffer.alloc(4);portData.writeUInt32BE(port);
+if(mode==='MERGED_STARTUP_DENIAL'){
+ process.stdout.write(frame(21,1,1,Buffer.from('ORIGINAL_MAIN_DENY=PRIVATE_FIXTURE_DIAGNOSTIC\n')));
+ for await(const ignored of iterator){}
+ process.exit(7);
+}
 if(mode==='LOG_READER_CHANGE'){
  process.stdout.write(frame(16,0,1,portData));
  process.stdout.write(frame(21,0,2,Buffer.from('first log\n')));

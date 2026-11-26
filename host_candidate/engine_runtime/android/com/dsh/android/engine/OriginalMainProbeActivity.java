@@ -8,7 +8,7 @@ import java.io.*;import java.nio.charset.StandardCharsets;import java.nio.file.*
  * the original EngineManager coroutine. No production READY assertion. */
 public final class OriginalMainProbeActivity extends Activity {
   private final Handler main=new Handler(Looper.getMainLooper());private final AtomicBoolean closed=new AtomicBoolean();
-  private final AtomicReference<String> stage=new AtomicReference<>("BIND"),childError=new AtomicReference<>("NONE"),transportFault=new AtomicReference<>("NONE/NONE");
+  private final AtomicReference<String> stage=new AtomicReference<>("BIND"),transportFault=new AtomicReference<>("NONE/NONE");
   private final StringBuilder status=new StringBuilder();private TextView text;
   private volatile OriginalMainTestSession session;private volatile HttpProcessTransport transport;
   @Override public void onCreate(Bundle saved){
@@ -38,6 +38,9 @@ public final class OriginalMainProbeActivity extends Activity {
         OriginalMainTestSession bound=new OriginalMainTestSession(this);session=bound;bound.bind();
         P37RemoteProcess raw=bound.awaitChild();post("ORIGINAL_MAIN_AUTHENTICATED_ISOLATED_CHILD=PASS generation="+generation);
         try{
+          try{bound.awaitChild();throw new IllegalStateException("MAIN_CHILD_REPLAY_ACCEPTED");}
+          catch(IOException denied){require("MAIN_CHILD_CLAIM_DENIED".equals(denied.getMessage()),"MAIN_CHILD_REPLAY_RESULT");}
+          post("ORIGINAL_MAIN_CHILD_HANDOFF_REPLAY=DENY generation="+generation);
           setStage("RESOURCE_TRANSFER");OutputStream resource=new FilterOutputStream(raw.getOutputStream()){
             long sent,next=32L*1024*1024;
             @Override public void write(int value)throws IOException{out.write(value);advanced(1);}
@@ -48,9 +51,10 @@ public final class OriginalMainProbeActivity extends Activity {
           post("ORIGINAL_MAIN_RESOURCE_SOURCE=VERIFIED_COMPLETE");if(closed.get())return;
           setStage("OWNED_STORAGE_AND_MAIN");DurableSessionSnapshot store=new DurableSessionSnapshot(root,owner);
           HttpProcessTransport active;
-          try{active=new HttpProcessTransport(raw,bound.session,bound.epoch,port,false,store);}catch(Exception bad){store.close();throw bad;}
+          // The original EngineManager main start merges stderr into its Process stdout.
+          try{active=new HttpProcessTransport(raw,bound.session,bound.epoch,port,true,store);}catch(Exception bad){store.close();throw bad;}
           transport=active;if(closed.get()){active.close();return;}
-          Thread stderr=new Thread(()->{try{String row;int total=0;while((row=OriginalMainHttpChecks.line(active.getErrorStream()))!=null){if((total+=row.length())>65536)break;if(row.matches("ORIGINAL_MAIN_DENY=[A-Z0-9_]{1,64}"))childError.set(row.substring(row.indexOf('=')+1));}}catch(Exception ignored){}},"original-main-fixed-diagnostics");stderr.setDaemon(true);stderr.start();
+          require(active.getErrorStream().read()==-1,"MAIN_MERGED_ERROR_STREAM");
           OriginalMainStartup startup=OriginalMainStartup.await(active);port=startup.port();
           post("ORIGINAL_MAIN_RUNCLI=INVOKED");setStage("AUTHENTICATION");
           if(generation==1)startup.verifyRetiredCredentials(oldToken,oldCookie);
@@ -65,6 +69,7 @@ public final class OriginalMainProbeActivity extends Activity {
           },"original-main-verified-stdout");
           stdout.setDaemon(true);
           stdout.start();
+          post("ORIGINAL_MAIN_PROCESS_MERGED_STDERR=PASS generation="+generation);
           post("ORIGINAL_MAIN_OWNED_READY_PROOF=PASS generation="+generation);
           setStage("ORIGINAL_WORKSPACE_RPC");String body="{\"type\":\"client-request\",\"rpcId\":\"main-test\",\"method\":\"workspace/create\",\"payload\":{\"args\":{\"request\":{\"path\":\"/dsh-workspace\"}}}}";
           OriginalMainHttpChecks.Reply reply=OriginalMainHttpChecks.request(port,"/api/workspace/create",cookie,body);String value=new String(reply.body,StandardCharsets.UTF_8).replaceAll("\\s+","");
@@ -80,7 +85,7 @@ public final class OriginalMainProbeActivity extends Activity {
       post("ORIGINAL_MAIN_ENGINE_START_COROUTINE=NOT_INVOKED");post("ORIGINAL_DSH_HTTP_READY=NOT_WIRED");post("FORMAL_V139=BLOCKED");main.post(this::close);
     }catch(Exception|LinkageError denied){
       final String fixed=denied.getMessage()!=null&&denied.getMessage().matches("[A-Z0-9_]{1,64}")?denied.getMessage():"OTHER";
-      main.post(()->{report("ORIGINAL_MAIN_FIXED_CHILD_ERROR="+childError.get());report("ORIGINAL_MAIN_FIXED_FAILURE_CODE="+fixed);report("ORIGINAL_MAIN_TRANSPORT_STATE="+transportFault.get());deny(stage.get());});
+      main.post(()->{report("ORIGINAL_MAIN_FIXED_FAILURE_CODE="+fixed);report("ORIGINAL_MAIN_TRANSPORT_STATE="+transportFault.get());deny(stage.get());});
     }
     finally{if(root!=null)try{Files.deleteIfExists(root.resolve("snapshot.bin"));Files.deleteIfExists(root.resolve("owner.lock"));Files.delete(root);}catch(IOException ignored){}}
   }

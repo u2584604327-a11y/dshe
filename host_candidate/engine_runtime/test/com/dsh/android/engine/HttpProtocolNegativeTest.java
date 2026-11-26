@@ -97,11 +97,26 @@ public final class HttpProtocolNegativeTest {
    yes(output.read()==-1&&process.failure().equals("NONE/NONE"),"log_handoff_preserves_eof_and_exit");
   }finally{process.close();}
  }
+ static void mergedStartupDenial(String node,String peer)throws Exception{
+  Process child=start(new ProcessBuilder(node,"--permission","--allow-fs-read="+peer,peer,"MERGED_STARTUP_DENIAL"));
+  HttpProcessTransport process=new HttpProcessTransport(child,"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",1,0,true);
+  FutureTask<String> outcome=new FutureTask<>(()->{
+   try{OriginalMainStartup.await(process);throw new AssertionError("failed_child_became_ready");}
+   catch(IOException expected){return expected.getMessage();}
+  });
+  Thread worker=new Thread(outcome,"merged-startup-denial");worker.setDaemon(true);worker.start();
+  try{
+   yes(process.getErrorStream().read()==-1,"merged_process_has_no_separate_error_stream");
+   yes("MAIN_CHILD_REJECTED".equals(outcome.get(5,TimeUnit.SECONDS)),"merged_stderr_denial_before_listener_is_redacted");
+   yes(process.getInputStream().read()==-1,"private_startup_diagnostics_not_exposed");
+  }finally{process.close();}
+ }
  public static void main(String[] a)throws Exception{
   if(a.length==3&&a[2].equals("LOG_READER_ONLY")){logReaderChange(a[0],a[1]);return;}
   unframedExit(a[0],a[1]);
   if(a.length==3&&a[2].equals("EXIT_DRAIN_ONLY"))return;
   logReaderChange(a[0],a[1]);
+  mergedStartupDenial(a[0],a[1]);
   hostRejects(a[0],a[1],"EOF_ALIVE","PREMATURE_EOF");
   startupExit(a[0],a[2],a[3]);
   for(String mode:new String[]{"BAD_MAC","OLD_SESSION","REPLAY","OVERSIZE","UNSOLICITED","DUP_LISTEN","CREDIT","RESERVED_CREDIT"})

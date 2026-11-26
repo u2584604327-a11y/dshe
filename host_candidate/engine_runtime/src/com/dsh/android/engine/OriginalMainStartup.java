@@ -34,6 +34,7 @@ public final class OriginalMainStartup {
     private static final String FRONTEND_SHA =
             "4bc914bfbb6adbdd63953a29f63835eb7127defd2a973149d64cdab489f1a9a5";
     private static final Pattern TARGET = Pattern.compile("/\\?token=[A-Za-z0-9_-]{43}");
+    private static final Pattern CHILD_DENIAL = Pattern.compile("ORIGINAL_MAIN_DENY=[A-Z0-9_]{1,64}");
     private final HttpProcessTransport process;
     private final int port;
     private final String target;
@@ -70,9 +71,10 @@ public final class OriginalMainStartup {
         reader.setDaemon(true);
         reader.start();
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
-        if (!process.awaitListening(15, TimeUnit.SECONDS)) throw denied("MAIN_LISTEN");
         try {
             Capture capture = output.get(deadline - System.nanoTime(), TimeUnit.NANOSECONDS);
+            long remaining = Math.max(0, deadline - System.nanoTime());
+            if (!process.awaitListening(remaining, TimeUnit.NANOSECONDS)) throw denied("MAIN_LISTEN");
             require(process.ownsListener(port), "MAIN_LISTENER_REVOKED");
             return new OriginalMainStartup(process, port, capture);
         } catch (TimeoutException failure) {
@@ -93,6 +95,7 @@ public final class OriginalMainStartup {
             while ((row = line(input, 8192)) != null) {
                 bytes += row.length() + 1;
                 require(bytes <= 65536, "MAIN_STARTUP_OUTPUT_BOUND");
+                require(!CHILD_DENIAL.matcher(row).matches(), "MAIN_CHILD_REJECTED");
                 if (row.startsWith(PREFIX)) {
                     require(candidate == null, "MAIN_DUPLICATE_STARTUP_URL");
                     candidate = launchTarget(row, port);

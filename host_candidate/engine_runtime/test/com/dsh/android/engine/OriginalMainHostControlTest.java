@@ -19,8 +19,8 @@ public final class OriginalMainHostControlTest {
    actual=builder.start();HttpProcessTransport owned=null;
    try{
     try(InputStream resource=Files.newInputStream(Paths.get(args[2]))){byte[] block=new byte[65536];int n;while((n=resource.read(block))!=-1)actual.getOutputStream().write(block,0,n);actual.getOutputStream().flush();}
-    owned=new HttpProcessTransport(actual,ProfileSnapshotWireTest.OWNER,System.nanoTime(),wanted,false,new DurableSessionSnapshot(root,ProfileSnapshotWireTest.OWNER));process=owned;
-    ProfileSnapshotWireTest.drain(process.getErrorStream());
+    owned=new HttpProcessTransport(actual,ProfileSnapshotWireTest.OWNER,System.nanoTime(),wanted,true,new DurableSessionSnapshot(root,ProfileSnapshotWireTest.OWNER));process=owned;
+    yes(process.getErrorStream().read()==-1,"original_main_engine_merged_stderr_contract");
     startup=OriginalMainStartup.await(process);port=startup.port();
    }catch(Exception|AssertionError failure){if(owned!=null)owned.close();else actual.destroyForcibly();throw failure;}
   }

@@ -13,11 +13,14 @@ import java.io.*;import java.security.*;import java.util.*;import java.util.conc
 final class OriginalMainTestSession implements AutoCloseable {
   private final Context context;private final Handler main=new Handler(Looper.getMainLooper());
   private final AtomicBoolean closed=new AtomicBoolean();
+  private final AtomicBoolean bindRequested=new AtomicBoolean(),childClaimed=new AtomicBoolean();
   private final CompletableFuture<P37RemoteProcess> started=new CompletableFuture<>();
   final String session;final long epoch=SystemClock.elapsedRealtimeNanos();
   private long requestSequence=1;private boolean bound,linked,handedOut;
-  private Messenger worker;private P68AndroidBinderIntake.HostPipes pipes;
-  private P68AndroidBinderIntake intake;private P37RemoteProcess process;
+  private volatile Messenger worker;
+  private volatile P68AndroidBinderIntake.HostPipes pipes;
+  private P68AndroidBinderIntake intake;
+  private volatile P37RemoteProcess process;
   private volatile String failure="NONE";
   private final IBinder.DeathRecipient died=()->main.post(()->reject("BINDER_DEATH"));
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()){
@@ -65,20 +68,27 @@ final class OriginalMainTestSession implements AutoCloseable {
     context=host.getApplicationContext();byte[] random=new byte[32];new SecureRandom().nextBytes(random);
     StringBuilder id=new StringBuilder();for(byte b:random)id.append(String.format(Locale.ROOT,"%02x",b&255));session=id.toString();Arrays.fill(random,(byte)0);
   }
-  void bind(){main.post(()->{
-    if(closed.get())return;
-    try{
-      // A new instance name forces a distinct lease/isolated process for each
-      // generation; old Binder callbacks remain bound to this exact object.
-      bound=context.bindIsolatedService(new Intent(context,OriginalMainIsolatedService.class),Context.BIND_AUTO_CREATE,
-          "main_"+session,task->main.post(task),connection);
-      if(!bound)reject("BIND_REJECTED");
-    }catch(RuntimeException denied){reject("BIND_EXCEPTION");}
-  });}
+  void bind(){
+    if(!bindRequested.compareAndSet(false,true))throw new IllegalStateException("MAIN_BIND_ALREADY_REQUESTED");
+    main.post(()->{
+      if(closed.get())return;
+      try{
+        // A new instance name forces a distinct lease/isolated process for each
+        // generation; old Binder callbacks remain bound to this exact object.
+        bound=context.bindIsolatedService(new Intent(context,OriginalMainIsolatedService.class),Context.BIND_AUTO_CREATE,
+            "main_"+session,task->main.post(task),connection);
+        if(!bound)reject("BIND_REJECTED");
+      }catch(RuntimeException denied){reject("BIND_EXCEPTION");}
+    });
+  }
   P37RemoteProcess awaitChild()throws Exception{
     if(Looper.myLooper()==Looper.getMainLooper())throw new IllegalStateException("MAIN_TEST_BACKGROUND_REQUIRED");
-    try{return started.get(15,TimeUnit.SECONDS);}
-    catch(InterruptedException interrupted){Thread.currentThread().interrupt();close();throw new InterruptedIOException("MAIN_TEST_CHILD_INTERRUPTED");}
+    if(!bindRequested.get()||!childClaimed.compareAndSet(false,true))throw new IOException("MAIN_CHILD_CLAIM_DENIED");
+    try{
+      P37RemoteProcess child=started.get(15,TimeUnit.SECONDS);
+      if(closed.get())throw new IOException("MAIN_TEST_SESSION_CLOSED");
+      return child;
+    }catch(InterruptedException interrupted){Thread.currentThread().interrupt();close();throw new InterruptedIOException("MAIN_TEST_CHILD_INTERRUPTED");}
     catch(ExecutionException|TimeoutException bad){close();throw new IOException("MAIN_TEST_CHILD_"+failure);}
   }
   String failure(){return failure;}
