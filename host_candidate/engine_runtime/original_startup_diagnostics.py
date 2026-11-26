@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""Redact v138 startup diagnostics at the signed, inventoried callsites."""
+
+import argparse
+import hashlib
+import re
+from collections import Counter
+from pathlib import Path
+
+PACKAGE = 'Lcom/dsh/android/'
+OWNER = PACKAGE + 'engine/OriginalStartupDiagnostics;'
+STRING = 'Ljava/lang/String;'
+BUILDER = 'Ljava/lang/StringBuilder;'
+LOG = PACKAGE + 'log/LogStore;'
+DEQUE = 'Lkotlin/collections/ArrayDeque;'
+LIST = 'Ljava/util/List;'
+OBJECT = 'Ljava/lang/Object;'
+HIDDEN = '[launch credential withheld]'
+ORIGINAL_SHA = '3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5'
+
+# Receiver, original name and argument, return descriptor, invoke mnemonic.
+WRAPPERS = {
+    'append': (BUILDER, 'append', STRING, BUILDER, 'invoke-virtual'),
+    'store': (LOG, 'engine', STRING, 'V', 'invoke-virtual'),
+    'history': (DEQUE, 'addLast', OBJECT, 'V', 'invoke-virtual'),
+    'probeTail': (LIST, 'add', OBJECT, 'Z', 'invoke-interface'),
+}
+
+START = (PACKAGE + 'EngineManager$start$2;', 'invokeSuspend', f'({OBJECT}){OBJECT}')
+READER = (START[0], 'invokeSuspend$lambda$9',
+          '(Ljava/lang/Process;Ljava/util/concurrent/CountDownLatch;Lkotlinx/coroutines/CoroutineScope;'
+          'Lcom/dsh/android/EngineManager;Lkotlin/jvm/internal/Ref$ObjectRef;Lkotlin/text/Regex;)V')
+
+# Byte PCs from signed classes.dex. The mask records each original invoke's
+# opcode and full argument register encoding, independent of pool position.
+SITES = {
+    READER: [(156, '6e202500', 'store', 'v5, v2'),
+             (188, '6e202600', 'append', 'v6, v2'),
+             (228, '6e202600', 'history', 'v6, v2')],
+    START: [(4700, '6e203200', 'append', 'v2, v3'),
+            (4776, '6e203200', 'append', 'v2, v3')],
+    (PACKAGE + 'EngineManager;', 'probeBoot$lambda$146$lambda$145',
+     '(Ljava/util/List;Ljava/util/concurrent/atomic/AtomicBoolean;Ljava/lang/String;)Lkotlin/Unit;'):
+        [(10, '72203100', 'probeTail', 'p0, p2')],
+    (PACKAGE + 'EngineManager$State$Ready;', 'toString', f'(){STRING}'):
+        [(18, '6e200100', 'append', 'v1, v0')],
+    (PACKAGE + 'MainActivity$observeEngine$1$1;', 'emit',
+     f'(Lcom/dsh/android/EngineManager$State;Lkotlin/coroutines/Continuation;){OBJECT}'):
+        [(776, '6e20e300', 'append', 'v3, p2')],
+    (PACKAGE + 'web/SystemWebHost;', 'reload', '()V'):
+        [(48, '6e200100', 'append', 'v1, v0')],
+}
+
+
+def ref(owner, name, params, returned):
+    return owner.encode(), name.encode(), tuple(param.encode() for param in params), returned.encode()
+
+
+def sanitizing_calls():
+    edits = {}
+    for key, sites in SITES.items():
+        edits[key] = {}
+        for pc, encoded, wrapper, _ in sites:
+            receiver, name, argument, returned, _ = WRAPPERS[wrapper]
+            edits[key][pc] = (bytes.fromhex(encoded), ref(receiver, name, (argument,), returned),
+                              ref(OWNER, wrapper, (receiver, STRING), returned))
+    return edits
+
+
+def wrapper_key(wrapper):
+    receiver, _, _, returned, _ = WRAPPERS[wrapper]
+    return OWNER, wrapper, f'({receiver}{STRING}){returned}'
+
+
+REDACT = (OWNER, 'publicLine', f'({STRING}){STRING}')
+METHODS = {REDACT, *(wrapper_key(name) for name in WRAPPERS)}
+
+
+def wrapper_source():
+    body = f'''.class public final {OWNER}
+.super Ljava/lang/Object;
+
+.method public static publicLine({STRING}){STRING}
+    .locals 1
+    if-eqz p0, :plain
+    const-string v0, "token="
+    invoke-virtual {{p0, v0}}, {STRING}->contains(Ljava/lang/CharSequence;)Z
+    move-result v0
+    if-eqz v0, :plain
+    const-string v0, "{HIDDEN}"
+    return-object v0
+    :plain
+    return-object p0
+.end method
+'''
+    for wrapper, (receiver, name, argument, returned, mnemonic) in WRAPPERS.items():
+        body += f'''
+.method public static {wrapper}({receiver}{STRING}){returned}
+    .locals 0
+    invoke-static {{p1}}, {OWNER}->publicLine({STRING}){STRING}
+    move-result-object p1
+    {mnemonic} {{p0, p1}}, {receiver}->{name}({argument}){returned}
+'''
+        body += {'V': '    return-void\n', 'Z': '    move-result p0\n    return p0\n',
+                 BUILDER: '    move-result-object p0\n    return-object p0\n'}[returned]
+        body += '.end method\n'
+    return body
+
+
+def rewrite(key, source, sites):
+    _, method, signature = key
+    matches = list(re.finditer(r'^\.method [^\n]* ' + re.escape(method + signature)
+                               + r'\n.*?^\.end method$', source, re.M | re.S))
+    if len(matches) != 1:
+        raise ValueError('STARTUP_DIAGNOSTICS_METHOD_ANCHOR')
+    match = matches[0]
+    body = match[0]
+    anchors = Counter((wrapper, registers) for _, _, wrapper, registers in sites)
+    for (wrapper, registers), count in anchors.items():
+        receiver, name, argument, returned, mnemonic = WRAPPERS[wrapper]
+        old = f'    {mnemonic} {{{registers}}}, {receiver}->{name}({argument}){returned}\n'
+        new = f'    invoke-static {{{registers}}}, {OWNER}->{wrapper}({receiver}{STRING}){returned}\n'
+        if key == START:
+            # Other branches reuse these registers; select only the two Ready
+            # log builders. The signed DEX check independently pins both PCs.
+            ready = ('    const-string/jumbo v4, "\\u5f15\\u64ce\\u5c31\\u7eea: "\n\n'
+                     f'    invoke-direct {{v2, v4}}, {BUILDER}-><init>({STRING})V\n\n')
+            old, new = ready + old, ready + new
+        if body.count(old) != count:
+            raise ValueError('STARTUP_DIAGNOSTICS_INVOKE_ANCHOR')
+        body = body.replace(old, new)
+    return source[:match.start()] + body + source[match.end():]
+
+
+def patch(original, root):
+    with original.open('rb') as apk:
+        if hashlib.file_digest(apk, 'sha256').hexdigest() != ORIGINAL_SHA:
+            raise ValueError('STARTUP_DIAGNOSTICS_SOURCE_APK_SHA')
+    directory = root.resolve(strict=True) / 'smali'
+    helper = directory / (OWNER[1:-1] + '.smali')
+    if helper.exists() or helper.is_symlink() or directory not in helper.resolve().parents:
+        raise ValueError('STARTUP_DIAGNOSTICS_NEW_HELPER_REQUIRED')
+    changed = {}
+    for key, sites in SITES.items():
+        file = directory / (key[0][1:-1] + '.smali')
+        if file.is_symlink() or directory not in file.resolve(strict=True).parents:
+            raise ValueError('STARTUP_DIAGNOSTICS_SOURCE_PATH')
+        source = changed[file] if file in changed else file.read_text(encoding='utf-8')
+        changed[file] = rewrite(key, source, sites)
+    helper.parent.mkdir(parents=True, exist_ok=True)
+    with helper.open('x', encoding='utf-8') as output:
+        output.write(wrapper_source())
+    for file, source in changed.items():
+        file.write_text(source, encoding='utf-8')
+    print('ORIGINAL_STARTUP_DIAGNOSTICS_SCOPED_SMALI=PREPARED sites=9')
+
+
+def verify_helper(strict, view, methods):
+    """Verify executable instructions and resolved refs of all new methods."""
+    classes = [cls for cls in view.dex.get_classes() if cls.get_name() == OWNER]
+    strict.need(len(classes) == 1 and classes[0].get_access_flags() == 0x11 and
+                classes[0].get_superclassname() == OBJECT and not classes[0].get_interfaces() and
+                not classes[0].get_fields(), 'STARTUP_DIAGNOSTICS_HELPER_CLASS')
+
+    def compare(key, inputs, expected):
+        method = methods[key]
+        code = method.get_code()
+        strict.need(method.get_access_flags() == 0x9 and code is not None and
+                    (code.get_registers_size(), code.get_ins_size(), code.get_outs_size()) == (2, inputs, 2) and
+                    not strict.decode(method, view.dex)[1], 'STARTUP_DIAGNOSTICS_HELPER_FRAME')
+        rows = view.rows(method)
+        strict.validate_targets(rows)
+        ordinals = {pc: i for i, pc in enumerate(rows)}
+        actual = [strict.relocated_instruction(view, rows, ordinals, pc, raw) for pc, raw in rows.items()]
+        strict.need(actual == expected, 'STARTUP_DIAGNOSTICS_HELPER_BODY')
+
+    contains = ref(STRING, 'contains', ('Ljava/lang/CharSequence;',), 'Z')
+    compare(REDACT, 1, [(b'\x38\x01', 7), (b'\x1a\x00', b'token='),
+                        (b'\x6e\x20\x01\x00', contains), (b'\x0a\x00', None),
+                        (b'\x38\x00', 7), (b'\x1a\x00', HIDDEN.encode()),
+                        (b'\x11\x00', None), (b'\x11\x01', None)])
+    redactor = ref(OWNER, 'publicLine', (STRING,), STRING)
+    for wrapper, (receiver, name, argument, returned, mnemonic) in WRAPPERS.items():
+        encoding = b'\x72' if mnemonic == 'invoke-interface' else b'\x6e'
+        ending = {'V': [b'\x0e\x00'], 'Z': [b'\x0a\x00', b'\x0f\x00'],
+                  BUILDER: [b'\x0c\x00', b'\x11\x00']}[returned]
+        compare(wrapper_key(wrapper), 2,
+                [(b'\x71\x10\x01\x00', redactor), (b'\x0c\x01', None),
+                 (encoding + b'\x20\x10\x00', ref(receiver, name, (argument,), returned))]
+                + [(raw, None) for raw in ending])
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('original', type=Path)
+    parser.add_argument('decoded', type=Path)
+    args = parser.parse_args()
+    patch(args.original, args.decoded)

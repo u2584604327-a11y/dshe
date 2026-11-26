@@ -354,6 +354,21 @@ the same HTTP/WS client. It must be physically run before claiming ARM64 main
 success. The APK stays TEST ONLY, has a temporary different signer, cannot
 upgrade original DSH and never reads its private files. Its status continues
 `ORIGINAL_MAIN_ENGINE_START_COROUTINE=NOT_INVOKED` and `FORMAL_V139=BLOCKED`.
+
+The main TEST build also applies a separate v138 diagnostic patch. Nine exact
+calls now redact lines containing the original literal `token=` before those
+lines enter the engine log, history, probe tail, Ready diagnostics or WebView
+load/reload logs. The original parser, Ready URL getter and WebView navigation
+retain the private URL. The DEX verifier checks the exact invoke registers,
+method targets and helper body, and still compares the full original method
+and exception tables. The original three-bridge verifier is the default;
+`--startup-diagnostics` selects the expanded, explicit list of allowed edits.
+
+The test page reports `MAIN_TEST_INSTALLED_APK_SHA256` from its own installed
+base APK. It also checks the original Ready object's getter and diagnostic
+string using a fixed sample credential, before starting either test child.
+This tests representation of Ready rather than the original state transition.
+
 Android-generated overlays, all three EngineManager launch paths, production
 owner authorization, model egress, browser/profile B3/B4 and original signing
 remain separate release requirements. Returning from `runCli` alone is not

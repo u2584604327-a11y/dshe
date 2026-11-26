@@ -34,6 +34,7 @@ def patches(sources):
     if builder.count('host_candidate/p51_side_by_side/p51_manifest.py')!=3:raise RuntimeError('HTTP_TEST_MANIFEST_CALL_COUNT')
     builder=builder.replace('host_candidate/p51_side_by_side/p51_manifest.py','host_candidate/engine_runtime/main_manifest.py')
     builder=once(builder,'apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"',
+        'python host_candidate/engine_runtime/original_startup_diagnostics.py "$ORIGINAL" "$DIR/decoded"\n'
         'python host_candidate/engine_runtime/prepare_main_runtime.py prepare "$ORIGINAL" "$DIR/decoded"\n'
         'apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"')
     builder=once(builder,

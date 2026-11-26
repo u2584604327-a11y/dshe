@@ -208,7 +208,7 @@ def relocated_instruction(view, rows, ordinals, pc, raw):
     return (fixed, ref)
 
 
-def compare_signed_code(left, right, signed, base):
+def compare_signed_code(left, right, signed, base, invoke_edits=None):
     """Account for assembler layout changes in methods outside the three seams."""
     lc, rc = left.get_code(), right.get_code()
     need((lc.get_registers_size(), lc.get_ins_size()) == (rc.get_registers_size(), rc.get_ins_size()), "SIGNED_REGISTER_FRAME")
@@ -222,7 +222,15 @@ def compare_signed_code(left, right, signed, base):
     ro = {pc: n for n, pc in enumerate((*rrows, 2 * rsize))}
     need(ordinal_tries(ltry, lo) == ordinal_tries(rtry, ro), "SIGNED_EXCEPTION_DISPATCH")
     same_offsets = lrows.keys() == rrows.keys()
+    edits = dict(invoke_edits or {})
     for (old_pc, old_raw), (new_pc, new_raw) in zip(lrows.items(), rrows.items()):
+        if old_pc in edits:
+            old_encoding, original_ref, replacement_ref = edits.pop(old_pc)
+            expect = (b"\x71" + old_encoding[1:], replacement_ref)
+            need(old_raw[0] in (0x6e, 0x72) and len(old_raw) == len(new_raw) == 6 and
+                 signed.instruction(old_raw) == (old_encoding, original_ref) and
+                 base.instruction(new_raw) == expect, "SIGNED_APPROVED_INVOKE")
+            continue
         if old_raw[0] != new_raw[0]:
             need((old_raw[0], new_raw[0]) == (0x1A, 0x1B), "SIGNED_ENCODING_CHANGE")
         if same_offsets and old_raw[0] == new_raw[0]:
@@ -231,6 +239,7 @@ def compare_signed_code(left, right, signed, base):
             before = relocated_instruction(signed, lrows, lo, old_pc, old_raw)
             after = relocated_instruction(base, rrows, ro, new_pc, new_raw)
         need(before == after, "SIGNED_INSTRUCTION_SEMANTICS")
+    need(not edits, "SIGNED_APPROVED_INVOKE_MISSING")
 
     # A lower outs_size is valid only when it still covers every encoded
     # method invocation. Filled-new-array creates its own array instead of
@@ -242,10 +251,14 @@ def compare_signed_code(left, right, signed, base):
     return (lc.get_outs_size() != rc.get_outs_size(), not same_offsets, ltry != rtry)
 
 
-def verify_signed_baseline(signed, base):
+def verify_signed_baseline(signed, base, invoke_edits=None, added_methods=()):
     """Census of signed v138 methods outside the separately audited bridges."""
     source, baseline = index(signed.dex), index(base.dex)
-    need(SIGNED_BRIDGED <= source.keys() and set(baseline) == set(source) | P40_METHODS, "SIGNED_METHOD_SET")
+    edits = invoke_edits or {}
+    additions = set(added_methods)
+    need(SIGNED_BRIDGED <= source.keys() and edits.keys() <= (source.keys() - SIGNED_BRIDGED) and
+         not additions.intersection(source.keys() | P40_METHODS) and
+         set(baseline) == set(source) | P40_METHODS | additions, "SIGNED_METHOD_SET")
     counts = Counter()
     for key, left in source.items():
         right = baseline[key]
@@ -254,7 +267,8 @@ def verify_signed_baseline(signed, base):
         if left.get_code() is None or key in SIGNED_BRIDGED:
             continue
         counts["METHODS"] += 1
-        for name, changed in zip(("OUTGOING_CAPACITY", "WIDTH_RELOCATED", "TRY_LAYOUT"), compare_signed_code(left, right, signed, base)):
+        for name, changed in zip(("OUTGOING_CAPACITY", "WIDTH_RELOCATED", "TRY_LAYOUT"),
+                                 compare_signed_code(left, right, signed, base, edits.get(key))):
             counts[name] += changed
     need(counts["METHODS"] == SIGNED_CODE_METHODS - len(SIGNED_BRIDGED), "SIGNED_CODE_METHOD_CENSUS")
     return counts

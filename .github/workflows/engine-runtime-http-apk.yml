@@ -59,13 +59,13 @@ jobs:
           python host_candidate/engine_runtime/prepare_http_sidecar.py
           if ! bash host_candidate/p43_original_service/build_embedded_emulator_apk.sh > "$RUNNER_TEMP/http-apk-builder.log" 2>&1; then
             echo HTTP_TEST_APK_BUILD=FAILED_NOT_PUBLISHED
-            grep -E 'MAIN_TEST_|HTTP_TEST_|P49_|P47_|RuntimeError|ValueError|Exception|Traceback|error:' "$RUNNER_TEMP/http-apk-builder.log" | tail -n 25 | cut -c 1-220 || true
+            grep -E 'MAIN_TEST_|HTTP_TEST_|STARTUP_DIAGNOSTICS_|P49_|P47_|RuntimeError|ValueError|Exception|Traceback|error:' "$RUNNER_TEMP/http-apk-builder.log" | tail -n 25 | cut -c 1-220 || true
             exit 1
           fi
           original=.p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
           apk=.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
           python host_candidate/engine_runtime/verify_http_apk.py "$original" "$apk" --original-main-profile
-          python host_candidate/p50_original_arm64_node/verify_config_dex.py "$original" "$apk"
+          python host_candidate/p50_original_arm64_node/verify_config_dex.py "$original" "$apk" --startup-diagnostics --negative-checks
           bt="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools/35.0.0"
           "$bt/apksigner" verify "$apk"
           "$bt/zipalign" -c -P 16 4 "$apk"

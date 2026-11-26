@@ -28,6 +28,10 @@ public final class OriginalMainProbeActivity extends Activity {
   private void verify(){
     Path root=null;String owner=randomId(),oldCookie=null,oldToken=null;int port=0;
     try{
+      setStage("APK_IDENTITY");
+      post("MAIN_TEST_INSTALLED_APK_SHA256="+installedApkSha256());
+      checkReadyDiagnostics();
+      post("MAIN_TEST_ORIGINAL_READY_REDACTION_AND_PRIVATE_URL=PASS");
       root=Files.createTempDirectory(getNoBackupFilesDir().toPath(),"original-main-test-",PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
       for(int generation=0;generation<2;generation++){
         if(closed.get())return;setStage(generation==0?"FIRST_BIND":"RESTART_BIND");
@@ -69,6 +73,24 @@ public final class OriginalMainProbeActivity extends Activity {
       main.post(()->{report("ORIGINAL_MAIN_FIXED_CHILD_ERROR="+childError.get());report("ORIGINAL_MAIN_FIXED_FAILURE_CODE="+fixed);report("ORIGINAL_MAIN_TRANSPORT_STATE="+transportFault.get());deny(stage.get());});
     }
     finally{if(root!=null)try{Files.deleteIfExists(root.resolve("snapshot.bin"));Files.deleteIfExists(root.resolve("owner.lock"));Files.delete(root);}catch(IOException ignored){}}
+  }
+  private String installedApkSha256()throws IOException,NoSuchAlgorithmException{
+    MessageDigest digest=MessageDigest.getInstance("SHA-256");
+    try(InputStream input=new FileInputStream(getApplicationInfo().sourceDir)){
+      byte[] block=new byte[65536];
+      for(int length;(length=input.read(block))!=-1;){
+        if(closed.get())throw new InterruptedIOException("MAIN_TEST_APK_IDENTITY_CANCELLED");
+        digest.update(block,0,length);
+      }
+    }
+    return hex(digest.digest());
+  }
+  private void checkReadyDiagnostics()throws ReflectiveOperationException,IOException{
+    Class<?> ready=Class.forName("com.dsh.android.EngineManager$State$Ready",true,getClassLoader());
+    String sample="http://127.0.0.1:34567/?token=diagnostic-check";
+    Object state=ready.getConstructor(String.class).newInstance(sample);
+    require(sample.equals(ready.getMethod("getUrl").invoke(state))&&
+        "Ready(url=[launch credential withheld])".equals(state.toString()),"MAIN_TEST_ORIGINAL_READY_DIAGNOSTICS");
   }
   private static void require(boolean value,String code)throws IOException{if(!value)throw new IOException(code);}
   private static String hex(byte[] bytes){StringBuilder result=new StringBuilder();for(byte b:bytes)result.append(String.format(Locale.ROOT,"%02x",b&255));return result.toString();}

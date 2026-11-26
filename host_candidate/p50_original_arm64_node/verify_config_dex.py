@@ -9,7 +9,6 @@ import gc
 import hashlib
 import struct
 import tempfile
-from copy import copy
 from pathlib import Path
 import sys
 import zipfile
@@ -20,7 +19,7 @@ import strict_dex as strict
 HOST_START = (b'Ljava/lang/ProcessBuilder;', b'start', (), b'Ljava/lang/Process;')
 
 
-def verify(original, candidate):
+def verify(original, candidate, startup_diagnostics=False):
     strict.logger.remove()
     with Path(original).open('rb') as source:
         strict.need(hashlib.file_digest(source, 'sha256').hexdigest() ==
@@ -29,26 +28,28 @@ def verify(original, candidate):
     with zipfile.ZipFile(original) as source, zipfile.ZipFile(candidate) as result:
         signed = strict.DexView(source.read('classes.dex'))
         current = strict.DexView(result.read('classes.dex'))
-    counts = strict.verify_signed_baseline(signed, current)
+    if startup_diagnostics:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'engine_runtime'))
+        import original_startup_diagnostics as diagnostics
+        edits, extras = diagnostics.sanitizing_calls(), diagnostics.METHODS
+    else:
+        edits, extras = {}, ()
+    outside_bridges = {key: calls for key, calls in edits.items() if key != strict.START}
+    counts = strict.verify_signed_baseline(signed, current, outside_bridges, extras)
     old, new = strict.index(signed.dex), strict.index(current.dex)
     for key in strict.SIGNED_BRIDGED:
         target = ('start' if key == strict.START else
                   'probeOrDeny' if key[1] == 'probeBoot' else 'configOrDeny')
         replacement = (b'Lcom/dsh/android/p40/P40ProcessBridge;', target.encode(),
                        (b'Ljava/lang/ProcessBuilder;',), b'Ljava/lang/Process;')
-        adjusted = copy(signed)
-        adjusted.resolve = lambda kind, idx: (replacement if kind == 'METHOD' and
-            signed.resolve(kind, idx) == HOST_START else signed.resolve(kind, idx))
-        def rows(method):
-            result = signed.rows(method)
-            sites = [pc for pc, raw in result.items() if raw[0] == 0x6e and
-                     signed.instruction(raw)[1] == HOST_START]
-            strict.need(len(sites) == 1, 'CONFIG_EXACT_ONE_AUTHORIZED_START')
-            pc = sites[0]
-            result[pc] = bytes([0x71]) + result[pc][1:]
-            return result
-        adjusted.rows = rows
-        strict.compare_signed_code(old[key], new[key], adjusted, current)
+        sites = [(pc, signed.instruction(raw)[0]) for pc, raw in signed.rows(old[key]).items()
+                 if raw[0] == 0x6e and signed.instruction(raw)[1] == HOST_START]
+        strict.need(len(sites) == 1, 'CONFIG_EXACT_ONE_AUTHORIZED_START')
+        pc, encoding = sites[0]
+        calls = dict(edits.get(key, {}))
+        strict.need(pc not in calls, 'CONFIG_TYPED_START_EDIT_COLLISION')
+        calls[pc] = (encoding, HOST_START, replacement)
+        strict.compare_signed_code(old[key], new[key], signed, current, calls)
         bridge = new[('Lcom/dsh/android/p40/P40ProcessBridge;', target,
                       '(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;')]
         raw = list(current.rows(bridge).values())
@@ -61,8 +62,14 @@ def verify(original, candidate):
                     current.instruction(raw[0]) == (b'\x71\x10\x01\x00', expected) and
                     raw[1:] == [b'\x0c\x00', b'\x11\x00'] and
                     not strict.decode(bridge, current.dex)[1], 'CONFIG_EXACT_TYPED_BRIDGE')
-    print('ORIGINAL_CONFIG_SIGNED_UNRELATED_METHODS=PASS count=' + str(counts['METHODS']))
-    print('ORIGINAL_CONFIG_THREE_TARGET_METHODS_ONLY_TYPED_START_CHANGED=PASS')
+    if startup_diagnostics:
+        diagnostics.verify_helper(strict, current, new)
+        print('ORIGINAL_STARTUP_DIAGNOSTICS_NINE_CALLS_AND_HELPER=PASS_STATIC')
+        print('ORIGINAL_CONFIG_SIGNED_UNRELATED_METHODS=PASS count=' + str(counts['METHODS'] - len(outside_bridges)))
+        print('ORIGINAL_CONFIG_THREE_TYPED_STARTS_AND_EXPLICIT_DIAGNOSTIC_SITES=PASS')
+    else:
+        print('ORIGINAL_CONFIG_SIGNED_UNRELATED_METHODS=PASS count=' + str(counts['METHODS']))
+        print('ORIGINAL_CONFIG_THREE_TARGET_METHODS_ONLY_TYPED_START_CHANGED=PASS')
     print('ORIGINAL_CONFIG_ART_AND_ENGINE_READY=NOT_ATTESTED')
 
 
@@ -71,8 +78,9 @@ if __name__ == '__main__':
     parser.add_argument('original', type=Path)
     parser.add_argument('candidate', type=Path)
     parser.add_argument('--negative-checks', action='store_true')
+    parser.add_argument('--startup-diagnostics', action='store_true')
     args = parser.parse_args()
-    verify(args.original, args.candidate)
+    verify(args.original, args.candidate, args.startup_diagnostics)
     if args.negative_checks:
         with zipfile.ZipFile(args.candidate) as archive:
             payload = archive.read('classes.dex')
@@ -105,6 +113,17 @@ if __name__ == '__main__':
             'TRY_RANGE': (try_offset + 4, struct.pack('<H', shortened)),
             'UNRELATED_LITERAL': (literal, bytes([payload[literal] ^ 0x10])),
         }
+        if args.startup_diagnostics:
+            import original_startup_diagnostics as diagnostics
+            helper = methods[diagnostics.REDACT]
+            reader = methods[diagnostics.READER]
+            replacement = diagnostics.sanitizing_calls()[diagnostics.READER][228][2]
+            changed = [pc for pc, raw in view.rows(reader).items() if raw[0] == 0x71 and
+                       view.instruction(raw)[1] == replacement]
+            strict.need(len(changed) == 1, 'STARTUP_DIAGNOSTICS_NEGATIVE_ANCHOR')
+            raw_argument = reader.get_code().get_off() + 16 + changed[0] + 4
+            mutations['STARTUP_HISTORY_REGISTER'] = (raw_argument, bytes([payload[raw_argument] ^ 0x10]))
+            mutations['STARTUP_HELPER_BRANCH'] = (helper.get_code().get_off() + 16, b'\x39')
         del rows, methods, view, dump
         gc.collect()
         with tempfile.TemporaryDirectory(prefix='original-config-negative-') as directory:
@@ -119,8 +138,12 @@ if __name__ == '__main__':
                 with zipfile.ZipFile(negative, 'w') as archive:
                     archive.writestr('classes.dex', changed)
                 try:
-                    verify(args.original, negative)
+                    verify(args.original, negative, args.startup_diagnostics)
                 except strict.Deny as denied:
+                    expected = {'STARTUP_HISTORY_REGISTER': 'P246_DENY_SIGNED_APPROVED_INVOKE',
+                                'STARTUP_HELPER_BRANCH': 'P246_DENY_STARTUP_DIAGNOSTICS_HELPER_BODY'}
+                    if label in expected and str(denied) != expected[label]:
+                        raise RuntimeError('STARTUP_MUTATION_WRONG_DENIAL_' + label) from denied
                     print('ORIGINAL_CONFIG_DEX_MUTATION_' + label + '=DENY reason=' + str(denied))
                 else:
                     raise RuntimeError('CONFIG_MUTATION_ACCEPTED_' + label)
