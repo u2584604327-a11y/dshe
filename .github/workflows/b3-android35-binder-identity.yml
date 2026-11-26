@@ -1,21 +1,16 @@
 name: B3 Android35 real Binder transaction identity and slot gate
 on:
   pull_request:
-    types: [opened, synchronize]
-    paths:
-      - 'host_candidate/browser_isolation_audit/slot_command_gate/**'
-      - 'host_candidate/browser_isolation_audit/b3_android_probe/**'
-      - 'host_candidate/browser_isolation_audit/b3_attacker/**'
-      - 'host_candidate/browser_isolation_audit/run_b3_android35.sh'
-      - '.github/workflows/b3-android35-binder-identity.yml'
+    types: [labeled]
 permissions:
   contents: read
 concurrency:
-  group: b3-real-binder-${{ github.ref }}
+  group: b3-real-binder-${{ github.ref }}-${{ github.event.action }}-${{ github.event.label.name }}
   cancel-in-progress: true
 jobs:
   b3-actual-binder-identity:
     if: >-
+      github.event.label.name == 'v139-check-b3' &&
       github.event.pull_request.number == 80 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'

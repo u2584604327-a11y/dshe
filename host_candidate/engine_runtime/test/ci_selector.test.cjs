@@ -16,31 +16,33 @@ async function check(changed, runs, event = context, current = head, cancelEffec
       assert.equal(request.request.timeout,2500);assert.equal(request.request.retries,0);await cancelEffect();
     }}}, paginate: async () => runs};
   const core = {info() {}, warning() {}, summary: {addRaw() {return this;}, async write() {}}};
-  const result = await select({github, context: event, core});return {cancelled, result};
+  await select({github, context: event, core});return cancelled;
 }
 (async () => {
-  const filename = 'p245-build-only-probe.yml';
+  const filename = 'p310-original-art-verify-one-shot.yml';
   const runs = [run(1, filename), run(2, 'p139-p51-arm64-sidecar-test-apk-artifact.yml'),
     run(3, filename, {head_sha: before}), run(4, filename, {pull_requests: [{number: 81}]}),
     run(5, filename, {pull_requests: []}), run(6, filename, {pull_requests: [{number: 80}, {number: 81}]}),
     run(7, filename, {head_branch: 'other'}), run(8, filename, {status: 'completed'}),
-    run(9, 'engine-runtime-http.yml')];
+    run(9, 'p134-real-arm64-isolated-guard.yml'), run(10, 'p245-build-only-probe.yml'),
+    run(11, 'engine-runtime-http.yml')];
   const first = await check(['host_candidate/engine_runtime/http_transport.mjs'], runs);
-  assert.deepEqual(first.cancelled, [1]);assert.equal(first.result.artifactNeeded, false);
+  assert.deepEqual(first, [1, 9]);
   const dex = await check(['host_candidate/p245_build_only_probe/strict_dex.py'], runs);
-  assert.deepEqual(dex.cancelled, [9]);assert.equal(dex.result.artifactNeeded, true);
-  assert.deepEqual((await check(['README.md'], runs, context, before)).cancelled, []);
+  assert.deepEqual(dex, [9]);
+  assert.deepEqual(await check(['README.md'], runs, context, before), []);
   const other = structuredClone(context);other.payload.pull_request.number = 81;
-  assert.deepEqual((await check(['README.md'], runs, other)).cancelled, []);
-  assert.equal((await check(['.github/workflows/p139-p51-arm64-sidecar-test-apk-artifact.yml'], [])).result.artifactNeeded, true);
+  assert.deepEqual(await check(['README.md'], runs, other), []);
+  const labeled = structuredClone(context);labeled.payload.action = 'labeled';
+  assert.deepEqual(await check(['README.md'], runs, labeled), []);
   const realNow=Date.now;let now=0;
   try{
     Date.now=()=>now;
     const limited=await check(['README.md'],[run(10,filename),run(11,filename)],context,head,()=>{
       now+=61000;throw Object.assign(new Error('fixed Actions service failure'),{status:500});
     });
-    assert.deepEqual(limited.cancelled,[10]);assert.equal(limited.result.artifactNeeded,true);
+    assert.deepEqual(limited,[10]);
   }finally{Date.now=realNow;}
-  console.log('PR80_OPTIONAL_CANCEL_HTTP500_BUDGET_PRESERVES_REQUIRED_BUILD=PASS');
-  console.log('PR80_CI_SELECTOR_FOREIGN_PR_SHA_CRITICAL_GATE_AND_ARTIFACT_SCOPE=PASS');
+  console.log('PR80_OPTIONAL_CANCEL_HTTP500_BUDGET=PASS');
+  console.log('PR80_CI_SELECTOR_PRESERVES_ON_DEMAND_WORKFLOWS_AND_FOREIGN_RUNS=PASS');
 })().catch(error => {console.error(error);process.exitCode = 1;});

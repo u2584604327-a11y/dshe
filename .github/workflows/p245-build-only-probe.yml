@@ -1,18 +1,16 @@
 name: P245 uninstalled equal-width process probe static-only
 on:
   pull_request:
-    types: [opened, synchronize]
-    paths:
-      - 'host_candidate/p245_build_only_probe/**'
-      - '.github/workflows/p245-build-only-probe.yml'
+    types: [labeled]
 permissions:
   contents: read
 concurrency:
-  group: p245-${{ github.ref }}
+  group: p245-${{ github.ref }}-${{ github.event.action }}-${{ github.event.label.name }}
   cancel-in-progress: true
 jobs:
   p245-build-only:
     if: >-
+      github.event.label.name == 'v139-check-dex' &&
       github.event.pull_request.number == 80 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'

@@ -1,19 +1,16 @@
 name: B4 Android35 managed-profile user and synthetic storage boundary
 on:
   pull_request:
-    types: [opened, synchronize]
-    paths:
-      - 'host_candidate/browser_isolation_audit/b4_os_user_probe/**'
-      - 'host_candidate/browser_isolation_audit/run_b4_android35.sh'
-      - '.github/workflows/b4-android35-managed-profile.yml'
+    types: [labeled]
 permissions:
   contents: read
 concurrency:
-  group: b4-work-user-${{ github.ref }}
+  group: b4-work-user-${{ github.ref }}-${{ github.event.action }}-${{ github.event.label.name }}
   cancel-in-progress: true
 jobs:
   b4-true-managed-user:
     if: >-
+      github.event.label.name == 'v139-check-b4' &&
       github.event.pull_request.number == 80 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'

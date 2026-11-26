@@ -1,19 +1,16 @@
 name: P311 original EngineManager coroutine entry and exception controls (CI-only)
 on:
   pull_request:
-    types: [opened, synchronize]
-    paths:
-      - 'host_candidate/p311_art_target/**'
-      - 'host_candidate/p159_emulator_root_reattach.sh'
-      - '.github/workflows/p311-original-target-class-link.yml'
+    types: [labeled]
 permissions:
   contents: read
 concurrency:
-  group: p311-art-class-link-${{ github.ref }}
+  group: p311-art-class-link-${{ github.ref }}-${{ github.event.action }}-${{ github.event.label.name }}
   cancel-in-progress: true
 jobs:
   original-v138-target-class:
     if: >-
+      github.event.label.name == 'v139-check-art' &&
       github.event.pull_request.number == 80 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'

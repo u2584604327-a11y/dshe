@@ -1,19 +1,16 @@
 name: Engine runtime HTTP transport with original authentication and frontend
 on:
   pull_request:
-    types: [opened, synchronize]
-    paths:
-      - 'host_candidate/engine_runtime/**'
-      - '.github/workflows/engine-runtime-http.yml'
-      - '.github/scripts/pr80_targeted_ci.cjs'
+    types: [labeled]
 permissions:
   contents: read
 concurrency:
-  group: engine-runtime-http-${{ github.event.pull_request.number }}
+  group: engine-runtime-http-${{ github.event.pull_request.number }}-${{ github.event.action }}-${{ github.event.label.name }}
   cancel-in-progress: true
 jobs:
   original-http-services:
     if: >-
+      github.event.label.name == 'v139-check-runtime' &&
       github.event.pull_request.number == 80 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'

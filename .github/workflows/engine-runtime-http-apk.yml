@@ -1,20 +1,16 @@
 name: Original isolated ARM64 main runtime TEST-ONLY APK
 on:
   pull_request:
-    types: [opened, synchronize]
-    paths:
-      - 'host_candidate/engine_runtime/**'
-      - 'host_candidate/p50_original_arm64_node/**'
-      - 'host_candidate/p49_original_node_stage.py'
-      - '.github/workflows/engine-runtime-http-apk.yml'
+    types: [labeled]
 permissions:
   contents: read
 concurrency:
-  group: original-http-test-apk-${{ github.event.pull_request.number }}
+  group: original-http-test-apk-${{ github.event.pull_request.number }}-${{ github.event.action }}-${{ github.event.label.name }}
   cancel-in-progress: true
 jobs:
   build-distinct-http-test-apk:
     if: >-
+      github.event.label.name == 'v139-build-test-apk' &&
       github.event.pull_request.number == 80 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'

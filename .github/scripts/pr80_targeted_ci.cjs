@@ -61,12 +61,6 @@ module.exports = async function select({github, context, core}) {
   const comparison = compared.data;
   if (comparison.status !== 'ahead' || !comparison.files?.length || comparison.files.length >= 300) return;
   const changed = comparison.files.flatMap(file => [file.filename, file.previous_filename].filter(Boolean));
-  // Decide required work before optional cancellation. Unknown changes retain
-  // the build; Actions API degradation must not consume the selector timeout.
-  const onlyTransport = changed.length > 0 && changed.every(file =>
-    file.startsWith('host_candidate/engine_runtime/') ||
-    file === '.github/workflows/engine-runtime-http.yml' ||
-    file === '.github/workflows/p37-remote-process-contract.yml');
   const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo,
     {...repo, event: 'pull_request', head_sha: pr.head.sha, per_page: 100});
   let cancelled = 0;
@@ -98,5 +92,4 @@ module.exports = async function select({github, context, core}) {
   }
   await core.summary.addRaw('PR #80 targeted CI: cancelled ' + cancelled +
     ' unrelated repetitions. Cancelled checks are NOT_TESTED, never PASS.\n').write();
-  return {artifactNeeded: !onlyTransport};
 };

@@ -410,3 +410,24 @@ remain separate namespaces. This build-only capsule grants no execution,
 owner access or privileged-tool permission. Generated Android YAML, other
 native/tool assets and dependency selection still need the original owner
 launch plan; this subset is not the complete production dependency closure.
+
+## PR #80 verification on demand
+
+Use `[skip ci]` on routine development commits to suppress the repository's
+historical push and pull-request workflows. Run only the check needed for the
+change or delivery milestone. For a GitHub check, use the exact milestone head
+without a skip marker and apply only the matching PR label. Create the label on first use. Remove a label before
+reapplying it for a future milestone. Applying a label does not override a skip
+marker on the exact head. Other historical workflows retain their existing
+triggers. A skipped check supplies no release evidence.
+
+| PR label | Existing check |
+|---|---|
+| `v139-check-runtime` | Host tests for the original HTTP runtime |
+| `v139-build-test-apk` | Separate ARM64 main TEST APK and DEX verification |
+| `v139-build-config-test` | Separate ARM64 config TEST APK |
+| `v139-check-dex` | P245 original denial and strict comparison |
+| `v139-check-art` | Original coroutine entry and exception controls on ART |
+| `v139-check-binder` | Android 35 authenticated Binder child handoff |
+| `v139-check-b3` | B3 Binder identity and slot authorization |
+| `v139-check-b4` | B4 Android managed-profile storage boundary |

@@ -1,30 +1,21 @@
 name: P139 P51 ARM64 original EngineManager fresh-config TEST APK (1-day artifact)
 on:
   pull_request:
-    types: [opened, synchronize]
-    paths:
-      - '.github/workflows/p139-p51-arm64-sidecar-test-apk-artifact.yml'
-      - '.github/scripts/pr80_targeted_ci.cjs'
-      - 'host_candidate/p51_side_by_side/**'
-      - 'host_candidate/p43_original_service/build_embedded_emulator_apk.sh'
-      - 'host_candidate/p134_real_arm64_gate/**'
-      - 'host_candidate/p50_original_arm64_node/**'
-      - 'host_candidate/p138_original_build_gate/**'
+    types: [synchronize, labeled]
 permissions:
   contents: read
 concurrency:
-  group: p139-safe-apk-${{ github.event.pull_request.number }}
+  group: p139-safe-apk-${{ github.event.pull_request.number }}-${{ github.event.action }}-${{ github.event.label.name }}
   cancel-in-progress: true
 jobs:
   select-current-change-checks:
     if: >-
+      github.event.action == 'synchronize' &&
       github.event.pull_request.number == 80 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    outputs:
-      artifact_needed: ${{ steps.select.outputs.artifact_needed }}
     permissions:
       contents: read
       pull-requests: read
@@ -35,16 +26,14 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
       - uses: actions/github-script@v7
-        id: select
         with:
           script: |
             const select = require('./.github/scripts/pr80_targeted_ci.cjs');
-            const result = await select({github, context, core});
-            core.setOutput('artifact_needed', String(result?.artifactNeeded !== false));
+            await select({github, context, core});
   build-side-by-side-test-apk:
-    needs: select-current-change-checks
     if: >-
-      needs.select-current-change-checks.outputs.artifact_needed == 'true' &&
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'v139-build-config-test' &&
       github.event.pull_request.number == 80 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'

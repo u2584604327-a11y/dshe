@@ -1,22 +1,16 @@
 name: P184 original-derived Android35 real P68 to P75 one-use Binder receipt (no Node)
 on:
   pull_request:
-    types: [opened, synchronize]
-    paths:
-      - 'host_candidate/p184_android35/**'
-      - 'host_candidate/engine_runtime/src/com/dsh/android/engine/DurableSessionSnapshot.java'
-      - 'host_candidate/engine_runtime/src/com/dsh/android/engine/SessionSnapshotCodec.java'
-      - 'host_candidate/engine_runtime/test/com/dsh/android/engine/DurableSessionSnapshotTest.java'
-      - 'host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48HostProcessProbe.java'
-      - '.github/workflows/p184-android35-real-p68-p75-receipt.yml'
+    types: [labeled]
 permissions:
   contents: read
 concurrency:
-  group: p184-android35-${{ github.ref }}
+  group: p184-android35-${{ github.ref }}-${{ github.event.action }}-${{ github.event.label.name }}
   cancel-in-progress: true
 jobs:
   original-android35-uid-and-one-shot-receipt:
     if: >-
+      github.event.label.name == 'v139-check-binder' &&
       github.event.pull_request.number == 80 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
