@@ -4,6 +4,7 @@ on:
     types: [opened, synchronize]
     paths:
       - 'host_candidate/p311_art_target/**'
+      - 'host_candidate/p159_emulator_root_reattach.sh'
       - '.github/workflows/p311-original-target-class-link.yml'
 permissions:
   contents: read
@@ -52,6 +53,7 @@ jobs:
           bash -n host_candidate/p310_art_verify/prepare_candidate.sh
           bash -n host_candidate/p311_art_target/prepare_probe.sh
           bash -n host_candidate/p311_art_target/run_android35.sh
+          bash host_candidate/p159_emulator_root_reattach.test.sh
           test -f .github/workflows/p311-original-target-class-link.yml
           grep -Fq 'Class.forName(TARGET, false, loader)' host_candidate/p311_art_target/TargetClassProbe.java
           grep -Fq 'getDeclaredMethod("invokeSuspend", Object.class)' host_candidate/p311_art_target/TargetClassProbe.java

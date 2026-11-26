@@ -10,8 +10,12 @@ adb -s "$SERIAL" wait-for-device
 sdk="$(adb -s "$SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')"
 arch="$(adb -s "$SERIAL" shell getprop ro.product.cpu.abi | tr -d '\r')"
 [[ "$sdk" == 35 && "$arch" == x86_64 ]] || { echo P311_REAL_ANDROID35_X86_SCOPE=DENY;exit 2;}
-adb -s "$SERIAL" root >/dev/null
-adb -s "$SERIAL" wait-for-device
+[[ "$SERIAL" == emulator-5554 ]] || { echo P311_FIXED_DISPOSABLE_EMULATOR=DENY;exit 2; }
+# ADB can report "closed" while restarting adbd. Reuse the bounded existing
+# helper and independently verify QEMU/hardware/boot/UID after reattachment.
+# This grants root only to emulator transport; target VMs still use UID 2000.
+source host_candidate/p159_emulator_root_reattach.sh
+p159_verify_disposable_root
 adb -s "$SERIAL" shell id | grep -Eq 'uid=0\('
 if adb -s "$SERIAL" shell pm list packages com.dsh.android | grep -Fxq 'package:com.dsh.android';then
  echo P311_PREEXISTING_PACKAGE=DENY;exit 2
