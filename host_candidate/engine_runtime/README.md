@@ -331,6 +331,16 @@ publish path. Unsupported descriptor/stream/link operations still refuse;
 this is not a complete POSIX filesystem or an existing-user storage broker.
 The temporary native cache and local native build paths remain disabled.
 
+The owner adapter also provides positional-buffer `FileHandle.read`, `r+`,
+handle/path `truncate`, zero extension and the shared read/write offset needed
+by the original JSONL header scanner and crash-tail repair. The same bounded
+operation sequence runs against real Node 26.4 native files and the adapter;
+results must match, including readonly truncation errors. Quota failures keep
+the last acknowledged bytes and version; revocation rejects retained handles.
+Changes use the existing authenticated snapshot commit before returning.
+This does not implement JSONL's native `flock`, hard-link publication or stream
+API, and does not establish complete session-persistence/chat acceptance.
+
 The host control runs the actual original main, authenticates the frontend,
 checks original frontend JS bytes, creates a workspace through the original
 RPC, subscribes to its original WebSocket baseline, then restarts at the same

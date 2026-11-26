@@ -182,6 +182,20 @@ def main():
         for memory in (False,True):
             subprocess.run([node,'--permission','--input-type=module','--eval',unit],cwd='/',
                            env={'DSH_FS_TEST_MEMORY':'1'} if memory else {},check=True,timeout=10)
+        # Independent native Node oracle for the original JSONL scanner and
+        # crash-tail repair API shapes. Full JSONL/flock remains unaccepted.
+        handle_control=(ROOT/'test/session_filehandle.test.mjs').read_text()
+        native_root=work/'native-filehandle';native_root.mkdir(mode=0o700)
+        native_source="import fs from 'node:fs';\n"+handle_control+"\nconsole.log(JSON.stringify(await exerciseFileHandles(process.argv[1])));\n"
+        oracle=subprocess.check_output([node,'--input-type=module','--eval',native_source,str(native_root)],text=True,timeout=10)
+        virtual=CORE.read_text().split('async function run() {\n')[0]
+        virtual+="\nimport {randomBytes} from 'node:crypto';\nimport assert from 'node:assert/strict';\n"+codec+owner
+        virtual+="\ninstallReadonlyFilesystem();let testVersion=0n;const testRoot=encodeSessionSnapshot(new Map(['/dsh-home','/dsh-workspace'].map(name=>[name,{directory:true,mode:0o700,mtime:0}])));"
+        virtual+="\nconst filehandleOwner=installSessionFilesystem({files,directories,privateFiles:profileFiles,resolve:filenameOf,maxBytes:64,snapshotCapability:{bytes:testRoot,version:0n,commit(){return ++testVersion;}}});\n"
+        virtual+=handle_control+"\nconst actual=await exerciseFileHandles('/dsh-home');assert.deepEqual(actual,"+oracle.strip()+");\n"
+        virtual+="const saved=await fs.promises.readFile('/dsh-home/session.jsonl');const held=await fs.promises.open('/dsh-home/session.jsonl','r+');const before=testVersion;await assert.rejects(()=>held.truncate(65),{code:'ENOSPC'});assert.equal(testVersion,before);assert.deepEqual(await fs.promises.readFile('/dsh-home/session.jsonl'),saved);await assert.rejects(()=>held.read(Buffer.alloc(1),0,1,-1),{code:'EINVAL'});await held.close();const revoked=await fs.promises.open('/dsh-home/session.jsonl','r');filehandleOwner.close();await assert.rejects(()=>revoked.read(Buffer.alloc(1),0,1,null),{code:'E_DSH_SESSION_FS_REVOKED'});await assert.rejects(()=>fs.promises.open('/dsh-home/session.jsonl','r+'),{code:'E_DSH_SESSION_FS_REVOKED'});\n"
+        virtual+="console.log('OWNER_FILEHANDLE_JSONL_READ_TRUNCATE_OFFSET_ZERO_FILL_AND_NATIVE_NODE_PARITY=PASS_HOST_CONTROL');console.log('ORIGINAL_JSONL_NATIVE_FLOCK_AND_COMPLETE_SESSION_PERSISTENCE=NOT_ATTESTED');\n"
+        subprocess.run([node,'--permission','--input-type=module','--eval',virtual],cwd='/',env={},check=True,timeout=10)
         watchers=wrapped('virtual_watch.mjs',['installVirtualWatchers'],[
             "import fs from 'node:fs';","import path from 'node:path';","import {EventEmitter} from 'node:events';",
             "import {syncBuiltinESMExports} from 'node:module';"])

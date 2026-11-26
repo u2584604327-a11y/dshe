@@ -157,8 +157,8 @@ def verify(original,apk,original_default_config=False,original_http_services=Fal
             bootstrap="assets/engine-original-main.mjs"
             fail(bootstrap not in base and bootstrap in allnames,"MAIN_BOOTSTRAP_MISSING")
             payload=derived.read(bootstrap)
-            fail(len(payload)==82113 and hash_bytes(payload)==
-                 "ed3596480e9d45c93bc96d205966016e1f65b16635cd35a462c35f2d1e6a8106",
+            fail(len(payload)==84009 and hash_bytes(payload)==
+                 "d24745592b6872a1c0c30b779df03b903e00163e79bd193fe5bbf157fff54e3e",
                  "MAIN_BOOTSTRAP_SHA_OR_LENGTH")
             allowed_assets.add(bootstrap)
         fail({x for x in allnames if x.startswith(("lib/","assets/")) and
