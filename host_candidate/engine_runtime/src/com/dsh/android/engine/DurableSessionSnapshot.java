@@ -16,6 +16,10 @@ import java.util.*;
 final class DurableSessionSnapshot implements AutoCloseable {
   private static final Path STATE=Paths.get("snapshot.bin"),LOCK=Paths.get("owner.lock");
   private static final byte[] MAGIC={'D','S','H','S','T','0','0','1'};
+  // A second descriptor close can release this VM's POSIX locks on an inode.
+  // Reserve the directory identity BEFORE opening another lock descriptor.
+  private static final Set<Object> OPEN_ROOTS=new HashSet<>();
+  private final Object rootKey;
   private final SecureDirectoryStream<Path> directory;
   private final FileChannel lockChannel;
   private final FileLock lock;
@@ -36,6 +40,12 @@ final class DurableSessionSnapshot implements AutoCloseable {
     DirectoryStream<Path> opened=Files.newDirectoryStream(root);
     if(!(opened instanceof SecureDirectoryStream)){opened.close();throw new IOException("STORE_SECURE_DIRECTORY_UNAVAILABLE");}
     directory=(SecureDirectoryStream<Path>)opened;
+    Object key;
+    try{key=directory.getFileAttributeView(BasicFileAttributeView.class).readAttributes().fileKey();}
+    catch(IOException failure){directory.close();throw failure;}
+    if(key==null){directory.close();throw new IOException("STORE_FILE_KEY_UNAVAILABLE");}
+    synchronized(OPEN_ROOTS){if(!OPEN_ROOTS.add(key)){directory.close();throw new IOException("STORE_OWNER_BUSY");}}
+    rootKey=key;
     FileChannel channel=null;FileLock acquired=null;
     try{
       try{BasicFileAttributes attr=directory.getFileAttributeView(LOCK,BasicFileAttributeView.class,LinkOption.NOFOLLOW_LINKS).readAttributes();if(!attr.isRegularFile()||attr.size()!=0)throw new IOException("STORE_LOCK_TYPE");}catch(NoSuchFileException absent){}
@@ -45,7 +55,10 @@ final class DurableSessionSnapshot implements AutoCloseable {
       try{acquired=channel.tryLock();}catch(OverlappingFileLockException busy){throw new IOException("STORE_OWNER_BUSY");}
       if(acquired==null)throw new IOException("STORE_OWNER_BUSY");
       readExisting();
-    }catch(IOException|RuntimeException failure){if(acquired!=null)acquired.release();if(channel!=null)channel.close();directory.close();throw failure;}
+    }catch(IOException|RuntimeException failure){
+      try{if(acquired!=null)acquired.release();}finally{try{if(channel!=null)channel.close();}finally{try{directory.close();}finally{synchronized(OPEN_ROOTS){OPEN_ROOTS.remove(rootKey);}}}}
+      throw failure;
+    }
     lockChannel=channel;lock=acquired;
   }
   private static byte[] hash(byte[] bytes)throws IOException{try{return MessageDigest.getInstance("SHA-256").digest(bytes);}catch(GeneralSecurityException impossible){throw new IOException("STORE_SHA_UNAVAILABLE");}}
@@ -95,6 +108,6 @@ final class DurableSessionSnapshot implements AutoCloseable {
   private void alive()throws IOException{if(closed||poisoned)throw new IOException(poisoned?"STORE_INDETERMINATE_REOPEN_REQUIRED":"STORE_CLOSED");}
   @Override public synchronized void close()throws IOException{
     if(closed)return;closed=true;if(current!=null)Arrays.fill(current,(byte)0);Arrays.fill(owner,(byte)0);
-    try{lock.release();}finally{try{lockChannel.close();}finally{directory.close();}}
+    try{lock.release();}finally{try{lockChannel.close();}finally{try{directory.close();}finally{synchronized(OPEN_ROOTS){OPEN_ROOTS.remove(rootKey);}}}}
   }
 }

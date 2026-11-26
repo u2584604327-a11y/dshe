@@ -11,11 +11,25 @@ public final class DurableSessionSnapshotTest {
     ByteArrayOutputStream bytes=new ByteArrayOutputStream();DataOutputStream out=new DataOutputStream(bytes);out.writeBytes("DSHFS001");out.writeInt(3);
     for(String path:new String[]{"/dsh-home","/dsh-workspace",name}){byte[] encoded=path.getBytes("UTF-8");out.writeShort(encoded.length);out.write(encoded);boolean dir=!path.equals(name);out.writeByte(dir?1:0);out.writeShort(dir?0700:0600);out.writeLong(1);out.writeInt(dir?0:value.length);if(!dir)out.write(value);}return bytes.toByteArray();
   }
+  private static ProcessBuilder child(boolean android,String mode,Path root){
+    return android?new ProcessBuilder("/system/bin/app_process","-Xmx32m","/",DurableSessionSnapshotTest.class.getName(),mode,root.toString()):
+        new ProcessBuilder(Paths.get(System.getProperty("java.home"),"bin","java").toString(),"-cp",System.getProperty("java.class.path"),DurableSessionSnapshotTest.class.getName(),mode,root.toString());
+  }
+  private static String readLine(Process child)throws Exception{
+    ExecutorService reader=Executors.newSingleThreadExecutor(task->{Thread thread=new Thread(task,"snapshot-test-child-ack");thread.setDaemon(true);return thread;});
+    Future<String> result=reader.submit(()->{ByteArrayOutputStream bytes=new ByteArrayOutputStream();int b;while((b=child.getInputStream().read())!=-1&&b!='\n'){if(bytes.size()>=128)throw new IOException("CHILD_ACK_BOUND");if(b!='\r')bytes.write(b);}return bytes.toString("US-ASCII");});
+    try{return result.get(8,TimeUnit.SECONDS);}finally{reader.shutdownNow();}
+  }
   public static void main(String[] args)throws Exception{
-    if(args.length==2&&args[0].equals("--halt")){
+    if(args.length==2&&args[0].equals("--try-lock")){
+      try(DurableSessionSnapshot store=new DurableSessionSnapshot(Paths.get(args[1]),OWNER)){throw new AssertionError("kernel_lock_lost");}
+      catch(IOException busy){if(!"STORE_OWNER_BUSY".equals(busy.getMessage()))throw busy;System.out.println("OWNER_SNAPSHOT_CHILD_LOCK=DENY_BUSY");}return;
+    }
+    if(args.length==2&&args[0].equals("--publish")){
       DurableSessionSnapshot store=new DurableSessionSnapshot(Paths.get(args[1]),OWNER);
       store.commit(0,snapshot("/dsh-home/record",new byte[]{4,5,6}));
-      Runtime.getRuntime().halt(17);return;
+      System.out.println("OWNER_SNAPSHOT_CHILD_COMMIT=FORCED");System.out.flush();
+      new CountDownLatch(1).await(30,TimeUnit.SECONDS);store.read();throw new AssertionError("parent_did_not_kill_child");
     }
     boolean android=args.length==2&&args[0].equals("--android");
     if(android){
@@ -25,9 +39,13 @@ public final class DurableSessionSnapshotTest {
     Path root=android?Files.createTempDirectory(Paths.get(args[1]),"dsh-durable-owner-"):Files.createTempDirectory("dsh-durable-owner-");Files.setPosixFilePermissions(root,PosixFilePermissions.fromString("rwx------"));
     byte[] first=snapshot("/dsh-home/record",new byte[]{1,2,3}),second=snapshot("/dsh-home/record",new byte[]{4,5,6});
     try{
+      System.out.println("OWNER_SNAPSHOT_STAGE=OPEN");
       try(DurableSessionSnapshot store=new DurableSessionSnapshot(root,OWNER)){
         yes(store.read().version==0,"empty_version");
         denied(()->new DurableSessionSnapshot(root,OWNER),"STORE_OWNER_BUSY");
+        Process contender=child(android,"--try-lock",root).start();
+        try{yes("OWNER_SNAPSHOT_CHILD_LOCK=DENY_BUSY".equals(readLine(contender)),"same_vm_duplicate_did_not_release_kernel_lock");yes(contender.waitFor(8,TimeUnit.SECONDS)&&contender.exitValue()==0,"foreign_process_cannot_enter_live_owner");}finally{if(contender.isAlive())contender.destroyForcibly();}
+        System.out.println("OWNER_SNAPSHOT_STAGE=COMMIT");
         yes(store.commit(0,first)==1,"file_force_rename_directory_force");
         first[0]^=1;yes(store.read().bytes[0]=='D',"input_is_copied");first[0]^=1;
         DurableSessionSnapshot.State exposed=store.read();exposed.bytes[0]=0;yes(store.read().bytes[0]=='D',"output_is_copied");
@@ -39,25 +57,28 @@ public final class DurableSessionSnapshotTest {
         yes(store.read().version==1&&Arrays.equals(store.read().bytes,first),"negative_commits_preserve_old_snapshot");
         yes(store.commit(1,second)==2,"atomic_replace_existing_snapshot");
       }
+      System.out.println("OWNER_SNAPSHOT_STAGE=REOPEN");
       try(DurableSessionSnapshot reopened=new DurableSessionSnapshot(root,OWNER)){
         yes(reopened.read().version==2&&Arrays.equals(reopened.read().bytes,second),"restart_retains_version_and_bytes");
       }
       denied(()->new DurableSessionSnapshot(root,OWNER.replace('a','b')),"STORE_ENVELOPE");
       byte[] disk=Files.readAllBytes(root.resolve("snapshot.bin"));disk[disk.length-1]^=1;Files.write(root.resolve("snapshot.bin"),disk);
       denied(()->new DurableSessionSnapshot(root,OWNER),"STORE_CORRUPT");disk[disk.length-1]^=1;Files.write(root.resolve("snapshot.bin"),disk);
+      System.out.println("OWNER_SNAPSHOT_STAGE=SYMLINK_NEGATIVES");
       Path link=root.resolve("root-link");Files.createSymbolicLink(link,root);
       denied(()->new DurableSessionSnapshot(link,OWNER),"STORE_PRIVATE_ROOT");Files.delete(link);
       Path escaped=root.resolve("unrelated");Files.write(escaped,new byte[]{9,8,7});
       Files.delete(root.resolve("snapshot.bin"));Files.createSymbolicLink(root.resolve("snapshot.bin"),escaped);
       denied(()->new DurableSessionSnapshot(root,OWNER),"STORE_STATE_TYPE");yes(Arrays.equals(Files.readAllBytes(escaped),new byte[]{9,8,7}),"no_symlink_target_touch");
       Files.delete(root.resolve("snapshot.bin"));Files.delete(escaped);
-      ProcessBuilder command=android?
-          new ProcessBuilder("/system/bin/app_process","/",DurableSessionSnapshotTest.class.getName(),"--halt",root.toString()):
-          new ProcessBuilder(Paths.get(System.getProperty("java.home"),"bin","java").toString(),"-cp",System.getProperty("java.class.path"),DurableSessionSnapshotTest.class.getName(),"--halt",root.toString());
-      Process child=command.start();
-      boolean stopped=child.waitFor(8,TimeUnit.SECONDS);
-      if(!stopped){child.destroyForcibly();child.waitFor(2,TimeUnit.SECONDS);}
-      yes(stopped&&child.exitValue()==17,"child_terminated_without_close");
+      System.out.println("OWNER_SNAPSHOT_STAGE=CHILD_COMMIT");
+      Process child=child(android,"--publish",root).start();
+      try{
+        yes("OWNER_SNAPSHOT_CHILD_COMMIT=FORCED".equals(readLine(child)),"child_ack_after_both_force_operations");
+        denied(()->new DurableSessionSnapshot(root,OWNER),"STORE_OWNER_BUSY");
+        child.destroyForcibly();yes(child.waitFor(8,TimeUnit.SECONDS)&&child.exitValue()!=0,"child_killed_without_close");
+      }finally{if(child.isAlive()){child.destroyForcibly();child.waitFor(2,TimeUnit.SECONDS);}}
+      System.out.println("OWNER_SNAPSHOT_STAGE=RECOVER_AFTER_KILL");
       try(DurableSessionSnapshot restarted=new DurableSessionSnapshot(root,OWNER)){
         yes(restarted.read().version==1&&Arrays.equals(restarted.read().bytes,second),"forced_commit_survives_process_halt_and_releases_lock");
       }

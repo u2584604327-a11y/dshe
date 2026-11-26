@@ -34,11 +34,14 @@ done
 grep -Eq '^P68_ANDROID35_RELIABLE_PIPE_OWNERSHIP=PASS checks=[1-9][0-9]*$' .p68pipetmp/android-result.txt
 
 # The same Android35 launch also checks the actual storage provider and
-# file+directory force across a child process halt. This is shell-UID storage,
+# file+directory force across a forced child-process termination. This is shell-UID storage,
 # not an authenticated production account root or isolated Node broker.
 adb -s "$serial" shell "mkdir -p $remote-store && chmod 700 $remote-store"
-adb -s "$serial" shell "su 2000 /system/bin/sh -c 'CLASSPATH=$remote.dex:$remote.apk /system/bin/app_process / com.dsh.android.engine.DurableSessionSnapshotTest --android $remote-store'" \
-  | tr -d '\r' | tee .p68pipetmp/store-result.txt
+if ! adb -s "$serial" shell "su 2000 /system/bin/sh -c 'CLASSPATH=$remote.dex:$remote.apk /system/bin/app_process -Xmx32m / com.dsh.android.engine.DurableSessionSnapshotTest --android $remote-store'" \
+  | tr -d '\r' | tee .p68pipetmp/store-result.txt;then
+  adb -s "$serial" logcat -d -v brief -s libc:F lmkd:V lowmemorykiller:V | tail -n 35 || true
+  exit 1
+fi
 grep -Eq '^OWNER_SNAPSHOT_REAL_FILE_FORCE_ATOMIC_REPLACE_DIRECTORY_FORCE_AND_PROCESS_RESTART=PASS_ANDROID35_SHELL_UID checks=[1-9][0-9]*$' .p68pipetmp/store-result.txt
 grep -Fxq 'OWNER_SNAPSHOT_ISOLATED_NODE_WIRE_AND_PRODUCTION_OWNER=NOT_TESTED' .p68pipetmp/store-result.txt
 adb -s "$serial" shell rmdir "$remote-store"

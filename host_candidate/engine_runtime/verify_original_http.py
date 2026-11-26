@@ -72,6 +72,42 @@ def reference(apk, destination, wire):
     print('HTTP_TEST_ORIGINAL_COMPLETE_RESOURCE_CLOSURE=PASS members=30411 bytes=262498938')
 
 
+def verify_snapshot_lock_reproduction(work):
+    source=ROOT/'src/com/dsh/android/engine/DurableSessionSnapshot.java'
+    old=source.read_text()
+    additions=[
+        '  // A second descriptor close can release this VM\'s POSIX locks on an inode.\n'
+        '  // Reserve the directory identity BEFORE opening another lock descriptor.\n'
+        '  private static final Set<Object> OPEN_ROOTS=new HashSet<>();\n'
+        '  private final Object rootKey;\n',
+        '    Object key;\n'
+        '    try{key=directory.getFileAttributeView(BasicFileAttributeView.class).readAttributes().fileKey();}\n'
+        '    catch(IOException failure){directory.close();throw failure;}\n'
+        '    if(key==null){directory.close();throw new IOException("STORE_FILE_KEY_UNAVAILABLE");}\n'
+        '    synchronized(OPEN_ROOTS){if(!OPEN_ROOTS.add(key)){directory.close();throw new IOException("STORE_OWNER_BUSY");}}\n'
+        '    rootKey=key;\n',
+    ]
+    for added in additions:
+        require(old.count(added)==1,'STORE_LEGACY_SOURCE_ANCHOR');old=old.replace(added,'')
+    cleanup=('    }catch(IOException|RuntimeException failure){\n'
+             '      try{if(acquired!=null)acquired.release();}finally{try{if(channel!=null)channel.close();}finally{try{directory.close();}finally{synchronized(OPEN_ROOTS){OPEN_ROOTS.remove(rootKey);}}}}\n'
+             '      throw failure;\n    }')
+    require(old.count(cleanup)==1,'STORE_LEGACY_CLEANUP_ANCHOR')
+    old=old.replace(cleanup,'    }catch(IOException|RuntimeException failure){if(acquired!=null)acquired.release();if(channel!=null)channel.close();directory.close();throw failure;}')
+    old=old.replace('try{lock.release();}finally{try{lockChannel.close();}finally{try{directory.close();}finally{synchronized(OPEN_ROOTS){OPEN_ROOTS.remove(rootKey);}}}}',
+                    'try{lock.release();}finally{try{lockChannel.close();}finally{directory.close();}}')
+    blob=old.encode();require(hashlib.sha1(b'blob '+str(len(blob)).encode()+b'\0'+blob).hexdigest()==
+        '7bcfffd5ff7b66d1a7f8e5d41ffa002c09807a96','STORE_ORIGINAL_FAILURE_BLOB')
+    folder=work/'legacy-store';folder.mkdir();(folder/'DurableSessionSnapshot.java').write_bytes(blob)
+    subprocess.run(['javac','--release','8','-d',str(folder),str(folder/'DurableSessionSnapshot.java'),
+                    str(ROOT/'src/com/dsh/android/engine/SessionSnapshotCodec.java'),
+                    str(ROOT/'test/com/dsh/android/engine/DurableSessionSnapshotTest.java')],check=True)
+    control=subprocess.run(['java','-cp',str(folder),'com.dsh.android.engine.DurableSessionSnapshotTest'],
+                           capture_output=True,text=True,timeout=20)
+    require(control.returncode!=0 and 'same_vm_duplicate_did_not_release_kernel_lock' in control.stderr,'STORE_LEGACY_KERNEL_LOCK_LOSS_NOT_REPRODUCED')
+    print('OWNER_SNAPSHOT_OLD_DUPLICATE_CLOSE_RELEASES_KERNEL_LOCK=REPRODUCED')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apk', type=Path, required=True)
@@ -108,7 +144,8 @@ def main():
         subprocess.run(['javac','--release','8','-cp',str(args.android_jar.resolve()),'-sourcepath',os.pathsep.join(roots),
                         '-d',str(classes),*map(str,sources)],check=True)
         classpath=str(classes)+os.pathsep+str(args.android_jar.resolve())
-        subprocess.run(['java','-cp',classpath,'com.dsh.android.engine.DurableSessionSnapshotTest'],check=True,timeout=20)
+        verify_snapshot_lock_reproduction(work)
+        subprocess.run(['java','-cp',classpath,'com.dsh.android.engine.DurableSessionSnapshotTest'],check=True,timeout=25)
         # Recompile the byte-identified pre-fix source as an independent legacy
         # control. No original/baseline source or production gate is changed.
         actual=host_root/'p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java'
