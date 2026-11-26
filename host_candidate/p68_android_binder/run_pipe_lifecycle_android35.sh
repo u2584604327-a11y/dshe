@@ -36,10 +36,16 @@ grep -Eq '^P68_ANDROID35_RELIABLE_PIPE_OWNERSHIP=PASS checks=[1-9][0-9]*$' .p68p
 # The same Android35 launch also checks the actual storage provider and
 # file+directory force across a forced child-process termination. This is shell-UID storage,
 # not an authenticated production account root or isolated Node broker.
-adb -s "$serial" shell "mkdir -p $remote-store && chmod 700 $remote-store"
+# adb is root in this disposable emulator. Creating mode 0700 as root then
+# entering the shell-UID VM denies the very first temp directory operation.
+# Create the test root as the actual storage owner; never relax its mode.
+adb -s "$serial" shell "su 2000 /system/bin/sh -c 'mkdir $remote-store && chmod 700 $remote-store'"
+[[ "$(adb -s "$serial" shell stat -c '%u:%a' "$remote-store" | tr -d '\r\n')" == 2000:700 ]]
 if ! adb -s "$serial" shell "su 2000 /system/bin/sh -c 'CLASSPATH=$remote.dex:$remote.apk /system/bin/app_process -Xmx32m / com.dsh.android.engine.DurableSessionSnapshotTest --android $remote-store'" \
   | tr -d '\r' | tee .p68pipetmp/store-result.txt;then
-  adb -s "$serial" logcat -d -v brief -s libc:F lmkd:V lowmemorykiller:V | tail -n 35 || true
+  # RuntimeInit kills app_process on an uncaught Java exception as well.
+  # Exit 137 alone therefore does not establish an LMK/environment failure.
+  adb -s "$serial" logcat -d -v brief -s AndroidRuntime:E libc:F lmkd:V lowmemorykiller:V | tail -n 35 || true
   exit 1
 fi
 grep -Eq '^OWNER_SNAPSHOT_REAL_FILE_FORCE_ATOMIC_REPLACE_DIRECTORY_FORCE_AND_PROCESS_RESTART=PASS_ANDROID35_SHELL_UID checks=[1-9][0-9]*$' .p68pipetmp/store-result.txt

@@ -21,6 +21,7 @@ public final class DurableSessionSnapshotTest {
     try{return result.get(8,TimeUnit.SECONDS);}finally{reader.shutdownNow();}
   }
   public static void main(String[] args)throws Exception{
+    if(args.length==2&&args[0].equals("--android"))System.out.println("OWNER_SNAPSHOT_STAGE=ANDROID_ENTRY");
     if(args.length==2&&args[0].equals("--try-lock")){
       try(DurableSessionSnapshot store=new DurableSessionSnapshot(Paths.get(args[1]),OWNER)){throw new AssertionError("kernel_lock_lost");}
       catch(IOException busy){if(!"STORE_OWNER_BUSY".equals(busy.getMessage()))throw busy;System.out.println("OWNER_SNAPSHOT_CHILD_LOCK=DENY_BUSY");}return;
