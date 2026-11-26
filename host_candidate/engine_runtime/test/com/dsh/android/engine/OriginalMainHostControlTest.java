@@ -21,29 +21,42 @@ public final class OriginalMainHostControlTest {
   "# 由 DSH Android 客户端生成，请勿手改（每次启动会整体覆盖）。",
   "# 挂载右侧栏「AI 浏览器」入口插件；插件包随 APK 分发，已解到 .dsh/browser-pane。",
   "- insert:", "    - id: dsh-android-browser-pane", "      name: 'file://");
- static OriginalWebLaunch launch(Integer port,boolean checkDrift,OriginalBrowserPane browser)throws IOException{
+ private static final String MOBILE_PREFIX = String.join("\n",
+  "# 由 DSH Android 客户端生成，请勿手改（每次启动会整体覆盖）。",
+  "# 挂载移动端 UI 适配插件；插件包随 APK 分发，已解到 .dsh/mobile-ui。",
+  "# 用 file:// 绝对路径挂载：包刻意放在 profile 的 node_modules 之外，",
+  "# 否则用户每次用插件管理器装东西都会被 pnpm 挪进 .ignored/。",
+  "- insert:", "    - id: dsh-android-mobile", "      name: 'file://");
+ static OriginalWebLaunch launch(Integer port,boolean checkDrift,OriginalClientPlugin mobile,
+     OriginalClientPlugin browser)throws IOException{
   File node=new File("/private/termux/usr/bin/node"),entry=new File("/private/engine/"+OriginalWebLaunch.ENTRY);
   File workspace=new File("/private/workspace"),patch=new File("/private/home/.dsh/workspace.patch.yml");
-  File browserPatch=new File(patch.getParentFile(),OriginalBrowserPane.PATCH);
-  String browserEntry=new File(patch.getParentFile(),OriginalBrowserPane.ENTRY).getPath();
+  File mobilePatch=new File(patch.getParentFile(),mobile.kind.patch);
+  String mobileEntry=new File(patch.getParentFile(),mobile.kind.entry).getPath();
+  byte[] mobileSource=(MOBILE_PREFIX+mobileEntry+"'\n").getBytes(StandardCharsets.UTF_8);
+  File browserPatch=new File(patch.getParentFile(),browser.kind.patch);
+  String browserEntry=new File(patch.getParentFile(),browser.kind.entry).getPath();
   byte[] browserSource=(BROWSER_PREFIX+browserEntry+"'\n").getBytes(StandardCharsets.UTF_8);
   List<String> argv=new ArrayList<>(Arrays.asList(node.getPath(),entry.getPath(),"--profile","web",
-      "--patch",browserPatch.getPath(),"--patch",patch.getPath()));
+      "--patch",mobilePatch.getPath(),"--patch",browserPatch.getPath(),"--patch",patch.getPath()));
   if(port!=null)argv.addAll(Arrays.asList("--port",port.toString()));argv.add("--no-open");
   byte[] original=(WORKSPACE_PREFIX+"    documentsDirectory: '/private/workspace'\n").getBytes(StandardCharsets.UTF_8);
   ProcessBuilder builder=new ProcessBuilder(argv).directory(workspace).redirectErrorStream(true);
-  OriginalWebLaunch launch=OriginalWebLaunch.capture(builder,node,entry,workspace,patch,original,browserPatch,browserSource,browser);
+  OriginalWebLaunch launch=OriginalWebLaunch.capture(builder,node,entry,workspace,patch,original,mobilePatch,mobileSource,mobile,browserPatch,browserSource,browser);
   if(checkDrift){
    launch.requireSame(builder);
    byte[] tampered=original.clone();tampered[4]^=1;
-   try{OriginalWebLaunch.capture(builder,node,entry,workspace,patch,tampered,browserPatch,browserSource,browser);throw new AssertionError("workspace_patch_tamper_accepted");}
+   try{OriginalWebLaunch.capture(builder,node,entry,workspace,patch,tampered,mobilePatch,mobileSource,mobile,browserPatch,browserSource,browser);throw new AssertionError("workspace_patch_tamper_accepted");}
    catch(IOException denied){yes("MAIN_WORKSPACE_PATCH_SOURCE".equals(denied.getMessage()),"workspace_patch_tamper_denied");}
    byte[] foreign=(WORKSPACE_PREFIX+"    documentsDirectory: '/foreign/workspace'\n").getBytes(StandardCharsets.UTF_8);
-   try{OriginalWebLaunch.capture(builder,node,entry,workspace,patch,foreign,browserPatch,browserSource,browser);throw new AssertionError("workspace_owner_tamper_accepted");}
+   try{OriginalWebLaunch.capture(builder,node,entry,workspace,patch,foreign,mobilePatch,mobileSource,mobile,browserPatch,browserSource,browser);throw new AssertionError("workspace_owner_tamper_accepted");}
    catch(IOException denied){yes("MAIN_WORKSPACE_PATCH_OWNER".equals(denied.getMessage()),"workspace_owner_tamper_denied");}
    byte[] foreignBrowser=(BROWSER_PREFIX+"/foreign/lib/index.js'\n").getBytes(StandardCharsets.UTF_8);
-   try{OriginalWebLaunch.capture(builder,node,entry,workspace,patch,original,browserPatch,foreignBrowser,browser);throw new AssertionError("browser_owner_tamper_accepted");}
+   try{OriginalWebLaunch.capture(builder,node,entry,workspace,patch,original,mobilePatch,mobileSource,mobile,browserPatch,foreignBrowser,browser);throw new AssertionError("browser_owner_tamper_accepted");}
    catch(IOException denied){yes("MAIN_BROWSER_PATCH_OWNER".equals(denied.getMessage()),"browser_owner_tamper_denied");}
+   byte[] foreignMobile=(MOBILE_PREFIX+"/foreign/lib/index.js'\n").getBytes(StandardCharsets.UTF_8);
+   try{OriginalWebLaunch.capture(builder,node,entry,workspace,patch,original,mobilePatch,foreignMobile,mobile,browserPatch,browserSource,browser);throw new AssertionError("mobile_owner_tamper_accepted");}
+   catch(IOException denied){yes("MAIN_MOBILE_PATCH_OWNER".equals(denied.getMessage()),"mobile_owner_tamper_denied");}
    builder.environment().put("TEST_DRIFT","1");
    try{launch.requireSame(builder);throw new AssertionError("environment_drift_accepted");}
    catch(IOException denied){yes("MAIN_LAUNCH_CHANGED".equals(denied.getMessage()),"environment_drift_denied");}
@@ -75,6 +88,14 @@ public final class OriginalMainHostControlTest {
   }
   public void close()throws Exception{process.destroy();deniedReady(process,startup.privateUrl());yes(process.waitFor(8,TimeUnit.SECONDS),"original_main_actual_shutdown_deadline");yes(process.exitValue()==0,"original_main_actual_shutdown_exit0");process.close();yes(process.awaitClosed(5,TimeUnit.SECONDS),"original_main_owner_disposed");yes(process.failure().equals("NONE/NONE"),"original_main_transport_clean_"+process.failure());}
  }
+ private static OriginalClientPlugin readPlugin(OriginalClientPlugin.Kind kind,String filename)throws IOException{
+  byte[] archive=Files.readAllBytes(Paths.get(filename));
+  OriginalClientPlugin plugin=OriginalClientPlugin.read(kind,new ByteArrayInputStream(archive));
+  archive[0]^=1;
+  try{OriginalClientPlugin.read(kind,new ByteArrayInputStream(archive));throw new AssertionError("archive_tamper_accepted_"+kind);}
+  catch(IOException denied){yes(kind.failure("ARCHIVE_SEAL").equals(denied.getMessage()),"archive_tamper_denied_"+kind);}
+  return plugin;
+ }
  public static void main(String[] args)throws Exception{
   String shape="/?token="+String.join("",Collections.nCopies(43,"a"));
   String url="dsh web: http://127.0.0.1:34567";
@@ -89,12 +110,10 @@ public final class OriginalMainHostControlTest {
   yes(originalOption==null||originalOption==0,"original_android_port_plan");
   Path root=ProfileSnapshotWireTest.root();String oldCookie=null,oldToken=null,oldUrl=null;int port=0;
   try{
-   byte[] browserAsset=Files.readAllBytes(Paths.get(args[5]));
-   OriginalBrowserPane browser=OriginalBrowserPane.read(new ByteArrayInputStream(browserAsset));
-   browserAsset[0]^=1;
-   try{OriginalBrowserPane.read(new ByteArrayInputStream(browserAsset));throw new AssertionError("browser_archive_tamper_accepted");}
-   catch(IOException denied){yes("MAIN_BROWSER_ARCHIVE_SEAL".equals(denied.getMessage()),"browser_archive_tamper_denied");}
-   for(int generation=0;generation<2;generation++)try(Activation a=new Activation(args,root,launch(generation==0?originalOption:Integer.valueOf(port),generation==0,browser))){
+   OriginalClientPlugin browser=readPlugin(OriginalClientPlugin.Kind.BROWSER,args[5]);
+   OriginalClientPlugin mobile=readPlugin(OriginalClientPlugin.Kind.MOBILE,args[6]);
+   for(int generation=0;generation<2;generation++)try(Activation a=new Activation(args,root,
+       launch(generation==0?originalOption:Integer.valueOf(port),generation==0,mobile,browser))){
     port=a.port;yes(request(port,"/",null,null).status==401,"original_main_unauth_frontend_denied");
     if(generation==0&&originalOption==null){
      yes(port==HttpProcessTransport.ORIGINAL_WEB_DEFAULT_PORT,"original_sealed_web_default_port");
@@ -111,6 +130,8 @@ public final class OriginalMainHostControlTest {
     yes(!OriginalMainStartup.permitsVerifiedAnnouncement(a.process,announcement),"stdout_before_http_proof_not_ready");
     yes(a.process.getInputStream().read()==-1,"raw_startup_line_not_exposed_before_proof");
     a.login();OriginalMainStartup.requireVerifiedReady(a.process,ownUrl);
+    Reply status=request(port,"/api/dsh-android/privileged",a.cookie,"{}");
+    yes(status.status==403&&status.body.length==0,"isolated_mobile_privilege_post_denied");
     yes(OriginalMainStartup.permitsVerifiedAnnouncement(a.process,announcement),"verified_http_announcement_accepted");
     InputStream admitted=a.process.getInputStream();
     yes(announcement.equals(line(admitted)),"exact_verified_original_stdout_released_after_proof");
@@ -132,7 +153,7 @@ public final class OriginalMainHostControlTest {
    System.out.println("FULL_ORIGINAL_MAIN_HTTP_AUTH_FRONTEND_WORKSPACE_RPC_WS_AND_RESTART=PASS_HOST_INTERNALS_CONTROL checks="+checks);
    System.out.println("ORIGINAL_MAIN_PRIVATE_STARTUP_AND_COOKIE_JAR_ISOLATION=PASS_HOST");
    System.out.println("ORIGINAL_MAIN_WORKSPACE_OVERLAY_SOURCE_OWNER_AND_DEFAULT_RPC=PASS_HOST");
-   System.out.println("ORIGINAL_MAIN_BROWSER_PANE_ARCHIVE_OWNER_AND_CLIENT_DELIVERY=PASS_HOST");
+   System.out.println("ORIGINAL_MAIN_BROWSER_AND_MOBILE_SIGNED_CLIENTS_AND_PRIVILEGE_FENCE=PASS_HOST");
    System.out.println("ORIGINAL_MAIN_OWNED_READY_PROOF_FOREIGN_CHANGED_RETIRED_AND_STOPPED=PASS_HOST");
    System.out.println("ORIGINAL_ARM64_BINDING_ANDROID_ENGINE_COROUTINE_MODEL_AND_READY=NOT_ATTESTED");
   }finally{ProfileSnapshotWireTest.clean(root);}

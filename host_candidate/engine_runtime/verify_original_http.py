@@ -230,10 +230,13 @@ def main():
         native_file=native_home/'libdsh_original_require_builtin.so'
         native_file.write_bytes(native_files[native_bundle.NATIVE]);native_file.chmod(0o444)
         browser_asset=work/'browser-pane.zip'
+        mobile_asset=work/'mobile-ui.zip'
         with zipfile.ZipFile(args.apk.resolve()) as package:
             browser_asset.write_bytes(package.read('assets/browser-pane.zip'))
+            mobile_asset.write_bytes(package.read('assets/mobile-ui.zip'))
         subprocess.run(['java','-cp',classpath,'com.dsh.android.engine.OriginalMainHostControlTest',node,
-                        str(control),str(module_stream),str(native_home),str(original),str(browser_asset)],check=True,timeout=90)
+                        str(control),str(module_stream),str(native_home),str(original),str(browser_asset),
+                        str(mobile_asset)],check=True,timeout=90)
         # Recompile the byte-identified pre-fix source as an independent legacy
         # control. No original/baseline source or production gate is changed.
         actual=host_root/'p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java'

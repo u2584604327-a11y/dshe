@@ -58,7 +58,7 @@ def patches(sources):
         'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalMainHttpChecks.java',
         'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalMainStartup.java',
         'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalWebLaunch.java',
-        'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalBrowserPane.java',
+        'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalClientPlugin.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalAndroidWebLaunch.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainOwnerHandoff.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainTestSession.java',
@@ -89,7 +89,7 @@ def main():
     if not git('remote','get-url','origin').removesuffix('.git').endswith('/'+REPO):raise RuntimeError('HTTP_TEST_WRONG_REPOSITORY')
     for name,pin in PINS.items():
         if git('hash-object',name)!=pin:raise RuntimeError('HTTP_TEST_PIN_CHANGED')
-    digest="a6b4735816a82d1b7095763982333d6fbcff7cc3499e0865976e2578864b5359"
+    digest="519c5c9973dc12784f055ec64397bc10319cf85bd23245b3e29acfa99894814b"
     java=Path('host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java').read_text()
     if 'MAIN_TEST_BOOTSTRAP_SHA="'+digest+'"' not in java:raise RuntimeError('HTTP_TEST_COMPOSED_BOOTSTRAP_PIN')
     for name,text in patches({name:Path(name).read_text() for name in PINS}).items():Path(name).write_text(text)

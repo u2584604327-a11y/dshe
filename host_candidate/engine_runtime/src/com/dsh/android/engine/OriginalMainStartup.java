@@ -36,9 +36,10 @@ public final class OriginalMainStartup {
             "4bc914bfbb6adbdd63953a29f63835eb7127defd2a973149d64cdab489f1a9a5";
     private static final Pattern TARGET = Pattern.compile("/\\?token=[A-Za-z0-9_-]{43}");
     private static final Pattern CHILD_DENIAL = Pattern.compile("ORIGINAL_MAIN_DENY=[A-Z0-9_]{1,64}");
+    // The signed mobile client adds 621475 bytes to the existing application combo.
+    private static final int PLUGIN_COMBO_LIMIT = 3 * 1024 * 1024;
     private static final Pattern PLUGIN_COMBO = Pattern.compile(
             "plugins/\\?\\?([A-Za-z0-9_@./,-]{1,3000})&(?:amp;)?rev=([a-f0-9]{12})(?![a-f0-9])");
-    private static final String BROWSER_SCRIPT = "dsh-android-browser-pane/client.js";
     private final HttpProcessTransport process;
     private final int port;
     private final String target;
@@ -225,22 +226,37 @@ public final class OriginalMainStartup {
         require(index.status == 200 && html.contains("src=\"." + FRONTEND_SCRIPT + "\""), "MAIN_FRONTEND");
         Reply script = request(FRONTEND_SCRIPT, null, 1024 * 1024);
         require(script.status == 200 && FRONTEND_SHA.equals(hex(sha(script.body))), "MAIN_ORIGINAL_JS_BYTES");
-        OriginalBrowserPane browser = process.browserPane();
-        if (browser != null) verifyBrowserBundle(html, cookie, browser);
+        if (process.mobilePlugin() != null) {
+            verifyClientBundles(html, cookie, process.mobilePlugin(), process.browserPlugin());
+            Reply privileged = request("/api/dsh-android/privileged", cookie, 256);
+            require(privileged.status == 403 && privileged.body.length == 0, "MAIN_MOBILE_PRIVILEGE_FENCE");
+        }
         require(process.ownsListener(port), "MAIN_LISTENER_REVOKED");
     }
 
-    private void verifyBrowserBundle(String html, String cookie, OriginalBrowserPane browser) throws IOException {
+    private void verifyClientBundles(String html, String cookie, OriginalClientPlugin mobile,
+            OriginalClientPlugin browser) throws IOException {
+        Map<String, OriginalClientPlugin> pending = new HashMap<>();
+        pending.put(mobile.kind.script, mobile);
+        pending.put(browser.kind.script, browser);
         Matcher combos = PLUGIN_COMBO.matcher(html);
         while (combos.find()) {
             String members = combos.group(1);
-            if (!Arrays.asList(members.split(",")).contains(BROWSER_SCRIPT)) continue;
-            Reply bundle = request("/plugins/??" + members + "&rev=" + combos.group(2), cookie, 2 * 1024 * 1024);
-            require(bundle.status == 200 && new String(bundle.body, StandardCharsets.ISO_8859_1)
-                    .contains(new String(browser.clientBytes(), StandardCharsets.ISO_8859_1)), "MAIN_BROWSER_CLIENT_BYTES");
-            return;
+            String[] scripts = members.split(",");
+            if (Arrays.stream(scripts).noneMatch(pending::containsKey)) continue;
+            Reply bundle = request("/plugins/??" + members + "&rev=" + combos.group(2), cookie, PLUGIN_COMBO_LIMIT);
+            require(bundle.status == 200, "MAIN_CLIENT_PLUGIN_BUNDLE");
+            String body = new String(bundle.body, StandardCharsets.ISO_8859_1);
+            for (String script : scripts) {
+                OriginalClientPlugin plugin = pending.remove(script);
+                if (plugin != null) {
+                    require(body.contains(new String(plugin.clientBytes(), StandardCharsets.ISO_8859_1)),
+                            plugin.kind.failure("CLIENT_BYTES"));
+                }
+            }
+            if (pending.isEmpty()) return;
         }
-        throw denied("MAIN_BROWSER_CLIENT_NOT_MOUNTED");
+        throw denied("MAIN_CLIENT_PLUGINS_NOT_MOUNTED");
     }
 
     void verifyRetiredCredentials(String retiredTarget, String retiredCookie) throws IOException {

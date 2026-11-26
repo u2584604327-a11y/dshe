@@ -44,6 +44,7 @@ async function runOriginalMain(){
   };
   process.once('exit',revokeMainOwner);
   process.argv=[process.execPath,ENTRY,'--profile','web'];
+  if(mainTransport.mobileOverlay)process.argv.push('--patch',mobileUiPatch);
   if(mainTransport.browserOverlay)process.argv.push('--patch',browserPanePatch);
   if(mainTransport.workspaceOverlay)process.argv.push('--patch',workspacePatch);
   if(!mainTransport.omitPort)process.argv.push('--port',String(mainTransport.requestedPort));

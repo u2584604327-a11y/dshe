@@ -34,20 +34,16 @@ final class OriginalAndroidWebLaunch {
         Path root = Files.createTempDirectory(host.getCacheDir().toPath(), "original-launch-");
         Path home = root.resolve("home"), dshHome = home.resolve(".dsh");
         Path patch = dshHome.resolve(OriginalWebLaunch.WORKSPACE_PATCH);
-        Path browserPatch = dshHome.resolve(OriginalBrowserPane.PATCH);
-        Path browserEntry = dshHome.resolve(OriginalBrowserPane.ENTRY);
+        OriginalClientPlugin.Kind mobileKind = OriginalClientPlugin.Kind.MOBILE;
+        OriginalClientPlugin.Kind browserKind = OriginalClientPlugin.Kind.BROWSER;
+        Path mobilePatch = dshHome.resolve(mobileKind.patch), mobileEntry = dshHome.resolve(mobileKind.entry);
+        Path browserPatch = dshHome.resolve(browserKind.patch), browserEntry = dshHome.resolve(browserKind.entry);
         Path workspace = root.resolve("workspace");
         try {
             Files.createDirectories(dshHome);
             Files.createDirectory(workspace);
-            OriginalBrowserPane browser;
-            try (InputStream input = host.getAssets().open(OriginalBrowserPane.ASSET)) {
-                browser = OriginalBrowserPane.read(input);
-            }
-            // The original generator checks that this entry is a regular file.
-            // Stage the verified bytes in this invocation's private TEST layout.
-            Files.createDirectories(browserEntry.getParent());
-            Files.write(browserEntry, browser.entryBytes(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            OriginalClientPlugin mobile = stagePlugin(host, mobileKind, mobileEntry);
+            OriginalClientPlugin browser = stagePlugin(host, browserKind, browserEntry);
             Context owner = new ContextWrapper(host) {
                 @Override public File getFilesDir() { return root.toFile(); }
                 @Override public Context getApplicationContext() { return this; }
@@ -56,6 +52,7 @@ final class OriginalAndroidWebLaunch {
             Constructor<?> constructor = type.getDeclaredConstructor(Context.class);
             constructor.setAccessible(true);
             Object engine = constructor.newInstance(owner);
+            byte[] mobilePatchBytes = generatePatch(type, engine, "writeMobileUiPatch", mobilePatch);
             byte[] browserPatchBytes = generatePatch(type, engine, "writeBrowserPanePatch", browserPatch);
             byte[] workspacePatchBytes = generatePatch(type, engine, "writeWorkspacePatch", patch);
             File node = root.resolve("termux/usr/bin/node").toFile();
@@ -65,15 +62,37 @@ final class OriginalAndroidWebLaunch {
             buildEngineArgs.setAccessible(true);
             @SuppressWarnings("unchecked")
             List<String> argv = (List<String>) buildEngineArgs.invoke(engine, node, entry, "web",
-                    Arrays.asList(browserPatch.toFile(), patch.toFile()), port);
+                    Arrays.asList(mobilePatch.toFile(), browserPatch.toFile(), patch.toFile()), port);
             ProcessBuilder original = new ProcessBuilder(argv).directory(workspace.toFile()).redirectErrorStream(true);
             OriginalWebLaunch plan = OriginalWebLaunch.capture(original, node, entry, workspace.toFile(),
-                    patch.toFile(), workspacePatchBytes, browserPatch.toFile(), browserPatchBytes, browser);
+                    patch.toFile(), workspacePatchBytes, mobilePatch.toFile(), mobilePatchBytes, mobile,
+                    browserPatch.toFile(), browserPatchBytes, browser);
             return new OriginalAndroidWebLaunch(engine, original, plan);
         } finally {
-            Path lib = browserEntry.getParent();
-            for (Path path : new Path[]{browserEntry, lib, lib.getParent(), lib.getParent().getParent(),
-                    browserPatch, patch, workspace, dshHome, home, root}) Files.deleteIfExists(path);
+            clearPlugin(mobileEntry);
+            clearPlugin(browserEntry);
+            for (Path path : new Path[]{mobilePatch, browserPatch, patch, workspace, dshHome, home, root}) {
+                Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    private static OriginalClientPlugin stagePlugin(Context host, OriginalClientPlugin.Kind kind, Path entry)
+            throws IOException {
+        OriginalClientPlugin plugin;
+        try (InputStream input = host.getAssets().open(kind.asset)) {
+            plugin = OriginalClientPlugin.read(kind, input);
+        }
+        // The signed patch generator requires a regular entry in this private layout.
+        Files.createDirectories(entry.getParent());
+        Files.write(entry, plugin.entryBytes(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        return plugin;
+    }
+
+    private static void clearPlugin(Path entry) throws IOException {
+        Path lib = entry.getParent();
+        for (Path path : new Path[]{entry, lib, lib.getParent(), lib.getParent().getParent()}) {
+            Files.deleteIfExists(path);
         }
     }
 
@@ -84,7 +103,7 @@ final class OriginalAndroidWebLaunch {
             throw new IOException("MAIN_LAUNCH_TEST_PATCH_REQUIRED");
         }
         try (InputStream input = Files.newInputStream(patch, LinkOption.NOFOLLOW_LINKS)) {
-            return OriginalBrowserPane.readBounded(input, OriginalWebLaunch.MAX_PATCH_BYTES);
+            return OriginalClientPlugin.readBounded(input, OriginalWebLaunch.MAX_PATCH_BYTES);
         }
     }
 }
