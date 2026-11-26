@@ -30,7 +30,9 @@ def main():
         view=DexView(archive.read('classes3.dex'));methods=index(view.dex)
         needed=['Lcom/dsh/android/engine/HttpProcessTransport;',
                 'Lcom/dsh/android/engine/OriginalHttpProbeActivity;',
-                'Lcom/dsh/android/engine/OriginalHttpIsolatedService;']
+                'Lcom/dsh/android/engine/OriginalHttpIsolatedService;',
+                'Lcom/dsh/android/engine/DurableSessionSnapshot;',
+                'Lcom/dsh/android/engine/SessionSnapshotCodec;']
         require(all(any(key[0]==name for key in methods) for name in needed),'HTTP_CLASSES_MISSING')
         for key,method in methods.items():
             if key[0]==needed[1] and method.get_code():

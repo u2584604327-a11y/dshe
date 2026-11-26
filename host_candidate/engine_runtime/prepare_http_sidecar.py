@@ -44,6 +44,8 @@ def patches(sources):
     builder=once(builder,anchor,anchor+''.join('  '+name+' \\\n' for name in [
         'host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50ModuleStream.java',
         'host_candidate/engine_runtime/src/com/dsh/android/engine/HttpProcessTransport.java',
+        'host_candidate/engine_runtime/src/com/dsh/android/engine/DurableSessionSnapshot.java',
+        'host_candidate/engine_runtime/src/com/dsh/android/engine/SessionSnapshotCodec.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalHttpIsolatedService.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalHttpProbeActivity.java']))
     builder=once(builder,'    "$ORIGINAL" "$DIR/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk"\nfi\nif test "${P47_NO_HOST_FALLBACK:-0}" = 1;',
