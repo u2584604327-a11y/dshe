@@ -77,7 +77,7 @@ def main():
     if not git('remote','get-url','origin').removesuffix('.git').endswith('/'+REPO):raise RuntimeError('HTTP_TEST_WRONG_REPOSITORY')
     for name,pin in PINS.items():
         if git('hash-object',name)!=pin:raise RuntimeError('HTTP_TEST_PIN_CHANGED')
-    digest="d24745592b6872a1c0c30b779df03b903e00163e79bd193fe5bbf157fff54e3e"
+    digest="11e1ada151faf44613a15fc9a241c84decb12d98893059772c434276b309385b"
     java=Path('host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java').read_text()
     if 'MAIN_TEST_BOOTSTRAP_SHA="'+digest+'"' not in java:raise RuntimeError('HTTP_TEST_COMPOSED_BOOTSTRAP_PIN')
     for name,text in patches({name:Path(name).read_text() for name in PINS}).items():Path(name).write_text(text)

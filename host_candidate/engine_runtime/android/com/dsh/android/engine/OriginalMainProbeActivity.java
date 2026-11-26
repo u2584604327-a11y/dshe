@@ -52,7 +52,10 @@ public final class OriginalMainProbeActivity extends Activity {
           setStage("OWNED_STORAGE_AND_MAIN");DurableSessionSnapshot store=new DurableSessionSnapshot(root,owner);
           HttpProcessTransport active;
           // The original EngineManager main start merges stderr into its Process stdout.
-          try{active=new HttpProcessTransport(raw,bound.session,bound.epoch,port,true,store);}catch(Exception bad){store.close();throw bad;}
+          try{
+            Integer portOption=generation==0?HttpProcessTransport.originalWebPortOption():Integer.valueOf(port);
+            active=new HttpProcessTransport(raw,bound.session,bound.epoch,portOption,true,store);
+          }catch(Exception bad){store.close();throw bad;}
           transport=active;if(closed.get()){active.close();return;}
           require(active.getErrorStream().read()==-1,"MAIN_MERGED_ERROR_STREAM");
           OriginalMainStartup startup=OriginalMainStartup.await(active);port=startup.port();

@@ -7,9 +7,11 @@ unchanged and fail-closed. The original permissionless P51 config package and pr
 unchanged. A separately identified network-component test build can package
 this transport; it is not an original DSH installation or upgrade.
 
-The host binds **only 127.0.0.1** at the original launch plan's requested port;
-port 0 uses the kernel-assigned port. There is no hardcoded 3080, wildcard,
-destination URL, CONNECT relay, or outbound network forwarding. A fresh secret,
+The host binds **only 127.0.0.1** at the original launch plan's requested port.
+An explicit port 0 uses the kernel-assigned port. The original web main can
+also omit `--port`. Its signed Android precheck uses 3080, and the isolated
+bootstrap independently resolves that default from its sealed original web
+bundle before accepting the listener. A fresh secret,
 session and owner epoch authenticate each direction of the Process pipe. Node
 intercepts exactly one original `http.Server.listen()` with the agreed IPv4
 address/port, then delivers virtual Duplex connections to the original HTTP
@@ -30,8 +32,10 @@ ProcessBuilder fallback. No public Binder service or factory was added here.
 ## Protocol and bounds
 
 The trusted pipe begins with 88 bytes: `DSHHTTP1`, 32 random key bytes, 32 session
-bytes, positive 64-bit owner epoch, requested port and bound port. All integers
-are big-endian. Frames contain `DHF1`, type, positive 64-bit per-direction
+bytes, positive 64-bit owner epoch, requested port and bound port. Full main
+reserves requested-port value 65536 for an omitted option. The bound port must
+then equal the default in the sealed web bundle. A conflict between precheck and
+bind fails startup. All integers are big-endian. Frames contain `DHF1`, type, positive 64-bit per-direction
 sequence, 32-bit connection id, 32-bit payload length, HMAC-SHA256 and payload.
 The MAC includes direction, session, epoch, complete header and payload. A frame
 is at most 16 KiB; sequence replay, a different direction/epoch, unallocated ids,
@@ -323,7 +327,7 @@ independent controls. The main mode is an additional exclusive P49 allowlist,
 not a production permission flag. Its worker factory only accepts the separate
 `com.dsh.p51.networkprobe` test context and authenticates a real isolated child.
 
-The full original `runCli --profile web --port <owned port> --no-open` now uses
+The full original `runCli --profile web [--port <port>] --no-open` now uses
 bounded owner snapshots, actual host file and directory force, versioned
 synchronous acknowledgments, virtual watchers and the reviewed browser-session
 scope. Its promise file handles implement the original JSON backend's atomic

@@ -28,6 +28,15 @@ def build(apk):
     transport=profile_transport().decode()
     transport=once(once(transport,"import fs from 'node:fs';\n",''),"import {createHash} from 'node:crypto';\n",'')
     transport=once(transport,'export async function installProfileTransport','async function installProfileTransport')
+    transport=once(transport,'onFailure = () => {}} = {}) {','onFailure = () => {}, originalDefaultPort} = {}) {')
+    transport=once(transport,'  const requestedPort = hello.readUInt32BE(80), port = hello.readUInt32BE(84);',
+        '''  const wirePort = hello.readUInt32BE(80), port = hello.readUInt32BE(84);
+  const omitPort = wirePort === 65536;
+  const requestedPort = omitPort ? originalDefaultPort : wirePort;''')
+    transport=once(transport,'      requestedPort > 65535 || port < 1',
+        '      !Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535 ||\n'
+        '      (omitPort && requestedPort === 0) || port < 1')
+    transport=once(transport,'    port, requestedPort, reading,','    port, requestedPort, omitPort, reading,')
     codec=wrapped('session_snapshot.mjs',['decodeSessionSnapshot','encodeSessionSnapshot'],["import path from 'node:path';"])
     filesystem=wrapped('session_filesystem.mjs',['installSessionFilesystem'],["import fs from 'node:fs';","import path from 'node:path';","import {randomBytes} from 'node:crypto';","import {syncBuiltinESMExports} from 'node:module';","import {decodeSessionSnapshot,encodeSessionSnapshot} from './session_snapshot.mjs';"])
     watches=wrapped('virtual_watch.mjs',['installVirtualWatchers'],["import fs from 'node:fs';","import path from 'node:path';","import {EventEmitter} from 'node:events';","import {syncBuiltinESMExports} from 'node:module';"])

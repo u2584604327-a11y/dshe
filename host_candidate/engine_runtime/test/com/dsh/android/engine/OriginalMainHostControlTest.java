@@ -12,7 +12,7 @@ public final class OriginalMainHostControlTest {
  }
  static final class Activation implements AutoCloseable{
   final HttpProcessTransport process;final Process actual;final OriginalMainStartup startup;String cookie;int port;
-  Activation(String[] args,Path root,int wanted)throws Exception{
+  Activation(String[] args,Path root,Integer wanted)throws Exception{
    Path executable=Paths.get(args[3],"libdshnode_p21_exec.so"),nativeFile=Paths.get(args[3],"libdsh_original_require_builtin.so");
    ProcessBuilder builder=new ProcessBuilder(args[0],"--expose-internals","--no-warnings","--permission","--allow-fs-read="+args[1],"--allow-fs-read="+nativeFile,"--allow-fs-read=/dsh-runtime","--allow-fs-read=/dsh-home",args[1],executable.toString());
    builder.directory(new File("/"));builder.environment().clear();builder.environment().put("HOME","/dsh-home");builder.environment().put("DSH_HOME","/dsh-home");
@@ -45,10 +45,21 @@ public final class OriginalMainHostControlTest {
    try{OriginalMainStartup.launchTarget(wrong,34567);throw new AssertionError("invalid_startup_url_accepted");}
    catch(IOException expected){yes("MAIN_PRIVATE_URL".equals(expected.getMessage()),"invalid_startup_url_redacted");}
   }
+  Integer originalOption=HttpProcessTransport.originalWebPortOption();
+  yes(originalOption==null||originalOption==0,"original_android_port_plan");
   Path root=ProfileSnapshotWireTest.root();String oldCookie=null,oldToken=null,oldUrl=null;int port=0;
   try{
-   for(int generation=0;generation<2;generation++)try(Activation a=new Activation(args,root,port)){
+   for(int generation=0;generation<2;generation++)try(Activation a=new Activation(args,root,generation==0?originalOption:Integer.valueOf(port))){
     port=a.port;yes(request(port,"/",null,null).status==401,"original_main_unauth_frontend_denied");
+    if(generation==0&&originalOption==null){
+     yes(port==HttpProcessTransport.ORIGINAL_WEB_DEFAULT_PORT,"original_sealed_web_default_port");
+     yes(Integer.valueOf(0).equals(HttpProcessTransport.originalWebPortOption()),"busy_original_web_port_asks_kernel");
+     System.out.println("ORIGINAL_MAIN_OMITTED_WEB_PORT_AND_BUSY_PORT_SELECTION=PASS_HOST");
+    }
+    if(generation==0&&originalOption!=null){
+     yes(port!=HttpProcessTransport.ORIGINAL_WEB_DEFAULT_PORT,"original_busy_port_uses_owned_ephemeral_listener");
+     System.out.println("ORIGINAL_MAIN_BUSY_DEFAULT_EXPLICIT_ZERO=PASS_HOST");
+    }
     if(generation==1)a.startup.verifyRetiredCredentials(oldToken,oldCookie);
     String ownUrl=a.startup.privateUrl(),announcement="dsh web: "+ownUrl;
     deniedReady(a.process,ownUrl);

@@ -3,11 +3,17 @@
 let mainTransport,mainFilesystem;
 const mainOwnerAbort=new AbortController(),mainBrowserScopes=new Set();
 function revokeMainOwner(){mainOwnerAbort.abort();for(const scope of mainBrowserScopes)scope.revoke();mainBrowserScopes.clear();mainFilesystem?.close();}
+function originalWebDefaultPort(){
+  const patch=files.get(ROOT+'/node_modules/@deepseek-ai/dsh-web-app/cordis.patch.yml');
+  const ports=[...(patch?.toString('utf8')??'').matchAll(/^[ \t]+port: !!js ctx\.webStartup\.port \?\? ([1-9]\d{0,4})$/gm)];
+  if(ports.length!==1||Number(ports[0][1])>65535)fail('E_DSH_ORIGINAL_WEB_PORT');
+  return Number(ports[0][1]);
+}
 async function runOriginalMain(){
   const pageSize=4096; // artifact is restricted to the verified 4 KiB original ELF
   receiveModules();
   // INSERT_FIXED_ORIGINAL_NATIVE_MAPPING
-  mainTransport=await installProfileTransport({onFailure:revokeMainOwner});
+  mainTransport=await installProfileTransport({onFailure:revokeMainOwner,originalDefaultPort:originalWebDefaultPort()});
   const snapshot=await mainTransport.filesystem.ready;
   installReadonlyFilesystem();installVirtualDirectories();
   let watches;
@@ -32,7 +38,9 @@ async function runOriginalMain(){
     }catch(cause){scope.revoke();mainBrowserScopes.delete(scope);throw cause;}
   };
   process.once('exit',revokeMainOwner);
-  process.argv=[process.execPath,ENTRY,'--profile','web','--port',String(mainTransport.requestedPort),'--no-open'];
+  process.argv=[process.execPath,ENTRY,'--profile','web'];
+  if(!mainTransport.omitPort)process.argv.push('--port',String(mainTransport.requestedPort));
+  process.argv.push('--no-open');
   const entry=await import(pathToFileURL(ENTRY).href);
   if(typeof entry.runCli!=='function')fail('E_DSH_ORIGINAL_ENTRY_EXPORT');
   await entry.runCli();

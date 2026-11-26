@@ -17,6 +17,10 @@ import javax.crypto.spec.SecretKeySpec;
  */
 final class HttpProcessTransport extends Process implements Closeable {
   static final int CHUNK=16384, WINDOW=65536, MAX_CONNECTIONS=16;
+  // Signed v138 EngineManager.resolveWebPort() probes this port. The main
+  // worker independently resolves the default from the sealed web bundle.
+  static final int ORIGINAL_WEB_DEFAULT_PORT=3080;
+  private static final int OMITTED_MAIN_PORT=65536;
   static final int OPEN=1, DATA=2, END=3, CLOSE=4, ACK=5,
       APP_DATA=6, APP_END=7, LOG_ACK=8, SHUTDOWN=9, LOG_CLOSE=10;
   static final int LISTEN=16, RESPONSE=17, RESPONSE_END=18, RESPONSE_CLOSE=19,
@@ -34,7 +38,6 @@ final class HttpProcessTransport extends Process implements Closeable {
   private final byte[] key=new byte[32],session,epochBytes;
   private final DataInputStream input;
   private final DataOutputStream output;
-  private final int requestedPort;
   private final boolean mergedError;
   private final Object appInputLock=new Object();
   private final AtomicBoolean closed=new AtomicBoolean(),accepting=new AtomicBoolean();
@@ -71,24 +74,35 @@ final class HttpProcessTransport extends Process implements Closeable {
   HttpProcessTransport(Process authenticatedChild,String hostSession,long ownerEpoch,int requestedPort,boolean mergedError)throws IOException{
     this(authenticatedChild,hostSession,ownerEpoch,requestedPort,mergedError,null);
   }
+  /** Match the original Android precheck. An actual bind race still denies. */
+  static Integer originalWebPortOption()throws IOException{
+    try(ServerSocket probe=new ServerSocket()){
+      probe.bind(loopback(ORIGINAL_WEB_DEFAULT_PORT),1);
+      return null;
+    }catch(BindException occupied){return 0;}
+  }
+  private static InetSocketAddress loopback(int port)throws UnknownHostException{
+    return new InetSocketAddress(InetAddress.getByAddress(new byte[]{127,0,0,1}),port);
+  }
   /** Only a trusted receipt/owner factory may provide this directory capability.
-   * The old HTTP/component constructors grant no snapshot authority. */
-  HttpProcessTransport(Process authenticatedChild,String hostSession,long ownerEpoch,int requestedPort,boolean mergedError,DurableSessionSnapshot profileStore)throws IOException{
+   * A null option preserves an omitted --port in the original web main. */
+  HttpProcessTransport(Process authenticatedChild,String hostSession,long ownerEpoch,Integer requestedPort,boolean mergedError,DurableSessionSnapshot profileStore)throws IOException{
     if(authenticatedChild==null||!authenticatedChild.isAlive()||hostSession==null||
-       !hostSession.matches("[0-9a-f]{64}")||ownerEpoch<=0||requestedPort<0||requestedPort>65535)
+       !hostSession.matches("[0-9a-f]{64}")||ownerEpoch<=0||
+       (requestedPort==null?profileStore==null:requestedPort<0||requestedPort>65535))
       throw new IOException("AUTHENTICATED_RUNTIME_REQUIRED");
-    child=authenticatedChild;this.profileStore=profileStore;this.requestedPort=requestedPort;this.mergedError=mergedError;
+    child=authenticatedChild;this.profileStore=profileStore;this.mergedError=mergedError;
     session=new byte[32];for(int i=0;i<32;i++)session[i]=(byte)Integer.parseInt(hostSession.substring(i*2,i*2+2),16);
     epochBytes=ByteBuffer.allocate(8).putLong(ownerEpoch).array();
     new SecureRandom().nextBytes(key);
     input=new DataInputStream(child.getInputStream());output=new DataOutputStream(child.getOutputStream());
     try{
-      // Honor the original launch plan. Port 0 asks the kernel; no hardcoded
-      // historical 3080 or fallback to a wildcard/remote listener.
+      // Port 0 asks the kernel. An omitted flag binds the verified original
+      // default without replacing that flag with an explicit value.
       listener.setReuseAddress(true);
-      listener.bind(new InetSocketAddress(InetAddress.getByAddress(new byte[]{127,0,0,1}),requestedPort),16);
+      listener.bind(loopback(requestedPort==null?ORIGINAL_WEB_DEFAULT_PORT:requestedPort),16);
       output.writeBytes("DSHHTTP1");output.write(key);output.write(session);output.write(epochBytes);
-      output.writeInt(requestedPort);output.writeInt(listener.getLocalPort());output.flush();
+      output.writeInt(requestedPort==null?OMITTED_MAIN_PORT:requestedPort);output.writeInt(listener.getLocalPort());output.flush();
       // Register deadlines before any reader can observe immediate child exit
       // and close this executor. Fast startup failure is a valid Process exit.
       deadlines.schedule(()->{if(!listenSeen)fail("LISTEN_DEADLINE");},90,TimeUnit.SECONDS);

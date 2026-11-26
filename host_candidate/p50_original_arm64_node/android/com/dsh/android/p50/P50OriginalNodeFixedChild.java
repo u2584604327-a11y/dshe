@@ -329,6 +329,6 @@ public final class P50OriginalNodeFixedChild {
     return new String(bytes,StandardCharsets.UTF_8);
   }
   private static final String HTTP_BOOTSTRAP_SHA="c78ea5b631d5716d9cf3aa324613637f5a88919f0744058b382f4b8e503f30b1";
-  private static final String MAIN_TEST_BOOTSTRAP_SHA="d24745592b6872a1c0c30b779df03b903e00163e79bd193fe5bbf157fff54e3e";
+  private static final String MAIN_TEST_BOOTSTRAP_SHA="11e1ada151faf44613a15fc9a241c84decb12d98893059772c434276b309385b";
   private static final String MODULE_BOOTSTRAP_SHA="bc0c4c874e617016de0bd909c7c665795a7d6ff728e8245677f4e71074bbf140";
 }
