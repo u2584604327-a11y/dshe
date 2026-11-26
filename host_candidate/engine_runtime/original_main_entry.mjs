@@ -12,6 +12,7 @@ function originalWebDefaultPort(){
 async function runOriginalMain(){
   const pageSize=4096; // artifact is restricted to the verified 4 KiB original ELF
   receiveModules();
+  const sessionStorageSource=originalSessionStorageAdapter();
   // INSERT_FIXED_ORIGINAL_NATIVE_MAPPING
   mainTransport=await installProfileTransport({onFailure:revokeMainOwner,originalDefaultPort:originalWebDefaultPort()});
   const snapshot=await mainTransport.filesystem.ready;
@@ -22,7 +23,7 @@ async function runOriginalMain(){
   }
   installReadonlyFilesystem();installVirtualDirectories();
   let watches;
-  mainFilesystem=installSessionFilesystem({files,directories,privateFiles:profileFiles,resolve:filenameOf,
+  mainFilesystem=installSessionFilesystem({files,directories,privateFiles:profileFiles,resolve:filenameOf,sessionWriteLeases:true,
     notify:(...args)=>watches?.notify(...args),snapshotCapability:{...snapshot,commit:mainTransport.filesystem.commit}});snapshot.bytes.fill(0);
   watches=installVirtualWatchers({resolve:filenameOf,stat:fs.statSync,signal:mainOwnerAbort.signal});
   // A writable temp namespace must not enable the original loader's native

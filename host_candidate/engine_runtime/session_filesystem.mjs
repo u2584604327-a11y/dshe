@@ -8,12 +8,12 @@ import {decodeSessionSnapshot,encodeSessionSnapshot} from './session_snapshot.mj
 
 let installed=false;
 export function installSessionFilesystem({files, directories, privateFiles, resolve, notify=()=>{},
-                                         maxBytes=16*1024*1024, maxEntries=4096, snapshotCapability}) {
+                                         maxBytes=16*1024*1024, maxEntries=4096, snapshotCapability, sessionWriteLeases=false}) {
   if(installed)throw Object.assign(new Error('E_DSH_SESSION_FS_ALREADY_INSTALLED'),{code:'E_DSH_SESSION_FS_ALREADY_INSTALLED'});
   if (!(files instanceof Map) || !(directories instanceof Set) || !(privateFiles instanceof Map) || typeof resolve!=='function') throw Error('E_DSH_SESSION_FS_INPUT');
   if(!Number.isInteger(maxBytes)||maxBytes<0||maxBytes>16*1024*1024||!Number.isInteger(maxEntries)||maxEntries<2||maxEntries>4096)throw Error('E_DSH_SESSION_FS_QUOTA');
   let closed=false, clock=Date.now(), sequence=0;
-  const metadata=new Map(),handles=new Map();let handleSequence=0,activeHandle=null,transactionActive=false,events=[];
+  const metadata=new Map(),handles=new Map(),leases=new Map();let handleSequence=0,activeHandle=null,transactionActive=false,events=[];
   let version=0n;const durable=snapshotCapability!==undefined;
   if(durable&&(typeof snapshotCapability?.commit!=='function'||typeof snapshotCapability?.version!=='bigint'||snapshotCapability.version<0n))throw Error('E_DSH_SNAPSHOT_CAPABILITY');
   const baseStat=fs.statSync, baseAccess=fs.accessSync,baseRead=fs.readFileSync,baseReaddir=fs.readdirSync,baseRealpath=fs.realpathSync;
@@ -21,14 +21,39 @@ export function installSessionFilesystem({files, directories, privateFiles, reso
   const alive=()=>{if(closed)throw error('E_DSH_SESSION_FS_REVOKED');};
   const owned=name=>name==='/dsh-home'||name.startsWith('/dsh-home/')||name==='/dsh-workspace'||name.startsWith('/dsh-workspace/');
   const canonical=value=>{alive();if(Buffer.isBuffer(value)&&!Buffer.from(value.toString('utf8')).equals(value))throw error('EILSEQ');const name=resolve(value);if(Buffer.from(name).toString('utf8')!==name)throw error('EILSEQ');if(name!=='/'&&(Buffer.byteLength(name)>4096||/[\\\x00-\x1f\x7f]/.test(name)||name.split('/').length>65||name.split('/').slice(1).some(p=>!p||p==='.'||p==='..'||Buffer.byteLength(p)>255)))throw error('EINVAL');for(let parent=path.dirname(name);owned(parent);parent=path.dirname(parent))if(directories.has(parent)&&!(meta(parent,true).mode&0o100))throw error('EACCES');return name;};
-  const writable=value=>{const name=canonical(value);if(!owned(name)||files.has(name))throw error('EROFS');for(const handle of handles.values())if(handle.name===name&&handle!==activeHandle)throw error('EBUSY');return name;};
+  const hasOtherHandle=name=>{
+    const inode=metadata.get(name)?.ino;
+    return [...handles.values()].some(h=>h!==activeHandle&&(h.name===name||(inode!==undefined&&metadata.get(h.name)?.ino===inode)));
+  };
+  const writable=value=>{const name=canonical(value);if(!owned(name)||files.has(name))throw error('EROFS');if(hasOtherHandle(name))throw error('EBUSY');return name;};
   const root=name=>name==='/dsh-home'||name==='/dsh-workspace';
   const tick=()=>clock=Math.max(Date.now(),clock+1);
   const mode=(requested,directory)=>{const value=typeof requested==='string'&&/^[0-7]+$/.test(requested)?parseInt(requested,8):requested??(directory?0o700:0o600);if(!Number.isInteger(value)||value<0||value>0o7777)throw error('EINVAL');return value&0o700;};
   const meta=(name,directory)=>{let row=metadata.get(name);if(!row){row={mode:directory?0o700:0o600,ino:++sequence,mtime:tick()};metadata.set(name,row);}return row;};
   const exists=name=>directories.has(name)||privateFiles.has(name)||files.has(name);
   const count=()=>privateFiles.size+[...directories].filter(owned).length;
-  const bytes=()=>[...privateFiles.values()].reduce((sum,b)=>sum+b.length,0);
+  const bytes=()=>[...new Set(privateFiles.values())].reduce((sum,b)=>sum+b.length,0);
+  const aliasNames=data=>[...privateFiles].filter(([,value])=>value===data).map(([name])=>name);
+  function discardFile(name){
+    const old=privateFiles.get(name);privateFiles.delete(name);
+    if(aliasNames(old).length===0)old.fill(0);
+  }
+  function replaceFile(name,next){
+    const old=privateFiles.get(name);
+    if(!old){privateFiles.set(name,next);changed('rename',name);return;}
+    const aliases=aliasNames(old);
+    for(const alias of aliases)privateFiles.set(alias,next);
+    old.fill(0);changed('change',name);
+    for(const alias of aliases)if(alias!==name)notice('change',alias);
+  }
+  function cloneRows(rows,copy){
+    const clones=new Map(),result=new Map();
+    for(const [name,value] of rows){
+      if(!clones.has(value))clones.set(value,copy(value));
+      result.set(name,clones.get(value));
+    }
+    return result;
+  }
   const parent=name=>{const p=path.dirname(name);if(!directories.has(p))throw error('ENOENT');if(owned(p)&&(meta(p,true).mode&0o300)!==0o300)throw error('EACCES');};
   const notice=(type,name)=>{if(transactionActive)events.push([type,name]);else notify(type,name);};
   const changed=(type,name)=>{meta(name,directories.has(name)).mtime=tick();notice(type,name);};
@@ -36,7 +61,8 @@ export function installSessionFilesystem({files, directories, privateFiles, reso
   function stat(filename,options){const name=canonical(filename);const value=baseStat(name,options);if(!value||!owned(name))return value;
     const m=meta(name,value.isDirectory()),number=n=>options?.bigint?BigInt(n):n;
     const result=Object.assign(Object.create(Object.getPrototypeOf(value)),value,
-      {uid:number(process.getuid()),gid:number(process.getgid()),ino:number(m.ino),mode:number((value.isDirectory()?0o40000:0o100000)|m.mode),
+      {uid:number(process.getuid()),gid:number(process.getgid()),ino:number(m.ino),
+       ...(privateFiles.has(name)?{nlink:number(aliasNames(privateFiles.get(name)).length)}:{}),mode:number((value.isDirectory()?0o40000:0o100000)|m.mode),
        mtimeMs:number(m.mtime),ctimeMs:number(m.mtime),mtime:new Date(m.mtime),ctime:new Date(m.mtime)});
     if(options?.bigint){result.mtimeNs=BigInt(m.mtime)*1000000n;result.ctimeNs=result.mtimeNs;}return result;
   }
@@ -57,17 +83,27 @@ export function installSessionFilesystem({files, directories, privateFiles, reso
     const old=privateFiles.get(name),size=value.length+(flag[0]==='a'?(old?.length??0):0);
     if(size>8*1024*1024||bytes()+size-(old?.length??0)>maxBytes||(!present&&count()>=maxEntries))throw error('ENOSPC');
     const next=flag[0]==='a'&&old?Buffer.concat([old,value]):value;
-    privateFiles.set(name,next);if(old)old.fill(0);if(!present)meta(name,false).mode=mode(typeof options==='object'?options?.mode:undefined,false);
-    changed(present?'change':'rename',name);
+    if(!present)meta(name,false).mode=mode(typeof options==='object'?options?.mode:undefined,false);
+    replaceFile(name,next);
   }
   function truncate(filename,length=0){const name=writable(filename);parent(name);if(directories.has(name))throw error('EISDIR');
     const old=privateFiles.get(name);if(!old)throw error('ENOENT');if(!(meta(name,false).mode&0o200))throw error('EACCES');
     if(!Number.isSafeInteger(length))throw error('EINVAL');length=Math.max(0,length);
     if(length>8*1024*1024||bytes()+length-old.length>maxBytes)throw error('ENOSPC');
-    const next=Buffer.alloc(length);old.copy(next);privateFiles.set(name,next);old.fill(0);changed('change',name);
+    const next=Buffer.alloc(length);old.copy(next);replaceFile(name,next);
   }
   function unlink(filename){const name=writable(filename);parent(name);if(directories.has(name))throw error('EISDIR');if(!privateFiles.has(name))throw error('ENOENT');
-    privateFiles.get(name).fill(0);privateFiles.delete(name);metadata.delete(name);notice('rename',name);
+    discardFile(name);metadata.delete(name);notice('rename',name);
+  }
+  function link(from,to){
+    const source=writable(from),target=writable(to);
+    if(source.split('/')[1]!==target.split('/')[1])throw error('EXDEV');
+    const data=privateFiles.get(source);
+    if(!data)throw error(directories.has(source)?'EPERM':'ENOENT');
+    parent(target);
+    if(exists(target))throw error('EEXIST');
+    if(count()>=maxEntries)throw error('ENOSPC');
+    privateFiles.set(target,data);metadata.set(target,meta(source,false));notice('rename',target);
   }
   function rm(filename,options={}){const name=writable(filename);if(root(name))throw error('EBUSY');
     if(!exists(name)){if(options.force)return;throw error('ENOENT');}parent(name);
@@ -84,14 +120,19 @@ export function installSessionFilesystem({files, directories, privateFiles, reso
   }
   function rename(from,to){const source=writable(from),target=writable(to);if(root(source)||root(target))throw error('EBUSY');
     if(!exists(source))throw error('ENOENT');if(source===target)return;parent(source);parent(target);if(target.startsWith(source+'/'))throw error('EINVAL');
+    if(privateFiles.has(source)&&privateFiles.get(source)===privateFiles.get(target))return;
     const dir=directories.has(source),targetDir=directories.has(target);
     if(exists(target)){if(dir!==targetDir)throw error(dir?'ENOTDIR':'EISDIR');if(targetDir&&children(target).length)throw error('ENOTEMPTY');}
     const moved=dir?[source,...children(source)]:[source];
     const plan=moved.map(old=>[old,target+old.slice(source.length),directories.has(old),privateFiles.get(old),metadata.get(old)]);
-    for(const old of moved)writable(old);
+    const sameRoot=source.split('/')[1]===target.split('/')[1];
+    for(const old of moved){
+      writable(old);
+      if(!sameRoot&&privateFiles.has(old)&&aliasNames(privateFiles.get(old)).some(alias=>alias!==source&&!alias.startsWith(source+'/')))throw error('EXDEV');
+    }
     // All validation precedes the same-turn commit. There are no symlinks,
     // external processes or host filesystem operations in this namespace.
-    if(privateFiles.has(target)){privateFiles.get(target).fill(0);privateFiles.delete(target);}directories.delete(target);metadata.delete(target);
+    if(privateFiles.has(target))discardFile(target);directories.delete(target);metadata.delete(target);
     for(const [old] of plan){directories.delete(old);privateFiles.delete(old);metadata.delete(old);}
     for(const [old,next,isDir,data,m] of plan){if(isDir)directories.add(next);else privateFiles.set(next,data);if(m)metadata.set(next,m);notice('rename',old);changed('rename',next);}
   }
@@ -103,16 +144,34 @@ export function installSessionFilesystem({files, directories, privateFiles, reso
   function access(filename,flags=fs.constants.F_OK){const name=canonical(filename);if(!owned(name))return baseAccess(name,flags);
     const value=stat(name);if(((flags&fs.constants.R_OK)&&!(value.mode&0o400))||((flags&fs.constants.W_OK)&&!(value.mode&0o200)))throw error('EACCES');if((flags&fs.constants.X_OK)&&!(value.mode&0o100))throw error('EACCES');
   }
-  function encoded(){const entries=new Map();for(const name of [...directories].filter(owned).sort()){const row=meta(name,true);entries.set(name,{directory:true,mode:row.mode,mtime:row.mtime});}
-    for(const [name,data] of [...privateFiles].sort(([a],[b])=>a.localeCompare(b))){const row=meta(name,false);entries.set(name,{directory:false,mode:row.mode,mtime:row.mtime,data});}return encodeSessionSnapshot(entries);
+  function encoded(){
+    const entries=new Map(),primary=new Map();
+    for(const name of [...directories].filter(owned).sort()){
+      const row=meta(name,true);entries.set(name,{directory:true,mode:row.mode,mtime:row.mtime});
+    }
+    for(const name of [...privateFiles.keys()].sort()){
+      const data=privateFiles.get(name),row=meta(name,false),target=primary.get(data);
+      entries.set(name,{directory:false,mode:row.mode,mtime:row.mtime,...(target===undefined?{data}:{link:target})});
+      if(target===undefined)primary.set(data,name);
+    }
+    return encodeSessionSnapshot(entries);
   }
-  function restore(entries){for(const value of privateFiles.values())value.fill(0);privateFiles.clear();for(const name of [...directories])if(owned(name))directories.delete(name);metadata.clear();
-    for(const [name,row] of entries){if(row.directory)directories.add(name);else privateFiles.set(name,row.data);metadata.set(name,{mode:row.mode,mtime:row.mtime,ino:++sequence});clock=Math.max(clock,row.mtime);}
+  function restore(entries){
+    for(const value of privateFiles.values())value.fill(0);
+    privateFiles.clear();for(const name of [...directories])if(owned(name))directories.delete(name);metadata.clear();
+    for(const [name,row] of entries){
+      if(row.link!==undefined){
+        privateFiles.set(name,privateFiles.get(row.link));metadata.set(name,metadata.get(row.link));
+        continue;
+      }
+      if(row.directory)directories.add(name);else privateFiles.set(name,row.data);
+      metadata.set(name,{mode:row.mode,mtime:row.mtime,ino:++sequence});clock=Math.max(clock,row.mtime);
+    }
   }
   if(durable){const initial=decodeSessionSnapshot(snapshotCapability.bytes);restore(initial);version=snapshotCapability.version;}
   function flush(){if(!durable)throw error('E_DSH_DURABLE_STORE_UNAVAILABLE');const payload=encoded();try{const next=snapshotCapability.commit(payload);if(next!==version+1n)throw error('E_DSH_STORE_ACK_VERSION');version=next;}finally{payload.fill(0);}}
   function mutate(operation,...args){alive();if(transactionActive)return operation(...args);
-    const previous=new Map([...privateFiles].map(([name,data])=>[name,Buffer.from(data)])),oldDirs=[...directories].filter(owned),oldMeta=new Map([...metadata].map(([name,row])=>[name,{...row}]));
+    const previous=cloneRows(privateFiles,data=>Buffer.from(data)),oldDirs=[...directories].filter(owned),oldMeta=cloneRows(metadata,row=>({...row}));
     transactionActive=true;events=[];let value,committing=false;
     try{value=operation(...args);if(durable){committing=true;flush();}}
     catch(cause){for(const data of privateFiles.values())data.fill(0);privateFiles.clear();for(const [name,data] of previous)privateFiles.set(name,data);for(const name of [...directories])if(owned(name))directories.delete(name);for(const name of oldDirs)directories.add(name);metadata.clear();for(const [name,row] of oldMeta)metadata.set(name,row);events=[];
@@ -120,11 +179,18 @@ export function installSessionFilesystem({files, directories, privateFiles, reso
     }finally{transactionActive=false;}
     for(const data of previous.values())data.fill(0);const deliver=events;events=[];for(const event of deliver)notify(...event);return value;
   }
-  function close(){if(closed)return;closed=true;for(const handle of handles.values())handle.closed=true;handles.clear();for(const value of privateFiles.values())value.fill(0);privateFiles.clear();for(const name of [...directories])if(owned(name))directories.delete(name);metadata.clear();}
+  function close(){if(closed)return;closed=true;for(const handle of handles.values())handle.closed=true;handles.clear();leases.clear();for(const value of privateFiles.values())value.fill(0);privateFiles.clear();for(const name of [...directories])if(owned(name))directories.delete(name);metadata.clear();}
   async function open(filename,flag='r',bits=0o600){alive();const name=canonical(filename);if(!owned(name))throw error('EROFS');
     if(!['r','r+','w','wx','a','ax'].includes(flag))throw error('E_DSH_OPEN_FLAGS_UNAVAILABLE');if(handles.size>=64||handleSequence>=0x3ffffffe)throw error('EMFILE');
     if(flag==='r'||flag==='r+'){const row=stat(name);access(name,fs.constants.R_OK|(flag==='r+'?fs.constants.W_OK:0));if(flag==='r+'&&row.isDirectory())throw error('EISDIR');}
-    else mutate(writeFileOperation,name,Buffer.alloc(0),{flag,mode:bits});
+    const leaseFile=sessionWriteLeases&&durable&&flag==='w'&&name.startsWith('/dsh-home/')&&path.basename(name)==='session.lock';
+    if(flag!=='r'&&flag!=='r+'){
+      // Opening a second empty lock file must reach the nonblocking lease
+      // check. Never let it truncate a held file or bypass normal permissions.
+      if(leaseFile&&privateFiles.get(name)?.length===0&&aliasNames(privateFiles.get(name)).length===1&&hasOtherHandle(name)){
+        parent(name);access(name,fs.constants.W_OK);
+      }else mutate(writeFileOperation,name,Buffer.alloc(0),{flag,mode:bits});
+    }
     const handle={name,closed:false},directory=directories.has(name);let position=0;const id=0x40000000+(++handleSequence);if(id>=0x7fffffff)throw error('EMFILE');handles.set(id,handle);
     const valid=()=>{alive();if(handle.closed)throw error('EBADF');};
     const perform=(operation,...args)=>{valid();if(flag==='r')throw error('EBADF');if(directory)throw error('EISDIR');activeHandle=handle;try{return mutate(operation,...args);}finally{activeHandle=null;}};
@@ -142,7 +208,12 @@ export function installSessionFilesystem({files, directories, privateFiles, reso
       const data=privateFiles.get(name);if(!data)throw error('ENOENT');const start=at??position,count=Math.min(length,Math.max(0,data.length-start));
       if(count)data.copy(target,offset,start,start+count);if(at===null||at===undefined)position+=count;return {bytesRead:count,buffer};
     }
-    // Streams, native descriptors, hard links and unsupported signatures deny.
+    function closeHandle(){
+      if(handle.closed)return;
+      handle.closed=true;handles.delete(id);
+      if(leases.get(handle.leaseInode)===handle)leases.delete(handle.leaseInode);
+    }
+    // Native descriptor and stream capabilities stay outside the owner namespace.
     const writeFilePath=writeFileOperation;
     return Object.freeze({fd:id,
       async writeFile(data,options){return writeHandleFile(data,options);},
@@ -151,14 +222,22 @@ export function installSessionFilesystem({files, directories, privateFiles, reso
       async truncate(length=0){valid();if(flag==='r')throw error('EINVAL');return perform(truncate,name,length);},
       async stat(options){valid();return stat(name,options);},
       async sync(){valid();try{flush();}catch(cause){if(durable)close();throw cause;}},async datasync(){valid();try{flush();}catch(cause){if(durable)close();throw cause;}},
-      async close(){if(handle.closed)return;handle.closed=true;handles.delete(id);},
+      async [Symbol.for('dsh.owner.sessionWriteLease')](){
+        valid();
+        const data=privateFiles.get(name),inode=metadata.get(name)?.ino;
+        if(!leaseFile||data?.length!==0||inode===undefined||aliasNames(data).length!==1)throw error('E_DSH_SESSION_LEASE_HANDLE');
+        const current=leases.get(inode);
+        if(current&&current!==handle)throw error('EAGAIN');
+        leases.set(inode,handle);handle.leaseInode=inode;
+      },
+      async close(){closeHandle();},
       createReadStream(){valid();throw error('E_DSH_FH_STREAM_UNAVAILABLE');},createWriteStream(){valid();throw error('E_DSH_FH_STREAM_UNAVAILABLE');},
-      async [Symbol.asyncDispose](){handle.closed=true;handles.delete(id);},
+      async [Symbol.asyncDispose](){closeHandle();},
     });
   }
   const writeFileOperation=writeFile;
   const callback=fn=>(...args)=>{const done=args.pop();if(typeof done!=='function')throw error('ERR_INVALID_ARG_TYPE');queueMicrotask(()=>{let value;try{value=fn(...args);}catch(e){done(e);return;}done(null,value);});};
-  const operations={mkdir,writeFile,truncate,appendFile:(file,data,options)=>writeFile(file,data,{...(typeof options==='object'?options:{encoding:options}),flag:typeof options==='object'?options.flag??'a':'a'}),unlink,rm,rmdir,rename,chmod,mkdtemp};
+  const operations={mkdir,writeFile,truncate,appendFile:(file,data,options)=>writeFile(file,data,{...(typeof options==='object'?options:{encoding:options}),flag:typeof options==='object'?options.flag??'a':'a'}),unlink,rm,rmdir,rename,link,chmod,mkdtemp};
   for(const [name,operation] of Object.entries(operations)){const fn=(...args)=>mutate(operation,...args);fs[name+'Sync']=fn;fs[name]=callback(fn);fs.promises[name]=async(...args)=>fn(...args);}
   const readers={stat,lstat:stat,access,
     readFile:(file,options)=>{const name=canonical(file);if(owned(name))access(name,fs.constants.R_OK);return baseRead(name,options);},

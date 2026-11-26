@@ -63,11 +63,20 @@ public final class OriginalMainHostControlTest {
   }
   return launch;
  }
+ private static void verifySessionHistory(int port,String cookie)throws Exception{
+  String address="{\"kind\":\"session\",\"sessionId\":\"owned-jsonl-control\"}";
+  String body="{\"type\":\"client-request\",\"rpcId\":\"history\",\"method\":\"session/page\",\"payload\":{\"args\":{\"request\":{\"address\":"
+      +address+",\"throughSeq\":1,\"maxMessages\":8}}}}";
+  Reply reply=request(port,"/api/session/page",cookie,body);
+  String view=new String(reply.body,StandardCharsets.UTF_8);
+  yes(reply.status==200&&view.contains("original durable message")&&
+      view.contains("continued after restart"),"original_authenticated_jsonl_history_page");
+ }
  static final class Activation implements AutoCloseable{
   final HttpProcessTransport process;final Process actual;final OriginalMainStartup startup;String cookie;int port;
-  Activation(String[] args,Path root,OriginalWebLaunch launch)throws Exception{
+  Activation(String[] args,Path root,OriginalWebLaunch launch,int generation)throws Exception{
    Path executable=Paths.get(args[3],"libdshnode_p21_exec.so"),nativeFile=Paths.get(args[3],"libdsh_original_require_builtin.so");
-   ProcessBuilder builder=new ProcessBuilder(args[0],"--expose-internals","--no-warnings","--permission","--allow-fs-read="+args[1],"--allow-fs-read="+nativeFile,"--allow-fs-read=/dsh-runtime","--allow-fs-read=/dsh-home",args[1],executable.toString());
+   ProcessBuilder builder=new ProcessBuilder(args[0],"--expose-internals","--no-warnings","--permission","--allow-fs-read="+args[1],"--allow-fs-read="+nativeFile,"--allow-fs-read=/dsh-runtime","--allow-fs-read=/dsh-home",args[1],executable.toString(),Integer.toString(generation));
    builder.directory(new File("/"));builder.environment().clear();builder.environment().put("HOME","/dsh-home");builder.environment().put("DSH_HOME","/dsh-home");
    actual=builder.start();HttpProcessTransport owned=null;
    try{
@@ -113,7 +122,7 @@ public final class OriginalMainHostControlTest {
    OriginalClientPlugin browser=readPlugin(OriginalClientPlugin.Kind.BROWSER,args[5]);
    OriginalClientPlugin mobile=readPlugin(OriginalClientPlugin.Kind.MOBILE,args[6]);
    for(int generation=0;generation<2;generation++)try(Activation a=new Activation(args,root,
-       launch(generation==0?originalOption:Integer.valueOf(port),generation==0,mobile,browser))){
+       launch(generation==0?originalOption:Integer.valueOf(port),generation==0,mobile,browser),generation)){
     port=a.port;yes(request(port,"/",null,null).status==401,"original_main_unauth_frontend_denied");
     if(generation==0&&originalOption==null){
      yes(port==HttpProcessTransport.ORIGINAL_WEB_DEFAULT_PORT,"original_sealed_web_default_port");
@@ -148,9 +157,11 @@ public final class OriginalMainHostControlTest {
     String json="{\"type\":\"client-request\",\"rpcId\":\"control\",\"method\":\"workspace/create\",\"payload\":{\"args\":{\"request\":{\"path\":\"/dsh-workspace\"}}}}";
     Reply rpc=request(port,"/api/workspace/create",a.cookie,json);String value=new String(rpc.body,StandardCharsets.UTF_8).replaceAll("\\s+","");
     yes(rpc.status==200&&value.contains("\"ok\":true")&&value.contains("\"created\":"+(generation==0))&&value.contains("/dsh-workspace"),"original_workspace_rpc_create_and_durable_restart");
+    if(generation==1)verifySessionHistory(a.port,a.cookie);
     workspaceStream(a.port,a.cookie);hostFence(a.port,a.cookie);oldCookie=a.cookie;oldToken=a.startup.privateTarget();oldUrl=ownUrl;
    }
    System.out.println("FULL_ORIGINAL_MAIN_HTTP_AUTH_FRONTEND_WORKSPACE_RPC_WS_AND_RESTART=PASS_HOST_INTERNALS_CONTROL checks="+checks);
+   System.out.println("ORIGINAL_JSONL_MESSAGE_PUBLISH_CONTENDED_WRITER_HISTORY_HTTP_AND_RESTART_APPEND=PASS_HOST");
    System.out.println("ORIGINAL_MAIN_PRIVATE_STARTUP_AND_COOKIE_JAR_ISOLATION=PASS_HOST");
    System.out.println("ORIGINAL_MAIN_WORKSPACE_OVERLAY_SOURCE_OWNER_AND_DEFAULT_RPC=PASS_HOST");
    System.out.println("ORIGINAL_MAIN_BROWSER_AND_MOBILE_SIGNED_CLIENTS_AND_PRIVILEGE_FENCE=PASS_HOST");

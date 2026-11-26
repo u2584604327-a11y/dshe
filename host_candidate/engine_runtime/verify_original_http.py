@@ -223,7 +223,9 @@ def main():
         subprocess.run([node,'--check',str(main_file)],check=True,timeout=10)
         spy=(ROOT/'test/host_main_native_control.mjs').read_text()
         control=work/'original-main-host-control.mjs'
-        control.write_text(once(main_source,'  const pageSize=4096;',spy+'\n  const pageSize=4096;'))
+        control_source=once(main_source,'  const pageSize=4096;',spy+'\n  const pageSize=4096;')
+        control.write_text(once(control_source,'  const {Service}=await import(',
+                                '  await exerciseOriginalJsonl(Number(process.argv[3]));\n  const {Service}=await import('))
         import original_native_bundle as native_bundle
         native_files=native_bundle.verified_bundle(args.apk.resolve())
         native_home=work/'main-native-control';native_home.mkdir(mode=0o700)

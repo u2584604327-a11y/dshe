@@ -11,6 +11,16 @@ public final class DurableSessionSnapshotTest {
     ByteArrayOutputStream bytes=new ByteArrayOutputStream();DataOutputStream out=new DataOutputStream(bytes);out.writeBytes("DSHFS001");out.writeInt(3);
     for(String path:new String[]{"/dsh-home","/dsh-workspace",name}){byte[] encoded=path.getBytes("UTF-8");out.writeShort(encoded.length);out.write(encoded);boolean dir=!path.equals(name);out.writeByte(dir?1:0);out.writeShort(dir?0700:0600);out.writeLong(1);out.writeInt(dir?0:value.length);if(!dir)out.write(value);}return bytes.toByteArray();
   }
+  private static byte[] linkedSnapshot(String alias,String target,int mode)throws Exception{
+    byte[] legacy=snapshot("/dsh-home/record",new byte[]{1,2,3});
+    legacy[7]='2';legacy[11]=4;
+    ByteArrayOutputStream bytes=new ByteArrayOutputStream();bytes.write(legacy);
+    DataOutputStream out=new DataOutputStream(bytes);
+    byte[] name=alias.getBytes("UTF-8"),link=target.getBytes("UTF-8");
+    out.writeShort(name.length);out.write(name);out.writeByte(2);out.writeShort(mode);out.writeLong(1);
+    out.writeInt(link.length);out.write(link);
+    return bytes.toByteArray();
+  }
   private static ProcessBuilder child(boolean android,String mode,Path root){
     return android?new ProcessBuilder("/system/bin/app_process","-Xmx32m","/",DurableSessionSnapshotTest.class.getName(),mode,root.toString()):
         new ProcessBuilder(Paths.get(System.getProperty("java.home"),"bin","java").toString(),"-cp",System.getProperty("java.class.path"),DurableSessionSnapshotTest.class.getName(),mode,root.toString());
@@ -37,6 +47,13 @@ public final class DurableSessionSnapshotTest {
       yes(((Integer)Class.forName("android.os.Process").getMethod("myUid").invoke(null))==2000,"actual_shell_uid");
       yes(Class.forName("android.os.Build$VERSION").getField("SDK_INT").getInt(null)==35,"actual_android35");
     }
+    byte[] linked=linkedSnapshot("/dsh-home/alias","/dsh-home/record",0600);
+    SessionSnapshotCodec.validate(linked);
+    denied(()->SessionSnapshotCodec.validate(linkedSnapshot("/dsh-workspace/alias","/dsh-home/record",0600)),"SNAPSHOT_LINK");
+    denied(()->SessionSnapshotCodec.validate(linkedSnapshot("/dsh-home/alias","/dsh-home/missing",0600)),"SNAPSHOT_LINK");
+    denied(()->SessionSnapshotCodec.validate(linkedSnapshot("/dsh-home/alias","/dsh-home/record",0400)),"SNAPSHOT_LINK");
+    linked[7]='1';
+    denied(()->SessionSnapshotCodec.validate(linked),"SNAPSHOT_ENTRY");
     Path root=android?Files.createTempDirectory(Paths.get(args[1]),"dsh-durable-owner-"):Files.createTempDirectory("dsh-durable-owner-");Files.setPosixFilePermissions(root,PosixFilePermissions.fromString("rwx------"));
     byte[] first=snapshot("/dsh-home/record",new byte[]{1,2,3}),second=snapshot("/dsh-home/record",new byte[]{4,5,6});
     try{

@@ -24,7 +24,7 @@ def build(apk):
     hooks=once(once(hooks,'  receiveModules();\n',''),'  installReadonlyFilesystem();\n','')
     if hooks.count('format: formatOf(filename)')!=2:raise RuntimeError('MAIN_NATIVE_FORMAT_SEAM')
     hooks=hooks.replace('format: formatOf(filename)','format: nativeMapping.format(filename) ?? formatOf(filename)')
-    hooks=once(hooks,'      const source = files.get(filename);','      const source = nativeMapping.source(filename) ?? files.get(filename);')
+    hooks=once(hooks,'      const source = files.get(filename);','      const source = nativeMapping.source(filename) ?? sessionStorageSource(filename) ?? files.get(filename);')
     transport=profile_transport().decode()
     transport=once(once(transport,"import fs from 'node:fs';\n",''),"import {createHash} from 'node:crypto';\n",'')
     transport=once(transport,'export async function installProfileTransport','async function installProfileTransport')
@@ -72,8 +72,9 @@ def build(apk):
     entry=once((ROOT/'original_main_entry.mjs').read_text(),'  // INSERT_ORIGINAL_MODULE_HOOKS',hooks)
     entry=once(entry,'  // INSERT_FIXED_ORIGINAL_NATIVE_MAPPING',native_overlay(apk).decode())
     plugins=(ROOT/'original_client_plugins.mjs').read_text()
+    session_storage=(ROOT/'original_session_storage.mjs').read_text()
     return (prefix+"\nimport {randomBytes} from 'node:crypto';\nimport {EventEmitter} from 'node:events';\n"+
-            plugins+'\n'+transport+codec+filesystem+watches+scope+directory+entry).encode()
+            plugins+'\n'+session_storage+'\n'+transport+codec+filesystem+watches+scope+directory+entry).encode()
 
 
 if __name__=='__main__':
