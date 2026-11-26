@@ -14,6 +14,13 @@ final class OriginalMainHttpChecks {
    Reply r=new Reply();r.status=c.getResponseCode();r.cookie=c.getHeaderField("Set-Cookie");InputStream body=r.status>=400?c.getErrorStream():c.getInputStream();r.body=body==null?new byte[0]:read(body,2*1024*1024);return r;
   }finally{c.disconnect();}
  }
+ static void verifyDefaultWorkspace(int port,String cookie)throws Exception{
+  String json="{\"type\":\"client-request\",\"rpcId\":\"default-workspace\",\"method\":\"workspace/initializeDefault\",\"payload\":{\"args\":{}}}";
+  Reply reply=request(port,"/api/workspace/initializeDefault",cookie,json);
+  String value=new String(reply.body,StandardCharsets.UTF_8).replaceAll("\\s+","");
+  yes(reply.status==200&&value.contains("\"ok\":true")&&
+      value.contains("/dsh-workspace/deepseek-harness/default-workspace"),"ORIGINAL_WORKSPACE_PATCH_DEFAULT_RPC");
+ }
  static void sendWs(OutputStream out,int opcode,byte[] data)throws Exception{
   if(data.length>65535)throw new IOException("CONTROL_WS_BOUND");byte[] mask=new byte[4];new SecureRandom().nextBytes(mask);out.write(0x80|opcode);if(data.length<126)out.write(0x80|data.length);else{out.write(0xfe);out.write(data.length>>>8);out.write(data.length&255);}out.write(mask);for(int i=0;i<data.length;i++)out.write(data[i]^mask[i%4]);out.flush();
  }

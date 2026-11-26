@@ -60,8 +60,8 @@ jobs:
           fi
           original=.p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
           apk=.p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk
-          python host_candidate/engine_runtime/verify_http_apk.py "$original" "$apk" --original-main-profile --owned-ready
-          python host_candidate/p50_original_arm64_node/verify_config_dex.py "$original" "$apk" --owned-ready --negative-checks
+          python host_candidate/engine_runtime/verify_http_apk.py "$original" "$apk" --original-main-profile --owner-bound
+          python host_candidate/p50_original_arm64_node/verify_config_dex.py "$original" "$apk" --owner-bound --negative-checks
           bt="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/build-tools/35.0.0"
           "$bt/apksigner" verify "$apk"
           "$bt/zipalign" -c -P 16 4 "$apk"

@@ -21,6 +21,9 @@ final class OriginalMainTestSession implements AutoCloseable {
   private volatile P68AndroidBinderIntake.HostPipes pipes;
   private P68AndroidBinderIntake intake;
   private volatile P37RemoteProcess process;
+  private HttpProcessTransport launchTransport;
+  private OriginalAndroidWebLaunch launchOwner;
+  private boolean transportOpened,handoffOffered;
   private volatile String failure="NONE";
   private final IBinder.DeathRecipient died=()->main.post(()->reject("BINDER_DEATH"));
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()){
@@ -92,6 +95,32 @@ final class OriginalMainTestSession implements AutoCloseable {
     catch(ExecutionException|TimeoutException bad){close();throw new IOException("MAIN_TEST_CHILD_"+failure);}
   }
   String failure(){return failure;}
+  HttpProcessTransport openLaunchTransport(P37RemoteProcess exact,OriginalAndroidWebLaunch launch,
+      DurableSessionSnapshot store)throws IOException{
+    synchronized(this){
+      if(closed.get()||!childClaimed.get()||exact==null||process!=exact||launch==null||transportOpened)
+        throw new IOException("MAIN_LAUNCH_AUTHENTICATED_CHILD_REQUIRED");
+      transportOpened=true;
+    }
+    HttpProcessTransport transport=HttpProcessTransport.forOriginalWebLaunch(exact,session,epoch,launch.plan,store);
+    synchronized(this){
+      if(!closed.get()){
+        launchTransport=transport;
+        launchOwner=launch;
+        return transport;
+      }
+    }
+    transport.close();
+    throw new IOException("MAIN_TEST_SESSION_CLOSED");
+  }
+  synchronized boolean ownsLaunch(OriginalAndroidWebLaunch owner,HttpProcessTransport transport){
+    return !closed.get()&&launchOwner==owner&&launchTransport==transport&&process!=null&&process.isAlive();
+  }
+  synchronized boolean reserveHandoff(OriginalAndroidWebLaunch owner,HttpProcessTransport transport){
+    if(handoffOffered||!ownsLaunch(owner,transport)||!transport.hasCurrentReadyProof())return false;
+    handoffOffered=true;
+    return true;
+  }
   private synchronized void control(int kind){
     if(worker==null)return;Bundle data=new Bundle();data.putString("session",session);data.putLong("epoch",epoch);data.putLong("request_seq",++requestSequence);
     Message request=Message.obtain(null,kind);request.setData(data);try{worker.send(request);}catch(RemoteException ignored){}

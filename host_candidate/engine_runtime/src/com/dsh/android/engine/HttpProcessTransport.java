@@ -21,6 +21,7 @@ final class HttpProcessTransport extends Process implements Closeable {
   // worker independently resolves the default from the sealed web bundle.
   static final int ORIGINAL_WEB_DEFAULT_PORT=3080;
   private static final int OMITTED_MAIN_PORT=65536;
+  private static final int APPROVED_WORKSPACE_OVERLAY=131072;
   static final int OPEN=1, DATA=2, END=3, CLOSE=4, ACK=5,
       APP_DATA=6, APP_END=7, LOG_ACK=8, SHUTDOWN=9, LOG_CLOSE=10;
   static final int LISTEN=16, RESPONSE=17, RESPONSE_END=18, RESPONSE_CLOSE=19,
@@ -87,6 +88,15 @@ final class HttpProcessTransport extends Process implements Closeable {
   /** Only a trusted receipt/owner factory may provide this directory capability.
    * A null option preserves an omitted --port in the original web main. */
   HttpProcessTransport(Process authenticatedChild,String hostSession,long ownerEpoch,Integer requestedPort,boolean mergedError,DurableSessionSnapshot profileStore)throws IOException{
+    this(authenticatedChild,hostSession,ownerEpoch,requestedPort,mergedError,profileStore,false);
+  }
+  static HttpProcessTransport forOriginalWebLaunch(Process child,String session,long epoch,
+      OriginalWebLaunch launch,DurableSessionSnapshot store)throws IOException{
+    if(launch==null||store==null)throw new IOException("MAIN_LAUNCH_CAPABILITY_REQUIRED");
+    return new HttpProcessTransport(child,session,epoch,launch.port(),true,store,true);
+  }
+  private HttpProcessTransport(Process authenticatedChild,String hostSession,long ownerEpoch,Integer requestedPort,
+      boolean mergedError,DurableSessionSnapshot profileStore,boolean workspaceOverlay)throws IOException{
     if(authenticatedChild==null||!authenticatedChild.isAlive()||hostSession==null||
        !hostSession.matches("[0-9a-f]{64}")||ownerEpoch<=0||
        (requestedPort==null?profileStore==null:requestedPort<0||requestedPort>65535))
@@ -102,7 +112,9 @@ final class HttpProcessTransport extends Process implements Closeable {
       listener.setReuseAddress(true);
       listener.bind(loopback(requestedPort==null?ORIGINAL_WEB_DEFAULT_PORT:requestedPort),16);
       output.writeBytes("DSHHTTP1");output.write(key);output.write(session);output.write(epochBytes);
-      output.writeInt(requestedPort==null?OMITTED_MAIN_PORT:requestedPort);output.writeInt(listener.getLocalPort());output.flush();
+      int wirePort=requestedPort==null?OMITTED_MAIN_PORT:requestedPort;
+      if(workspaceOverlay)wirePort|=APPROVED_WORKSPACE_OVERLAY;
+      output.writeInt(wirePort);output.writeInt(listener.getLocalPort());output.flush();
       // Register deadlines before any reader can observe immediate child exit
       // and close this executor. Fast startup failure is a valid Process exit.
       deadlines.schedule(()->{if(!listenSeen)fail("LISTEN_DEADLINE");},90,TimeUnit.SECONDS);
@@ -148,6 +160,10 @@ final class HttpProcessTransport extends Process implements Closeable {
   boolean hasVerifiedReadyUrl(String url){
     OriginalMainStartup.ReadyProof proof=readyProof.get();
     return proof!=null&&proof.matches(this,url)&&readyProof.get()==proof;
+  }
+  boolean hasCurrentReadyProof(){
+    OriginalMainStartup.ReadyProof proof=readyProof.get();
+    return proof!=null&&proof.isCurrent(this)&&readyProof.get()==proof;
   }
   String failure(){return failure+"/"+peerFault;}
   boolean awaitListening(long timeout,TimeUnit unit)throws InterruptedException{return listened.await(timeout,unit)&&accepting.get()&&!closed.get();}

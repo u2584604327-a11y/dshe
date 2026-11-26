@@ -26,6 +26,14 @@ def patches(sources):
         '          (os.environ.get("P51_SIDE_BY_SIDE")=="1" and\n'
         '           os.environ.get("HTTP_COMPONENT_TEST")=="1" and\n'
         '           os.environ.get("GITHUB_ACTIONS")=="true")),')
+    # The separate APK uses the receiver-bearing call. The strict DEX verifier
+    # independently checks its exact PC, register words and wrapper body.
+    owner_call=('Lcom/dsh/android/engine/OriginalStartupDiagnostics;->startOwned('
+                'Ljava/lang/ProcessBuilder;Lcom/dsh/android/EngineManager;)')
+    guard=once(guard,'    need(m[target]["calls"].count(("invoke-static",TRAMPOLINE))==1,',
+        f'    need(sum((op,"".join(call.split())) == ("invoke-static",{owner_call!r})\n'
+        '             for op,call in m[target]["calls"])==1 and\n'
+        '         ("invoke-static",TRAMPOLINE) not in m[target]["calls"],')
     builder=once(sources[BUILDER],
         'test "${P47_NO_HOST_FALLBACK:-0}" = 1 && test "${P51_SIDE_BY_SIDE:-0}" = 0 || {',
         'test "${P47_NO_HOST_FALLBACK:-0}" = 1 && { test "${P51_SIDE_BY_SIDE:-0}" = 0 ||\n'
@@ -34,7 +42,7 @@ def patches(sources):
     if builder.count('host_candidate/p51_side_by_side/p51_manifest.py')!=3:raise RuntimeError('HTTP_TEST_MANIFEST_CALL_COUNT')
     builder=builder.replace('host_candidate/p51_side_by_side/p51_manifest.py','host_candidate/engine_runtime/main_manifest.py')
     builder=once(builder,'apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"',
-        'python host_candidate/engine_runtime/original_startup_diagnostics.py "$ORIGINAL" "$DIR/decoded" --owned-ready\n'
+        'python host_candidate/engine_runtime/original_startup_diagnostics.py "$ORIGINAL" "$DIR/decoded" --owner-bound\n'
         'python host_candidate/engine_runtime/prepare_main_runtime.py prepare "$ORIGINAL" "$DIR/decoded"\n'
         'apktool b "$DIR/decoded" -o "$DIR/rebuilt-unsigned.apk"')
     builder=once(builder,
@@ -49,6 +57,9 @@ def patches(sources):
         'host_candidate/engine_runtime/src/com/dsh/android/engine/SessionSnapshotCodec.java',
         'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalMainHttpChecks.java',
         'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalMainStartup.java',
+        'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalWebLaunch.java',
+        'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalAndroidWebLaunch.java',
+        'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainOwnerHandoff.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainTestSession.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainIsolatedService.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainProbeActivity.java',
@@ -77,7 +88,7 @@ def main():
     if not git('remote','get-url','origin').removesuffix('.git').endswith('/'+REPO):raise RuntimeError('HTTP_TEST_WRONG_REPOSITORY')
     for name,pin in PINS.items():
         if git('hash-object',name)!=pin:raise RuntimeError('HTTP_TEST_PIN_CHANGED')
-    digest="11e1ada151faf44613a15fc9a241c84decb12d98893059772c434276b309385b"
+    digest="81b162b3cd84d3623daa84a1049c0201ca8c4814198dbb570bf58e3dbe41178c"
     java=Path('host_candidate/p50_original_arm64_node/android/com/dsh/android/p50/P50OriginalNodeFixedChild.java').read_text()
     if 'MAIN_TEST_BOOTSTRAP_SHA="'+digest+'"' not in java:raise RuntimeError('HTTP_TEST_COMPOSED_BOOTSTRAP_PIN')
     for name,text in patches({name:Path(name).read_text() for name in PINS}).items():Path(name).write_text(text)

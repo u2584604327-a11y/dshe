@@ -26,8 +26,10 @@ def main():
     parser.add_argument('original',type=Path);parser.add_argument('candidate',type=Path)
     parser.add_argument('--original-main-profile',action='store_true')
     parser.add_argument('--owned-ready',action='store_true')
+    parser.add_argument('--owner-bound',action='store_true')
     args=parser.parse_args()
     main=args.original_main_profile
+    require(not args.owner_bound or main,'OWNER_BOUND_MAIN_ONLY')
     if main:
         from main_manifest import verify_apk as manifest_check
     else:manifest_check=verify_apk
@@ -44,18 +46,28 @@ def main():
                          'Lcom/dsh/android/engine/OriginalMainIsolatedService;',
                          'Lcom/dsh/android/engine/OriginalMainHttpChecks;',
                          'Lcom/dsh/android/engine/OriginalMainStartup;']
+        if args.owner_bound:needed+=['Lcom/dsh/android/engine/OriginalWebLaunch;',
+                                     'Lcom/dsh/android/engine/OriginalAndroidWebLaunch;',
+                                     'Lcom/dsh/android/engine/OriginalMainOwnerHandoff;']
         require(all(any(key[0]==name for key in methods) for name in needed),'HTTP_CLASSES_MISSING')
         if main:
             body=[method for key,method in methods.items()
                   if key[0]=='Lcom/dsh/android/engine/OriginalMainProbeActivity;' and key[1]=='verify']
             require(len(body)==1,'MAIN_TEST_VERIFICATION_METHOD')
             refs=[view.instruction(raw)[1] for raw in view.rows(body[0]).values()]
-            expected=([b'await',b'verifyForReady',b'requireVerifiedReady'] if args.owned_ready else
+            expected=([b'await',b'verifyForReady',b'requireVerifiedReady'] if args.owned_ready or args.owner_bound else
                       [b'await',b'authenticate',b'verifyFrontend'])
             calls=[ref[1] for ref in refs if isinstance(ref,tuple) and len(ref)==4 and
                    ref[0]==b'Lcom/dsh/android/engine/OriginalMainStartup;' and
                    ref[1] in expected]
             require(calls==expected,'MAIN_TEST_PRIVATE_STARTUP_CALLS')
+        if args.owner_bound:
+            handoff=[method for key,method in methods.items() if key[0]==needed[-1] and key[1]=='claimOrDeny']
+            require(len(handoff)==1,'MAIN_TEST_OWNER_BOUND_WRAPPER')
+            refs=[view.instruction(raw)[1] for raw in view.rows(handoff[0]).values()]
+            require(refs.count((b'Lcom/dsh/android/p47/P47LaunchGate;',b'startOrDeny',
+                                (b'Ljava/lang/ProcessBuilder;',),b'Ljava/lang/Process;'))==1,
+                    'MAIN_TEST_OWNER_BOUND_FAIL_CLOSED')
         for key,method in methods.items():
             if key[0] in ([needed[1]]+needed[5:]) and method.get_code():
                 require(not any(view.instruction(raw)[1]==(b'Ljava/lang/ProcessBuilder;',b'start',(),b'Ljava/lang/Process;')

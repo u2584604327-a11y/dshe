@@ -1,6 +1,7 @@
 package com.dsh.android.engine;
 import android.app.Activity;import android.content.*;import android.os.*;import android.widget.*;
 import com.dsh.android.p50.P50ModuleStream;import com.dsh.p37.P37RemoteProcess;
+import java.lang.Process;
 import java.io.*;import java.nio.charset.StandardCharsets;import java.nio.file.*;import java.nio.file.attribute.*;import java.security.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.*;
 
 /** Physical ARM64 original runCli + actual workspace/RPC/WS/restart test.
@@ -27,6 +28,7 @@ public final class OriginalMainProbeActivity extends Activity {
   private void post(String value){main.post(()->report(value));}
   private void verify(){
     Path root=null;String owner=randomId(),oldCookie=null,oldToken=null;int port=0;
+    OriginalAndroidWebLaunch retiredLaunch=null;
     try{
       setStage("APK_IDENTITY");
       post("MAIN_TEST_INSTALLED_APK_SHA256="+installedApkSha256());
@@ -34,6 +36,10 @@ public final class OriginalMainProbeActivity extends Activity {
       post("MAIN_TEST_ORIGINAL_READY_REDACTION_AND_PRIVATE_URL=PASS");
       root=Files.createTempDirectory(getNoBackupFilesDir().toPath(),"original-main-test-",PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")));
       for(int generation=0;generation<2;generation++){
+        if(closed.get())return;
+        setStage("ORIGINAL_WORKSPACE_LAUNCH_PLAN");
+        Integer portOption=generation==0?HttpProcessTransport.originalWebPortOption():Integer.valueOf(port);
+        OriginalAndroidWebLaunch launch=OriginalAndroidWebLaunch.prepare(this,portOption);
         if(closed.get())return;setStage(generation==0?"FIRST_BIND":"RESTART_BIND");
         OriginalMainTestSession bound=new OriginalMainTestSession(this);session=bound;bound.bind();
         P37RemoteProcess raw=bound.awaitChild();post("ORIGINAL_MAIN_AUTHENTICATED_ISOLATED_CHILD=PASS generation="+generation);
@@ -51,11 +57,8 @@ public final class OriginalMainProbeActivity extends Activity {
           post("ORIGINAL_MAIN_RESOURCE_SOURCE=VERIFIED_COMPLETE");if(closed.get())return;
           setStage("OWNED_STORAGE_AND_MAIN");DurableSessionSnapshot store=new DurableSessionSnapshot(root,owner);
           HttpProcessTransport active;
-          // The original EngineManager main start merges stderr into its Process stdout.
-          try{
-            Integer portOption=generation==0?HttpProcessTransport.originalWebPortOption():Integer.valueOf(port);
-            active=new HttpProcessTransport(raw,bound.session,bound.epoch,portOption,true,store);
-          }catch(Exception bad){store.close();throw bad;}
+          try{active=bound.openLaunchTransport(raw,launch,store);}
+          catch(Exception bad){store.close();throw bad;}
           transport=active;if(closed.get()){active.close();return;}
           require(active.getErrorStream().read()==-1,"MAIN_MERGED_ERROR_STREAM");
           OriginalMainStartup startup=OriginalMainStartup.await(active);port=startup.port();
@@ -64,6 +67,12 @@ public final class OriginalMainProbeActivity extends Activity {
           setStage("OWNED_HTTP_READY_PROOF");
           String cookie=startup.verifyForReady();
           OriginalMainStartup.requireVerifiedReady(active,startup.privateUrl());
+          try(OriginalMainOwnerHandoff offer=OriginalMainOwnerHandoff.offer(launch,bound,active)){
+            if(retiredLaunch!=null)expectOwnedStartDenied(retiredLaunch);
+            require(invokeOwnedStart(launch)==active,"MAIN_OWNER_HANDOFF_EXACT_PROCESS");
+            expectOwnedStartDenied(launch);
+          }
+          post("ORIGINAL_MAIN_OWNER_BOUND_BRIDGE=PASS generation="+generation);
           InputStream admittedOutput=active.getInputStream();
           require(OriginalMainStartup.permitsVerifiedAnnouncement(active,OriginalMainHttpChecks.line(admittedOutput)),"MAIN_VERIFIED_STDOUT_HANDOFF");
           Thread stdout=new Thread(()->{
@@ -74,13 +83,15 @@ public final class OriginalMainProbeActivity extends Activity {
           stdout.start();
           post("ORIGINAL_MAIN_PROCESS_MERGED_STDERR=PASS generation="+generation);
           post("ORIGINAL_MAIN_OWNED_READY_PROOF=PASS generation="+generation);
+          OriginalMainHttpChecks.verifyDefaultWorkspace(port,cookie);
+          post("ORIGINAL_MAIN_ORIGINAL_WORKSPACE_OVERLAY=PASS generation="+generation);
           setStage("ORIGINAL_WORKSPACE_RPC");String body="{\"type\":\"client-request\",\"rpcId\":\"main-test\",\"method\":\"workspace/create\",\"payload\":{\"args\":{\"request\":{\"path\":\"/dsh-workspace\"}}}}";
           OriginalMainHttpChecks.Reply reply=OriginalMainHttpChecks.request(port,"/api/workspace/create",cookie,body);String value=new String(reply.body,StandardCharsets.UTF_8).replaceAll("\\s+","");
           require(reply.status==200&&value.contains("\"ok\":true")&&value.contains("\"created\":"+(generation==0))&&value.contains("/dsh-workspace"),"MAIN_WORKSPACE_RESTORE");
           setStage("ORIGINAL_WORKSPACE_WEBSOCKET");OriginalMainHttpChecks.workspaceStream(port,cookie);
           setStage("HOST_FENCE");OriginalMainHttpChecks.hostFence(port,cookie);
           setStage("STOP_AND_DISPOSE");active.destroy();require(active.waitFor(8,TimeUnit.SECONDS)&&active.exitValue()==0&&raw.terminalReason()==P37RemoteProcess.TerminalReason.REMOTE_EXIT,"MAIN_ACTUAL_EXIT");active.close();require(active.awaitClosed(5,TimeUnit.SECONDS)&&active.failure().equals("NONE/NONE"),"MAIN_OWNER_RELEASE");
-          oldCookie=cookie;oldToken=startup.privateTarget();transport=null;
+          oldCookie=cookie;oldToken=startup.privateTarget();retiredLaunch=launch;transport=null;
           post("ORIGINAL_MAIN_AUTH_FRONTEND_WORKSPACE_RPC_AND_WS=PASS generation="+generation);post("ORIGINAL_MAIN_ACTUAL_CHILD_EXIT=0 generation="+generation);
         }finally{HttpProcessTransport current=transport;if(current!=null){current.close();current.awaitClosed(5,TimeUnit.SECONDS);transportFault.set(current.failure());transport=null;}bound.close();session=null;}
       }
@@ -102,6 +113,18 @@ public final class OriginalMainProbeActivity extends Activity {
       }
     }
     return hex(digest.digest());
+  }
+  private Process invokeOwnedStart(OriginalAndroidWebLaunch launch)throws ReflectiveOperationException{
+    Class<?> bridge=Class.forName("com.dsh.android.engine.OriginalStartupDiagnostics",true,getClassLoader());
+    return (Process)bridge.getMethod("startOwned",ProcessBuilder.class,launch.engine.getClass())
+        .invoke(null,launch.original,launch.engine);
+  }
+  private void expectOwnedStartDenied(OriginalAndroidWebLaunch launch)throws Exception{
+    try{invokeOwnedStart(launch);throw new IOException("MAIN_OWNER_HANDOFF_REPLAY_ACCEPTED");}
+    catch(java.lang.reflect.InvocationTargetException denied){
+      require(denied.getCause() instanceof IOException&&"P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK"
+          .equals(denied.getCause().getMessage()),"MAIN_OWNER_HANDOFF_REPLAY_RESULT");
+    }
   }
   private void checkReadyDiagnostics()throws ReflectiveOperationException,IOException{
     Class<?> ready=Class.forName("com.dsh.android.EngineManager$State$Ready",true,getClassLoader());

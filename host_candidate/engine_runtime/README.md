@@ -33,9 +33,11 @@ ProcessBuilder fallback. No public Binder service or factory was added here.
 
 The trusted pipe begins with 88 bytes: `DSHHTTP1`, 32 random key bytes, 32 session
 bytes, positive 64-bit owner epoch, requested port and bound port. Full main
-reserves requested-port value 65536 for an omitted option. The bound port must
-then equal the default in the sealed web bundle. A conflict between precheck and
-bind fails startup. All integers are big-endian. Frames contain `DHF1`, type, positive 64-bit per-direction
+uses the low 16 bits for the explicit port and bit 16 for an omitted option.
+The bound port must then equal the default in the sealed web bundle. A conflict
+between precheck and bind fails startup. Bit 17 carries the approved workspace
+overlay capability for the already authenticated pipe. All integers are
+big-endian. Frames contain `DHF1`, type, positive 64-bit per-direction
 sequence, 32-bit connection id, 32-bit payload length, HMAC-SHA256 and payload.
 The MAC includes direction, session, epoch, complete header and payload. A frame
 is at most 16 KiB; sequence replay, a different direction/epoch, unallocated ids,
@@ -385,8 +387,24 @@ buffer that can survive a change of reader thread.
 
 The isolated main TEST exercises the real HTTP proof and stdout handoff.
 The DEX verifier checks the original callsites and helper body independently.
-The production launch gate still requires an authorized Android Supervisor
-to provide this Process to the original coroutine.
+The separate TEST APK also uses `--owner-bound`. It changes the signed
+main-start call at byte PC 3912 to pass the exact original `EngineManager`
+receiver already in register `v2`. The strict verifier pins the register
+encoding and the new wrapper body. An unarmed wrapper reaches the ordinary
+P47 refusal. A one-use offer belongs to the exact receiver, captured argv,
+cwd, environment, authenticated child session and current HTTP proof. The TEST
+activity exercises the wrapper directly and checks that a retired receiver or
+replay receives the P47 refusal. The full original coroutine still requires a
+production Supervisor and owner authorization.
+
+The TEST activity invokes the original `writeWorkspacePatch` and
+`buildEngineArgs` in its fresh owner directory. The launch adapter checks the
+signed generator's fixed prefix digest and exact owner workspace path. The
+isolated runtime reconstructs only the approved workspace-controller row with
+`documentsDirectory: /dsh-workspace` in its read-only resource map. The original
+`workspace/initializeDefault` RPC proves that this row is applied and that the
+default workspace persists on restart. Other Android overlays require their
+own source, dependency and capability checks.
 
 Android-generated overlays, all three EngineManager launch paths, production
 owner authorization, model egress, browser/profile B3/B4 and original signing

@@ -31,12 +31,14 @@ def build(apk):
     transport=once(transport,'onFailure = () => {}} = {}) {','onFailure = () => {}, originalDefaultPort} = {}) {')
     transport=once(transport,'  const requestedPort = hello.readUInt32BE(80), port = hello.readUInt32BE(84);',
         '''  const wirePort = hello.readUInt32BE(80), port = hello.readUInt32BE(84);
-  const omitPort = wirePort === 65536;
-  const requestedPort = omitPort ? originalDefaultPort : wirePort;''')
+  const omitPort = (wirePort & 65536) !== 0, workspaceOverlay = (wirePort & 131072) !== 0;
+  const explicitPort = wirePort & 65535;
+  const requestedPort = omitPort ? originalDefaultPort : explicitPort;''')
     transport=once(transport,'      requestedPort > 65535 || port < 1',
-        '      !Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535 ||\n'
-        '      (omitPort && requestedPort === 0) || port < 1')
-    transport=once(transport,'    port, requestedPort, reading,','    port, requestedPort, omitPort, reading,')
+        '      wirePort > 262143 || !Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535 ||\n'
+        '      (omitPort && (explicitPort !== 0 || requestedPort === 0)) || port < 1')
+    transport=once(transport,'    port, requestedPort, reading,',
+        '    port, requestedPort, omitPort, workspaceOverlay, reading,')
     codec=wrapped('session_snapshot.mjs',['decodeSessionSnapshot','encodeSessionSnapshot'],["import path from 'node:path';"])
     filesystem=wrapped('session_filesystem.mjs',['installSessionFilesystem'],["import fs from 'node:fs';","import path from 'node:path';","import {randomBytes} from 'node:crypto';","import {syncBuiltinESMExports} from 'node:module';","import {decodeSessionSnapshot,encodeSessionSnapshot} from './session_snapshot.mjs';"])
     watches=wrapped('virtual_watch.mjs',['installVirtualWatchers'],["import fs from 'node:fs';","import path from 'node:path';","import {EventEmitter} from 'node:events';","import {syncBuiltinESMExports} from 'node:module';"])

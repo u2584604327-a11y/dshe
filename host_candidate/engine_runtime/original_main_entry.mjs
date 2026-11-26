@@ -15,6 +15,11 @@ async function runOriginalMain(){
   // INSERT_FIXED_ORIGINAL_NATIVE_MAPPING
   mainTransport=await installProfileTransport({onFailure:revokeMainOwner,originalDefaultPort:originalWebDefaultPort()});
   const snapshot=await mainTransport.filesystem.ready;
+  const workspacePatch=ROOT+'/owner-workspace.patch.yml';
+  if(mainTransport.workspaceOverlay){
+    if(files.has(workspacePatch)||directories.has(workspacePatch))fail('E_DSH_WORKSPACE_PATCH_COLLISION');
+    files.set(workspacePatch,Buffer.from("- id: workspace-controller\n  name: '@deepseek-ai/dsh-api-workspace-controller'\n  config:\n    documentsDirectory: '/dsh-workspace'\n"));
+  }
   installReadonlyFilesystem();installVirtualDirectories();
   let watches;
   mainFilesystem=installSessionFilesystem({files,directories,privateFiles:profileFiles,resolve:filenameOf,
@@ -39,6 +44,7 @@ async function runOriginalMain(){
   };
   process.once('exit',revokeMainOwner);
   process.argv=[process.execPath,ENTRY,'--profile','web'];
+  if(mainTransport.workspaceOverlay)process.argv.push('--patch',workspacePatch);
   if(!mainTransport.omitPort)process.argv.push('--port',String(mainTransport.requestedPort));
   process.argv.push('--no-open');
   const entry=await import(pathToFileURL(ENTRY).href);

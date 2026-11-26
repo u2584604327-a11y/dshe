@@ -20,6 +20,8 @@ ORIGINAL_SHA = '3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5
 ENGINE = PACKAGE + 'EngineManager;'
 STARTUP = PACKAGE + 'engine/OriginalMainStartup;'
 PROCESS = 'Ljava/lang/Process;'
+PROCESS_BUILDER = 'Ljava/lang/ProcessBuilder;'
+MAIN_HANDOFF = PACKAGE + 'engine/OriginalMainOwnerHandoff;'
 FLOW = 'Lkotlinx/coroutines/flow/MutableStateFlow;'
 REGEX = 'Lkotlin/text/Regex;'
 CHARSEQ = 'Ljava/lang/CharSequence;'
@@ -93,9 +95,12 @@ def wrapper_key(wrapper):
 REDACT = (OWNER, 'publicLine', f'({STRING}){STRING}')
 METHODS = {REDACT, *(wrapper_key(name) for name in WRAPPERS)}
 READY_METHODS = {(OWNER, 'findReady', FIND_READY), (OWNER, 'readyState', f'({ENGINE}{STRING}){FLOW}')}
+OWNED_START = (OWNER, 'startOwned', f'({PROCESS_BUILDER}{ENGINE}){PROCESS}')
+OWNED_START_PC = 3912
+OWNED_START_INVOKE = (bytes.fromhex('71202000'), ref(OWNER, 'startOwned', (PROCESS_BUILDER, ENGINE), PROCESS))
 
 
-def wrapper_source(owned_ready=False):
+def wrapper_source(owned_ready=False, owner_bound=False):
     body = f'''.class public final {OWNER}
 .super Ljava/lang/Object;
 
@@ -149,10 +154,19 @@ def wrapper_source(owned_ready=False):
     return-object v0
 .end method
 '''
+    if owner_bound:
+        body += f'''
+.method public static startOwned{OWNED_START[2]}
+    .locals 0
+    invoke-static {{p0, p1}}, {MAIN_HANDOFF}->claimOrDeny({PROCESS_BUILDER}{OBJECT}){PROCESS}
+    move-result-object p0
+    return-object p0
+.end method
+'''
     return body
 
 
-def rewrite(key, source, sites, owned_ready=False):
+def rewrite(key, source, sites, owned_ready=False, owner_bound=False):
     _, method, signature = key
     matches = list(re.finditer(r'^\.method [^\n]* ' + re.escape(method + signature)
                                + r'\n.*?^\.end method$', source, re.M | re.S))
@@ -174,6 +188,18 @@ def rewrite(key, source, sites, owned_ready=False):
         if body.count(old) != count:
             raise ValueError('STARTUP_DIAGNOSTICS_INVOKE_ANCHOR')
         body = body.replace(old, new)
+    if owner_bound and key == START:
+        # v2 contains this$0 and remains live across ensureRescuePrompt().
+        context = (f'    iget-object v2, v1, {START[0]}->this$0:{ENGINE}\n\n'
+                   f'    invoke-static {{v2}}, {ENGINE}->access$ensureRescuePrompt({ENGINE})V\n')
+        old = f'    invoke-static {{v0}}, {PACKAGE}p40/P40ProcessBridge;->start({PROCESS_BUILDER}){PROCESS}\n'
+        new = f'    invoke-static {{v0, v2}}, {OWNER}->startOwned{OWNED_START[2]}\n'
+        if body.count(context) != 1 or body.count(old) != 1:
+            raise ValueError('OWNER_BOUND_ORIGINAL_SPAWN_ANCHOR')
+        begin, finish = body.index(context) + len(context), body.index(old)
+        if not re.fullmatch(r'\s*(?:\.line \d+\s+)?:try_start_\w+\s*', body[begin:finish]):
+            raise ValueError('OWNER_BOUND_ORIGINAL_RECEIVER_DRIFT')
+        body = body.replace(old, new)
     if owned_ready and key == READER:
         old = f'    invoke-static {{p5, v2, v0, v5, v4}}, {REGEX}->find$default{FIND}\n'
         new = f'    invoke-static {{p5, v2, v0, v5, p0}}, {OWNER}->findReady{FIND_READY}\n'
@@ -191,7 +217,8 @@ def rewrite(key, source, sites, owned_ready=False):
     return source[:match.start()] + body + source[match.end():]
 
 
-def patch(original, root, owned_ready=False):
+def patch(original, root, owned_ready=False, owner_bound=False):
+    owned_ready = owned_ready or owner_bound
     with original.open('rb') as apk:
         if hashlib.file_digest(apk, 'sha256').hexdigest() != ORIGINAL_SHA:
             raise ValueError('STARTUP_DIAGNOSTICS_SOURCE_APK_SHA')
@@ -205,18 +232,20 @@ def patch(original, root, owned_ready=False):
         if file.is_symlink() or directory not in file.resolve(strict=True).parents:
             raise ValueError('STARTUP_DIAGNOSTICS_SOURCE_PATH')
         source = changed[file] if file in changed else file.read_text(encoding='utf-8')
-        changed[file] = rewrite(key, source, sites, owned_ready)
+        changed[file] = rewrite(key, source, sites, owned_ready, owner_bound)
     helper.parent.mkdir(parents=True, exist_ok=True)
     with helper.open('x', encoding='utf-8') as output:
-        output.write(wrapper_source(owned_ready))
+        output.write(wrapper_source(owned_ready, owner_bound))
     for file, source in changed.items():
         file.write_text(source, encoding='utf-8')
     print('ORIGINAL_STARTUP_DIAGNOSTICS_SCOPED_SMALI=PREPARED sites=9')
     if owned_ready:
         print('ORIGINAL_MAIN_OWNED_READY_SCOPED_SMALI=PREPARED sites=3')
+    if owner_bound:
+        print('ORIGINAL_MAIN_OWNER_BOUND_START_SMALI=PREPARED')
 
 
-def verify_helper(strict, view, methods, owned_ready=False):
+def verify_helper(strict, view, methods, owned_ready=False, owner_bound=False):
     """Verify executable instructions and resolved refs of all new methods."""
     classes = [cls for cls in view.dex.get_classes() if cls.get_name() == OWNER]
     strict.need(len(classes) == 1 and classes[0].get_access_flags() == 0x11 and
@@ -265,6 +294,10 @@ def verify_helper(strict, view, methods, owned_ready=False):
                 [(bytes.fromhex('71100100'), get_process), (b'\x0c\x00', None),
                  (bytes.fromhex('71202000'), require), (bytes.fromhex('71100100'), get_state),
                  (b'\x0c\x00', None), (b'\x11\x00', None)], frame=(3, 2, 2))
+    if owner_bound:
+        handoff = ref(MAIN_HANDOFF, 'claimOrDeny', (PROCESS_BUILDER, OBJECT), PROCESS)
+        compare(OWNED_START, 2, [(bytes.fromhex('71201000'), handoff),
+                                (b'\x0c\x00', None), (b'\x11\x00', None)])
 
 
 if __name__ == '__main__':
@@ -272,5 +305,6 @@ if __name__ == '__main__':
     parser.add_argument('original', type=Path)
     parser.add_argument('decoded', type=Path)
     parser.add_argument('--owned-ready', action='store_true')
+    parser.add_argument('--owner-bound', action='store_true')
     args = parser.parse_args()
-    patch(args.original, args.decoded, args.owned_ready)
+    patch(args.original, args.decoded, args.owned_ready, args.owner_bound)
