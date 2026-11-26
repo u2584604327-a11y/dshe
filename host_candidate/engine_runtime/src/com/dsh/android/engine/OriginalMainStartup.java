@@ -24,6 +24,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** Checks the original web service while its launch URL is still private. */
@@ -35,6 +36,9 @@ public final class OriginalMainStartup {
             "4bc914bfbb6adbdd63953a29f63835eb7127defd2a973149d64cdab489f1a9a5";
     private static final Pattern TARGET = Pattern.compile("/\\?token=[A-Za-z0-9_-]{43}");
     private static final Pattern CHILD_DENIAL = Pattern.compile("ORIGINAL_MAIN_DENY=[A-Z0-9_]{1,64}");
+    private static final Pattern PLUGIN_COMBO = Pattern.compile(
+            "plugins/\\?\\?([A-Za-z0-9_@./,-]{1,3000})&(?:amp;)?rev=([a-f0-9]{12})(?![a-f0-9])");
+    private static final String BROWSER_SCRIPT = "dsh-android-browser-pane/client.js";
     private final HttpProcessTransport process;
     private final int port;
     private final String target;
@@ -217,11 +221,26 @@ public final class OriginalMainStartup {
 
     private void verifyFrontend(String cookie) throws IOException {
         Reply index = request("/", cookie, 65536);
-        require(index.status == 200 && new String(index.body, StandardCharsets.UTF_8)
-                .contains("src=\"." + FRONTEND_SCRIPT + "\""), "MAIN_FRONTEND");
+        String html = new String(index.body, StandardCharsets.UTF_8);
+        require(index.status == 200 && html.contains("src=\"." + FRONTEND_SCRIPT + "\""), "MAIN_FRONTEND");
         Reply script = request(FRONTEND_SCRIPT, null, 1024 * 1024);
         require(script.status == 200 && FRONTEND_SHA.equals(hex(sha(script.body))), "MAIN_ORIGINAL_JS_BYTES");
+        OriginalBrowserPane browser = process.browserPane();
+        if (browser != null) verifyBrowserBundle(html, cookie, browser);
         require(process.ownsListener(port), "MAIN_LISTENER_REVOKED");
+    }
+
+    private void verifyBrowserBundle(String html, String cookie, OriginalBrowserPane browser) throws IOException {
+        Matcher combos = PLUGIN_COMBO.matcher(html);
+        while (combos.find()) {
+            String members = combos.group(1);
+            if (!Arrays.asList(members.split(",")).contains(BROWSER_SCRIPT)) continue;
+            Reply bundle = request("/plugins/??" + members + "&rev=" + combos.group(2), cookie, 2 * 1024 * 1024);
+            require(bundle.status == 200 && new String(bundle.body, StandardCharsets.ISO_8859_1)
+                    .contains(new String(browser.clientBytes(), StandardCharsets.ISO_8859_1)), "MAIN_BROWSER_CLIENT_BYTES");
+            return;
+        }
+        throw denied("MAIN_BROWSER_CLIENT_NOT_MOUNTED");
     }
 
     void verifyRetiredCredentials(String retiredTarget, String retiredCookie) throws IOException {

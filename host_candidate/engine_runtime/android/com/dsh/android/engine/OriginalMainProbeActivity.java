@@ -66,6 +66,7 @@ public final class OriginalMainProbeActivity extends Activity {
           if(generation==1)startup.verifyRetiredCredentials(oldToken,oldCookie);
           setStage("OWNED_HTTP_READY_PROOF");
           String cookie=startup.verifyForReady();
+          post("ORIGINAL_MAIN_BROWSER_PANE_CLIENT_BYTES=PASS generation="+generation);
           OriginalMainStartup.requireVerifiedReady(active,startup.privateUrl());
           try(OriginalMainOwnerHandoff offer=OriginalMainOwnerHandoff.offer(launch,bound,active)){
             if(retiredLaunch!=null)expectOwnedStartDenied(retiredLaunch);

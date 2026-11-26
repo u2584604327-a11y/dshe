@@ -5,8 +5,8 @@ import hashlib
 from pathlib import Path
 from build_original_main_bootstrap import build
 from prepare_native_http import embed
-MAIN_SHA='81b162b3cd84d3623daa84a1049c0201ca8c4814198dbb570bf58e3dbe41178c'
-MAIN_LENGTH=85349
+MAIN_SHA='a6b4735816a82d1b7095763982333d6fbcff7cc3499e0865976e2578864b5359'
+MAIN_LENGTH=87922
 
 
 def prepare(apk,decoded):

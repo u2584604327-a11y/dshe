@@ -32,13 +32,31 @@ def build(apk):
     transport=once(transport,'  const requestedPort = hello.readUInt32BE(80), port = hello.readUInt32BE(84);',
         '''  const wirePort = hello.readUInt32BE(80), port = hello.readUInt32BE(84);
   const omitPort = (wirePort & 65536) !== 0, workspaceOverlay = (wirePort & 131072) !== 0;
+  const browserOverlay = (wirePort & 262144) !== 0;
   const explicitPort = wirePort & 65535;
   const requestedPort = omitPort ? originalDefaultPort : explicitPort;''')
     transport=once(transport,'      requestedPort > 65535 || port < 1',
-        '      wirePort > 262143 || !Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535 ||\n'
+        '      wirePort > 524287 || (browserOverlay && !workspaceOverlay) ||\n'
+        '      !Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535 ||\n'
         '      (omitPort && (explicitPort !== 0 || requestedPort === 0)) || port < 1')
     transport=once(transport,'    port, requestedPort, reading,',
-        '    port, requestedPort, omitPort, workspaceOverlay, reading,')
+        '    port, requestedPort, omitPort, workspaceOverlay, browserOverlay, reading,')
+    transport=once(transport,'function applyProfileFrame(frame){', '''let browserBytes = browserOverlay ? Buffer.alloc(browserPaneLength) : null;
+let browserOffset = 0;
+function applyProfileFrame(frame){
+  if (frame.type === 15) {
+    if (!browserBytes || frame.id !== 0 || frame.length === 0 || frame.length > browserBytes.length - browserOffset) {
+      throw error('E_DSH_BROWSER_CAPSULE_FRAME');
+    }
+    frame.data.copy(browserBytes, browserOffset);
+    browserOffset += frame.length;
+    if (browserOffset === browserBytes.length) {
+      installBrowserPane(browserBytes);
+      browserBytes = null;
+    }
+    return;
+  }
+  if (browserBytes) throw error('E_DSH_BROWSER_CAPSULE_INCOMPLETE');''')
     codec=wrapped('session_snapshot.mjs',['decodeSessionSnapshot','encodeSessionSnapshot'],["import path from 'node:path';"])
     filesystem=wrapped('session_filesystem.mjs',['installSessionFilesystem'],["import fs from 'node:fs';","import path from 'node:path';","import {randomBytes} from 'node:crypto';","import {syncBuiltinESMExports} from 'node:module';","import {decodeSessionSnapshot,encodeSessionSnapshot} from './session_snapshot.mjs';"])
     watches=wrapped('virtual_watch.mjs',['installVirtualWatchers'],["import fs from 'node:fs';","import path from 'node:path';","import {EventEmitter} from 'node:events';","import {syncBuiltinESMExports} from 'node:module';"])
@@ -46,7 +64,9 @@ def build(apk):
     directory=once((ROOT/'readonly_directory.mjs').read_text(),'export function installVirtualDirectories','function installVirtualDirectories')
     entry=once((ROOT/'original_main_entry.mjs').read_text(),'  // INSERT_ORIGINAL_MODULE_HOOKS',hooks)
     entry=once(entry,'  // INSERT_FIXED_ORIGINAL_NATIVE_MAPPING',native_overlay(apk).decode())
-    return (prefix+"\nimport {randomBytes} from 'node:crypto';\nimport {EventEmitter} from 'node:events';\n"+transport+codec+filesystem+watches+scope+directory+entry).encode()
+    browser=(ROOT/'original_browser_pane.mjs').read_text()
+    return (prefix+"\nimport {randomBytes} from 'node:crypto';\nimport {EventEmitter} from 'node:events';\n"+
+            browser+'\n'+transport+codec+filesystem+watches+scope+directory+entry).encode()
 
 
 if __name__=='__main__':

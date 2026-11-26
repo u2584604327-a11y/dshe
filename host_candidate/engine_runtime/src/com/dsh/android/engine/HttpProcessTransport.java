@@ -22,12 +22,15 @@ final class HttpProcessTransport extends Process implements Closeable {
   static final int ORIGINAL_WEB_DEFAULT_PORT=3080;
   private static final int OMITTED_MAIN_PORT=65536;
   private static final int APPROVED_WORKSPACE_OVERLAY=131072;
+  private static final int APPROVED_BROWSER_OVERLAY=262144;
+  private static final int BROWSER_DATA=15;
   static final int OPEN=1, DATA=2, END=3, CLOSE=4, ACK=5,
       APP_DATA=6, APP_END=7, LOG_ACK=8, SHUTDOWN=9, LOG_CLOSE=10;
   static final int LISTEN=16, RESPONSE=17, RESPONSE_END=18, RESPONSE_CLOSE=19,
       REQUEST_ACK=20, LOG=21, STOP=22, APP_ACK=24, FINISH=25;
   private final Process child;
   private final DurableSessionSnapshot profileStore;
+  private final OriginalBrowserPane browserPane;
   private final Object snapshotLock=new Object();
   private byte[] snapshotIncoming,snapshotExpectedHash;
   private int snapshotOffset,snapshotTransaction;
@@ -88,20 +91,20 @@ final class HttpProcessTransport extends Process implements Closeable {
   /** Only a trusted receipt/owner factory may provide this directory capability.
    * A null option preserves an omitted --port in the original web main. */
   HttpProcessTransport(Process authenticatedChild,String hostSession,long ownerEpoch,Integer requestedPort,boolean mergedError,DurableSessionSnapshot profileStore)throws IOException{
-    this(authenticatedChild,hostSession,ownerEpoch,requestedPort,mergedError,profileStore,false);
+    this(authenticatedChild,hostSession,ownerEpoch,requestedPort,mergedError,profileStore,null);
   }
   static HttpProcessTransport forOriginalWebLaunch(Process child,String session,long epoch,
       OriginalWebLaunch launch,DurableSessionSnapshot store)throws IOException{
     if(launch==null||store==null)throw new IOException("MAIN_LAUNCH_CAPABILITY_REQUIRED");
-    return new HttpProcessTransport(child,session,epoch,launch.port(),true,store,true);
+    return new HttpProcessTransport(child,session,epoch,launch.port(),true,store,launch.browser);
   }
   private HttpProcessTransport(Process authenticatedChild,String hostSession,long ownerEpoch,Integer requestedPort,
-      boolean mergedError,DurableSessionSnapshot profileStore,boolean workspaceOverlay)throws IOException{
+      boolean mergedError,DurableSessionSnapshot profileStore,OriginalBrowserPane browser)throws IOException{
     if(authenticatedChild==null||!authenticatedChild.isAlive()||hostSession==null||
        !hostSession.matches("[0-9a-f]{64}")||ownerEpoch<=0||
        (requestedPort==null?profileStore==null:requestedPort<0||requestedPort>65535))
       throw new IOException("AUTHENTICATED_RUNTIME_REQUIRED");
-    child=authenticatedChild;this.profileStore=profileStore;this.mergedError=mergedError;
+    child=authenticatedChild;this.profileStore=profileStore;this.mergedError=mergedError;browserPane=browser;
     session=new byte[32];for(int i=0;i<32;i++)session[i]=(byte)Integer.parseInt(hostSession.substring(i*2,i*2+2),16);
     epochBytes=ByteBuffer.allocate(8).putLong(ownerEpoch).array();
     new SecureRandom().nextBytes(key);
@@ -113,7 +116,7 @@ final class HttpProcessTransport extends Process implements Closeable {
       listener.bind(loopback(requestedPort==null?ORIGINAL_WEB_DEFAULT_PORT:requestedPort),16);
       output.writeBytes("DSHHTTP1");output.write(key);output.write(session);output.write(epochBytes);
       int wirePort=requestedPort==null?OMITTED_MAIN_PORT:requestedPort;
-      if(workspaceOverlay)wirePort|=APPROVED_WORKSPACE_OVERLAY;
+      if(browser!=null)wirePort|=APPROVED_WORKSPACE_OVERLAY|APPROVED_BROWSER_OVERLAY;
       output.writeInt(wirePort);output.writeInt(listener.getLocalPort());output.flush();
       // Register deadlines before any reader can observe immediate child exit
       // and close this executor. Fast startup failure is a valid Process exit.
@@ -125,7 +128,7 @@ final class HttpProcessTransport extends Process implements Closeable {
       thread("dsh-app-stdout",()->logs[0].run());if(!mergedError)thread("dsh-app-stderr",()->logs[1].run());
       thread("dsh-http-frame-writer",this::writeFrames);
       thread("dsh-http-frame-reader",this::readFrames);
-      if(profileStore!=null)thread("dsh-owner-snapshot-initialization",this::sendInitialSnapshot);
+      if(profileStore!=null)thread("dsh-owner-snapshot-initialization",()->sendInitialSnapshot(browser));
       thread("dsh-http-child-stderr",()->{
         try(InputStream err=child.getErrorStream()){
           // Unframed native diagnostics are not application output or authority.
@@ -141,6 +144,7 @@ final class HttpProcessTransport extends Process implements Closeable {
     }catch(IOException|RuntimeException error){close();throw error;}
   }
   int port(){return listener.getLocalPort();}
+  OriginalBrowserPane browserPane(){return browserPane;}
   boolean ownsListener(int port){
     return port>0&&port==port()&&accepting.get()&&!stopping.get()&&!closed.get()&&child.isAlive();
   }
@@ -248,10 +252,15 @@ final class HttpProcessTransport extends Process implements Closeable {
       throw new IOException("STORE_WIRE_CLOSED");
     }catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new InterruptedIOException("STORE_WIRE_INTERRUPTED");}
   }
-  private void sendInitialSnapshot(){
+  private void sendInitialSnapshot(OriginalBrowserPane browser){
     DurableSessionSnapshot.State state=null;
     try{
       state=profileStore.read();long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(15);
+      if(browser!=null){
+        byte[] capsule=browser.framedBytes();
+        for(int offset=0;offset<capsule.length;offset+=CHUNK)
+          sendOwnedFrame(BROWSER_DATA,0,Arrays.copyOfRange(capsule,offset,Math.min(offset+CHUNK,capsule.length)),deadline);
+      }
       byte[] hash=MessageDigest.getInstance("SHA-256").digest(state.bytes);
       sendOwnedFrame(FS_INIT_BEGIN,0,ByteBuffer.allocate(44).putLong(state.version).putInt(state.bytes.length).put(hash).array(),deadline);
       for(int offset=0;offset<state.bytes.length;offset+=CHUNK)

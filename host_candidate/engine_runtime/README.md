@@ -36,8 +36,11 @@ bytes, positive 64-bit owner epoch, requested port and bound port. Full main
 uses the low 16 bits for the explicit port and bit 16 for an omitted option.
 The bound port must then equal the default in the sealed web bundle. A conflict
 between precheck and bind fails startup. Bit 17 carries the approved workspace
-overlay capability for the already authenticated pipe. All integers are
-big-endian. Frames contain `DHF1`, type, positive 64-bit per-direction
+overlay capability. Bit 18 carries the browser-pane capability on the same
+authenticated pipe. Type 15 delivers its fixed-order 36,846-byte capsule
+before the owner snapshot. The isolated receiver checks every member digest
+before exposing the files. All integers are big-endian. Frames contain `DHF1`,
+type, positive 64-bit per-direction
 sequence, 32-bit connection id, 32-bit payload length, HMAC-SHA256 and payload.
 The MAC includes direction, session, epoch, complete header and payload. A frame
 is at most 16 KiB; sequence replay, a different direction/epoch, unallocated ids,
@@ -405,6 +408,15 @@ isolated runtime reconstructs only the approved workspace-controller row with
 `workspace/initializeDefault` RPC proves that this row is applied and that the
 default workspace persists on restart. Other Android overlays require their
 own source, dependency and capability checks.
+
+The browser-pane capsule uses the signed `browser-pane.zip` and the original
+`writeBrowserPanePatch` output. The host compares the generated prefix and the
+entry path in the fresh owner. The isolated runtime verifies three fixed
+members and mounts them under a read-only virtual root. It applies the browser
+patch before the workspace patch, preserving their order in the original main.
+The live Ready proof fetches the original frontend's versioned bundle for this
+module and checks the exact client bytes. This mount introduces no browser-tool
+IPC, Android WebView authorization, process spawn or new network permission.
 
 Android-generated overlays, all three EngineManager launch paths, production
 owner authorization, model egress, browser/profile B3/B4 and original signing

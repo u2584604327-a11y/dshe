@@ -19,44 +19,64 @@ final class OriginalWebLaunch {
     // The fixed output of signed v138 writeWorkspacePatch() before its path line.
     private static final String WORKSPACE_PREFIX_SHA =
             "1c32ae4dd581f4ffcfa4fd4370c55ed3cd0f28984f732f34aebafc67e22c5e27";
+    private static final String BROWSER_PREFIX_SHA =
+            "b50b9f51870598bca0783374c4c2650fb0548a93042028a8c45698f95394e424";
 
     private final List<String> argv;
     private final Map<String, String> environment;
     private final File directory;
     private final Integer port;
+    final OriginalBrowserPane browser;
 
-    private OriginalWebLaunch(ProcessBuilder original, List<String> argv, Integer port) {
+    private OriginalWebLaunch(ProcessBuilder original, List<String> argv, Integer port, OriginalBrowserPane browser) {
         this.argv = argv;
         environment = new HashMap<>(original.environment());
         directory = original.directory();
         this.port = port;
+        this.browser = browser;
     }
 
     /** The caller supplies these paths and the bounded file from the trusted owner's layout. */
     static OriginalWebLaunch capture(ProcessBuilder original, File node, File entry,
-            File workspace, File workspacePatch, byte[] patchBytes) throws IOException {
-        require(original != null && node != null && entry != null && workspace != null && workspacePatch != null,
+            File workspace, File workspacePatch, byte[] patchBytes, File browserPatch,
+            byte[] browserPatchBytes, OriginalBrowserPane browser) throws IOException {
+        require(original != null && node != null && entry != null && workspace != null && workspacePatch != null
+                        && browserPatch != null && browser != null,
                 "MAIN_LAUNCH_OWNER_LAYOUT");
         require(workspace.isAbsolute() && workspace.toPath().normalize().equals(workspace.toPath())
                 && workspace.getPath().matches("/[A-Za-z0-9._/-]{1,1024}"), "MAIN_LAUNCH_WORKSPACE");
         require(node.isAbsolute() && entry.isAbsolute() && workspacePatch.isAbsolute()
-                && WORKSPACE_PATCH.equals(workspacePatch.getName()), "MAIN_LAUNCH_OWNER_LAYOUT");
+                && WORKSPACE_PATCH.equals(workspacePatch.getName())
+                && new File(workspacePatch.getParentFile(), OriginalBrowserPane.PATCH).equals(browserPatch),
+                "MAIN_LAUNCH_OWNER_LAYOUT");
         require(workspace.equals(original.directory()) && validPipes(original), "MAIN_LAUNCH_STREAMS");
         List<String> argv = new ArrayList<>(original.command());
         List<String> fixed = Arrays.asList(node.getPath(), entry.getPath(), "--profile", "web",
-                "--patch", workspacePatch.getPath());
-        require((argv.size() == 7 || argv.size() == 9) && argv.subList(0, 6).equals(fixed)
+                "--patch", browserPatch.getPath(), "--patch", workspacePatch.getPath());
+        int options = fixed.size();
+        require((argv.size() == options + 1 || argv.size() == options + 3) && argv.subList(0, options).equals(fixed)
                 && "--no-open".equals(argv.get(argv.size() - 1)), "MAIN_LAUNCH_ARGUMENTS");
         Integer port = null;
-        if (argv.size() == 9) {
-            String value = argv.get(7);
-            require("--port".equals(argv.get(6)) && value != null
+        if (argv.size() == options + 3) {
+            String value = argv.get(options + 1);
+            require("--port".equals(argv.get(options)) && value != null
                     && value.matches("0|[1-9][0-9]{0,4}"), "MAIN_LAUNCH_PORT");
             port = Integer.valueOf(value);
             require(port <= 65535, "MAIN_LAUNCH_PORT");
         }
         verifyWorkspacePatch(workspace, patchBytes);
-        return new OriginalWebLaunch(original, argv, port);
+        verifyBrowserPatch(new File(browserPatch.getParentFile(), OriginalBrowserPane.ENTRY), browserPatchBytes);
+        return new OriginalWebLaunch(original, argv, port, browser);
+    }
+
+    private static void verifyBrowserPatch(File entry, byte[] bytes) throws IOException {
+        require(entry.getPath().matches("/[A-Za-z0-9._/-]{1,1024}")
+                && entry.toPath().normalize().equals(entry.toPath()), "MAIN_BROWSER_PATCH_OWNER");
+        byte[] suffix = (entry.getPath() + "'\n").getBytes(StandardCharsets.UTF_8);
+        require(bytes != null && bytes.length <= MAX_PATCH_BYTES && bytes.length > suffix.length, "MAIN_BROWSER_PATCH_SIZE");
+        int prefixLength = bytes.length - suffix.length;
+        require(Arrays.equals(suffix, Arrays.copyOfRange(bytes, prefixLength, bytes.length)), "MAIN_BROWSER_PATCH_OWNER");
+        require(BROWSER_PREFIX_SHA.equals(OriginalBrowserPane.sha(bytes, prefixLength)), "MAIN_BROWSER_PATCH_SOURCE");
     }
 
     private static void verifyWorkspacePatch(File workspace, byte[] bytes) throws IOException {
