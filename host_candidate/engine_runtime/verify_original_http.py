@@ -108,6 +108,7 @@ def main():
         subprocess.run(['javac','--release','8','-cp',str(args.android_jar.resolve()),'-sourcepath',os.pathsep.join(roots),
                         '-d',str(classes),*map(str,sources)],check=True)
         classpath=str(classes)+os.pathsep+str(args.android_jar.resolve())
+        subprocess.run(['java','-cp',classpath,'com.dsh.android.engine.DurableSessionSnapshotTest'],check=True,timeout=20)
         # Recompile the byte-identified pre-fix source as an independent legacy
         # control. No original/baseline source or production gate is changed.
         actual=host_root/'p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java'

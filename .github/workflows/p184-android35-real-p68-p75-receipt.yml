@@ -4,6 +4,9 @@ on:
     types: [opened, synchronize]
     paths:
       - 'host_candidate/p184_android35/**'
+      - 'host_candidate/engine_runtime/src/com/dsh/android/engine/DurableSessionSnapshot.java'
+      - 'host_candidate/engine_runtime/src/com/dsh/android/engine/SessionSnapshotCodec.java'
+      - 'host_candidate/engine_runtime/test/com/dsh/android/engine/DurableSessionSnapshotTest.java'
       - 'host_candidate/p48_process_proxy/android/com/dsh/android/p48/P48HostProcessProbe.java'
       - '.github/workflows/p184-android35-real-p68-p75-receipt.yml'
 permissions:
@@ -101,7 +104,10 @@ jobs:
           mkdir -p .p68pipetmp/classes
           javac --release 8 -cp "$sdk/platforms/android-35/android.jar:.p43tmp/p43.jar" \
             -d .p68pipetmp/classes \
-            host_candidate/p68_android_binder/test/com/dsh/android/p68/P68ReliablePipeLifecycleTest.java
+            host_candidate/p68_android_binder/test/com/dsh/android/p68/P68ReliablePipeLifecycleTest.java \
+            host_candidate/engine_runtime/src/com/dsh/android/engine/DurableSessionSnapshot.java \
+            host_candidate/engine_runtime/src/com/dsh/android/engine/SessionSnapshotCodec.java \
+            host_candidate/engine_runtime/test/com/dsh/android/engine/DurableSessionSnapshotTest.java
           jar cf .p68pipetmp/fixture.jar -C .p68pipetmp/classes .
           "$sdk/build-tools/35.0.0/d8" --min-api 26 --lib "$sdk/platforms/android-35/android.jar" \
             --classpath .p43tmp/p43.jar --output .p68pipetmp .p68pipetmp/fixture.jar
