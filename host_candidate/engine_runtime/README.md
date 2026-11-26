@@ -353,3 +353,20 @@ The user's latest reported native-prerequisite result includes the real
 original binding/five internal APIs and 200 modules on the vivo 4 KiB ARM64
 device. This is reported device evidence, not an independent installed-APK
 hash measurement, full main run, Android restart or production attestation.
+
+`original_android_bundles.py` verifies and stages a selected additional source
+set used by the original Android `ensure*` methods: eleven signed-APK ZIPs
+(36 entries: 33 regular files and three directories) and two original preload
+assets. It verifies the original APK and each archive hash, canonical paths,
+types, lengths, package identities and versions before creating output. Read
+and hash share one opened APK inode; extraction uses directory-relative
+`NOFOLLOW`, exclusive readonly files, per-file hashes and a final manifest.
+An incomplete output has no manifest. The existing core workflow tests actual
+source bytes, provenance/path/type/native negatives and path-swap races.
+
+Archive origin is part of identity: `browser-tool.zip` carries nested mobile
+and market packages at 1.3.5, whereas their separate ZIPs contain 1.0.0. They
+remain separate namespaces. This build-only capsule grants no execution,
+owner access or privileged-tool permission. Generated Android YAML, other
+native/tool assets and dependency selection still need the original owner
+launch plan; this subset is not the complete production dependency closure.

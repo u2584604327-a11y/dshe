@@ -48,6 +48,8 @@ jobs:
           node host_candidate/engine_runtime/test/ci_selector.test.cjs
           python3 -u host_candidate/engine_runtime/test_original_native_bundle.py \
             "$RUNNER_TEMP/original-http/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk"
+          python3 -u host_candidate/engine_runtime/test_original_android_bundles.py \
+            "$RUNNER_TEMP/original-http/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk"
           python3 -u host_candidate/engine_runtime/verify_original_http.py \
             --apk "$RUNNER_TEMP/original-http/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk" \
             --android-jar "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/platforms/android-35/android.jar" \
