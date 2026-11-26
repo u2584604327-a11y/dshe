@@ -169,6 +169,22 @@ def main():
         subprocess.run(['java','-cp',classpath,'com.dsh.android.engine.ProfileSnapshotWireTest',node,
                         str(extended),str(ROOT/'test/owned_snapshot_peer.mjs'),
                         str(ROOT/'test/snapshot_attack_peer.mjs')],check=True,timeout=45)
+        from build_profile_storage_bootstrap import build as storage_bootstrap, wrapped
+        codec=wrapped('session_snapshot.mjs',['decodeSessionSnapshot','encodeSessionSnapshot'],["import path from 'node:path';"])
+        owner=wrapped('session_filesystem.mjs',['installSessionFilesystem'],[
+            "import fs from 'node:fs';","import path from 'node:path';","import {randomBytes} from 'node:crypto';",
+            "import {syncBuiltinESMExports} from 'node:module';",
+            "import {decodeSessionSnapshot,encodeSessionSnapshot} from './session_snapshot.mjs';"])
+        from build_http_bootstrap import CORE
+        unit=CORE.read_text().split('async function run() {\n')[0]
+        unit+="\nimport {randomBytes} from 'node:crypto';\nimport assert from 'node:assert/strict';\n"+codec+owner
+        unit+=(ROOT/'test/session_filesystem.test.mjs').read_text()
+        for memory in (False,True):
+            subprocess.run([node,'--permission','--input-type=module','--eval',unit],cwd='/',
+                           env={'DSH_FS_TEST_MEMORY':'1'} if memory else {},check=True,timeout=10)
+        storage=work/'profile-storage.mjs';storage.write_bytes(storage_bootstrap())
+        subprocess.run(['java','-cp',classpath,'com.dsh.android.engine.OriginalProfileStorageTest',node,
+                        str(storage),str(module_stream)],check=True,timeout=70)
         # Recompile the byte-identified pre-fix source as an independent legacy
         # control. No original/baseline source or production gate is changed.
         actual=host_root/'p68_android_binder/android/com/dsh/android/p68/P68AndroidBinderIntake.java'
