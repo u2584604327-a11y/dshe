@@ -63,6 +63,7 @@ public final class OriginalMainProbeActivity extends Activity {
             OriginalMainOwnerHandoff.VerifiedLaunch admitted;
             try(OriginalMainOwnerHandoff offer=lease){
               if(retiredLaunch!=null)expectOwnedStartDenied(retiredLaunch);
+              if(generation==0)expectClaimWithoutPrelaunchDenied(launch);
               invokeOriginalCoroutine(launch);
               admitted=offer.verifiedLaunch();
               transport=admitted.process;
@@ -198,6 +199,13 @@ public final class OriginalMainProbeActivity extends Activity {
     catch(InvocationTargetException denied){
       if(denied.getCause() instanceof IOException)throw (IOException)denied.getCause();
       throw denied;
+    }
+  }
+  private void expectClaimWithoutPrelaunchDenied(OriginalAndroidWebLaunch launch)throws Exception{
+    try{invokeOwnedStart(launch);throw new IOException("MAIN_UNPREPARED_CLAIM_ACCEPTED");}
+    catch(IOException denied){
+      require("MAIN_OWNER_PRELAUNCH_REQUIRED".equals(denied.getMessage()),"MAIN_UNPREPARED_CLAIM_RESULT");
+      post("ORIGINAL_MAIN_UNPREPARED_CLAIM=DENY");
     }
   }
   private void expectOwnedStartDenied(OriginalAndroidWebLaunch launch)throws Exception{

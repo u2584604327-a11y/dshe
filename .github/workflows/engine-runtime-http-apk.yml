@@ -78,7 +78,10 @@ jobs:
           cp .p43tmp/P43-ORIGINAL-DSH-EPHEMERAL-EMULATOR-ONLY.apk "$RUNNER_TEMP/http-test-delivery/DSH-ORIGINAL-MAIN-ARM64-TEST-ONLY.apk"
           cp "$RUNNER_TEMP/http-test-cert.txt" "$RUNNER_TEMP/http-test-delivery/TEST-ONLY-SIGNATURE.txt"
           (cd "$RUNNER_TEMP/http-test-delivery" && sha256sum DSH-ORIGINAL-MAIN-ARM64-TEST-ONLY.apk > SHA256SUMS.txt)
-          printf 'TEST-ONLY; not v139; not an upgrade.\nPackage: com.dsh.p51.networkprobe\nHost permission: INTERNET only. Worker: isolated UID, no network permission.\nCommit: %s\nOriginal main runCli: PENDING_ARM64_DEVICE. Original Android EngineManager/P47: NOT_WIRED.\n' "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/http-test-delivery/SOURCE.txt"
+          printf 'TEST-ONLY; not v139; not an upgrade.\nPackage: com.dsh.p51.networkprobe\nHost permission: INTERNET only. Worker: isolated UID, no network permission.\nCommit: %s\nTEST package: guarded original EngineManager.start/stop and isolated runCli wired in source.\nTEST APK Android 36 ARM64 install, coroutine, Ready/Idle and HTTP: PENDING_DEVICE.\nProduction com.dsh.android EngineManager/P47 supervisor: NOT_WIRED.\n' "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/http-test-delivery/SOURCE.txt"
+          cat "$RUNNER_TEMP/http-test-delivery/SHA256SUMS.txt"
+          sed -n '/certificate SHA-256 digest:/p' "$RUNNER_TEMP/http-test-cert.txt"
+          echo TEST_APK_PACKAGE=com.dsh.p51.networkprobe
           echo HTTP_TEST_ANDROID_ARM64_INSTALL_AND_RUNTIME=PENDING_DEVICE >> "$GITHUB_STEP_SUMMARY"
           echo ORIGINAL_DSH_HTTP_READY=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4

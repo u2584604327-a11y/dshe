@@ -66,6 +66,9 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
         if (handoff == null) throw new IOException("MAIN_OWNER_PRELAUNCH_NOT_ARMED");
         synchronized (handoff) {
             handoff.requireFresh();
+            if (!handoff.session.ownsReservation(handoff.owner, handoff.child)) {
+                throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
+            }
             if (handoff.preparedThread != null) throw new IOException("MAIN_OWNER_PRELAUNCH_ALREADY_USED");
             handoff.owner.plan.requireSame(handoff.owner.original);
             handoff.preparedThread = Thread.currentThread();
@@ -81,7 +84,17 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
     /** The exact receiver comes from the checked main-DEX callsite. */
     public static Process claimOrDeny(ProcessBuilder builder, Object receiver) throws IOException {
         OriginalMainOwnerHandoff handoff;
-        synchronized (pending) { handoff = pending.remove(receiver); }
+        synchronized (pending) {
+            handoff = pending.get(receiver);
+            if (handoff != null) {
+                synchronized (handoff) {
+                    if (handoff.preparedThread != Thread.currentThread()) {
+                        throw new IOException("MAIN_OWNER_PRELAUNCH_REQUIRED");
+                    }
+                    pending.remove(receiver);
+                }
+            }
+        }
         if (handoff == null) return P47LaunchGate.startOrDeny(builder);
         return handoff.activate(builder);
     }

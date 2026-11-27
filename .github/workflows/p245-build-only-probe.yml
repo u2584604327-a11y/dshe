@@ -120,6 +120,12 @@ jobs:
           python3 -B host_candidate/p245_build_only_probe/strict_dex.py \
             --signed-original "$signed" --base "$base" --candidate "$candidate"
           python3 -B host_candidate/p245_build_only_probe/test_strict_dex.py "$base" "$candidate"
+      - name: Compare the current owner-bound TEST coroutine and deliberate DEX mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash host_candidate/engine_runtime/prepare_owned_dex.sh \
+            .p43tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk .p245tmp --negative-checks
       - name: Destroy all temporary outputs, never install or upload
         if: always()
         run: |

@@ -10,12 +10,16 @@ import java.lang.reflect.Method;
 public final class TargetClassProbe {
     private static final String TARGET = "com.dsh.android.EngineManager$start$2";
     private static final String MISSING = "com.dsh.android.__P311_NEVER_EXISTS_37192";
+    private static final String OWNED_JAR = "/data/local/tmp/p311-owned-runtime.jar";
     private TargetClassProbe() {}
     public static void main(String[] args) {
-        if (args == null || args.length != 2 ||
-                !("missing".equals(args[0]) || "target".equals(args[0]) ||
-                  "failure".equals(args[0]) || "post-return".equals(args[0])) ||
-                !args[1].startsWith("/data/app/") || !args[1].endsWith("/base.apk")) {
+        boolean legacy = args != null && args.length == 2 &&
+                ("missing".equals(args[0]) || "target".equals(args[0]) ||
+                 "failure".equals(args[0]) || "post-return".equals(args[0])) &&
+                args[1].startsWith("/data/app/") && args[1].endsWith("/base.apk");
+        boolean owned = args != null && args.length == 2 && OWNED_JAR.equals(args[1]) &&
+                ("owned-unarmed".equals(args[0]) || "owned-failure".equals(args[0]));
+        if (!legacy && !owned) {
             System.out.println("P311_INPUT_SCOPE=DENY");
             System.exit(2);
             return;
@@ -53,7 +57,8 @@ public final class TargetClassProbe {
                 System.out.println("P311_TARGET_METHOD_INVOKED=NO");
                 return;
             }
-            exerciseCoroutine(loader, found, method, "failure".equals(args[0]));
+            exerciseCoroutine(loader, found, method, owned,
+                    "failure".equals(args[0]) || "owned-failure".equals(args[0]));
         } catch (Throwable denied) {
             // Do not disclose method refs, APK paths, private fields, logs or messages.
             System.out.println("P311_ART_TARGET_CLASS_LINK=DENY");
@@ -62,7 +67,7 @@ public final class TargetClassProbe {
     }
 
     private static void exerciseCoroutine(ClassLoader loader, Class<?> target, Method entry,
-            boolean failBeforeHelper) throws ReflectiveOperationException {
+            boolean owned, boolean failBeforeHelper) throws ReflectiveOperationException {
         if (android.os.Process.myUid() != 2000 || android.os.Process.isIsolated()) {
             throw new SecurityException("shell UID required");
         }
@@ -72,8 +77,8 @@ public final class TargetClassProbe {
         Constructor<?> constructor = target.getDeclaredConstructor(owner, continuation);
         constructor.setAccessible(true);
         entry.setAccessible(true);
-        // The null owner bounds this probe to entry. The positive control must
-        // reach the original owner access immediately after the P245 helper.
+        // No owner is armed. This executes the checked initial branch without
+        // granting a child, a store or a listener to a shell-UID test.
         Object coroutine = constructor.newInstance(null, null);
         IOException injected = new IOException("P311_CONTROLLED_RESUME_FAILURE");
         Object result;
@@ -89,10 +94,24 @@ public final class TargetClassProbe {
         } catch (InvocationTargetException observed) {
             Throwable cause = observed.getCause();
             if (failBeforeHelper && cause == injected) {
-                System.out.println("P311_INVOKESUSPEND_RESUME_FAILURE_RETHROWN=PASS");
+                System.out.println(owned ? "P311_OWNED_RESUME_FAILURE_IDENTITY=PASS"
+                        : "P311_INVOKESUSPEND_RESUME_FAILURE_RETHROWN=PASS");
                 return;
             }
-            if (!failBeforeHelper && cause instanceof NullPointerException) {
+            if (owned && !failBeforeHelper && cause instanceof IOException &&
+                    "MAIN_OWNER_PRELAUNCH_NOT_ARMED".equals(cause.getMessage())) {
+                boolean reachedOriginal = false, reachedGate = false;
+                for (StackTraceElement frame : cause.getStackTrace()) {
+                    reachedOriginal |= TARGET.equals(frame.getClassName()) && "invokeSuspend".equals(frame.getMethodName());
+                    reachedGate |= "com.dsh.android.engine.OriginalMainOwnerHandoff".equals(frame.getClassName()) &&
+                            "prepareOriginal".equals(frame.getMethodName());
+                }
+                if (reachedOriginal && reachedGate) {
+                    System.out.println("P311_OWNED_ORIGINAL_FOOTER_NO_LEASE=DENY");
+                    return;
+                }
+            }
+            if (!owned && !failBeforeHelper && cause instanceof NullPointerException) {
                 StackTraceElement[] trace = cause.getStackTrace();
                 if (trace.length >= 2 && owner.getName().equals(trace[0].getClassName()) &&
                         "access$getProcess$p".equals(trace[0].getMethodName()) &&

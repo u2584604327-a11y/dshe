@@ -473,15 +473,19 @@ final class HttpProcessTransport extends Process implements Closeable {
     @Override public void close()throws IOException{synchronized(appInputLock){if(stdinOpen.compareAndSet(true,false)&&!closed.get()){appCredit.revoke();send(APP_END,0,new byte[0]);}}}
   };
   private void stopListener(){
-    stopping.set(true);accepting.set(false);readyProof.set(null);try{listener.close();}catch(IOException ignored){}
+    synchronized(this){stopping.set(true);accepting.set(false);readyProof.set(null);}
+    try{listener.close();}catch(IOException ignored){}
     for(Peer peer:peers.values())peer.close(false);
   }
   private void fail(String category){synchronized(this){if(closed.get()||!failure.equals("NONE"))return;failure=category;}close();}
   private void discardFrames(){Frame frame;while((frame=writes.poll())!=null)if(frame.type==FS_INIT_DATA)Arrays.fill(frame.data,(byte)0);}
   @Override public void close(){
-    if(!closed.compareAndSet(false,true))return;
+    synchronized(this){
+      if(!closed.compareAndSet(false,true))return;
+      accepting.set(false);readyProof.set(null);
+    }
     try{
-    accepting.set(false);readyProof.set(null);listened.countDown();stdinOpen.set(false);appCredit.revoke();
+    listened.countDown();stdinOpen.set(false);appCredit.revoke();
     for(LogSink sink:logs)sink.reader.wakeWriter();
     deadlines.shutdownNow();try{listener.close();}catch(IOException ignored){}
     for(Peer peer:peers.values())peer.close(false);discardFrames();
@@ -509,7 +513,7 @@ final class HttpProcessTransport extends Process implements Closeable {
   @Override public int exitValue(){return child.exitValue();}
   @Override public boolean isAlive(){return child.isAlive();}
   @Override public void destroy(){
-    if(closed.get()||peerFinished.get()||!stopping.compareAndSet(false,true))return;
+    synchronized(this){if(closed.get()||peerFinished.get()||!stopping.compareAndSet(false,true))return;}
     stopListener();stdinOpen.set(false);appCredit.revoke();
     sendOrFail(SHUTDOWN,0,new byte[0]);
     try{deadlines.schedule(()->{if(child.isAlive())close();},5,TimeUnit.SECONDS);}

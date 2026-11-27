@@ -23,6 +23,7 @@ PROCESS = 'Ljava/lang/Process;'
 PROCESS_BUILDER = 'Ljava/lang/ProcessBuilder;'
 MAIN_HANDOFF = PACKAGE + 'engine/OriginalMainOwnerHandoff;'
 FLOW = 'Lkotlinx/coroutines/flow/MutableStateFlow;'
+READY = ENGINE[:-1] + '$State$Ready;'
 REGEX = 'Lkotlin/text/Regex;'
 CHARSEQ = 'Ljava/lang/CharSequence;'
 MATCH = 'Lkotlin/text/MatchResult;'
@@ -67,7 +68,7 @@ def ref(owner, name, params, returned):
     return owner.encode(), name.encode(), tuple(param.encode() for param in params), returned.encode()
 
 
-def sanitizing_calls(owned_ready=False):
+def sanitizing_calls(owned_ready=False, owner_bound=False):
     edits = {}
     for key, sites in SITES.items():
         edits[key] = {}
@@ -83,7 +84,12 @@ def sanitizing_calls(owned_ready=False):
         for pc in (4656, 4732):
             edits[START][pc] = (
                 (bytes.fromhex('71100000'), ref(ENGINE, 'access$get_state$p', (ENGINE,), FLOW)),
-                (bytes.fromhex('71203000'), ref(OWNER, 'readyState', (ENGINE, STRING), FLOW)))
+                (bytes.fromhex('71203000'),
+                 ref(OWNER, 'readyOwner' if owner_bound else 'readyState',
+                     (ENGINE, STRING), ENGINE if owner_bound else FLOW)))
+            if owner_bound:
+                edits[START][pc + 18] = ((bytes.fromhex('72202000'), ref(FLOW, 'setValue', (OBJECT,), 'V')),
+                                         (bytes.fromhex('71202000'), ref(OWNER, 'publishReady', (ENGINE, READY), 'V')))
     return edits
 
 
@@ -95,6 +101,9 @@ def wrapper_key(wrapper):
 REDACT = (OWNER, 'publicLine', f'({STRING}){STRING}')
 METHODS = {REDACT, *(wrapper_key(name) for name in WRAPPERS)}
 READY_METHODS = {(OWNER, 'findReady', FIND_READY), (OWNER, 'readyState', f'({ENGINE}{STRING}){FLOW}')}
+ATOMIC_READY_METHODS = {(OWNER, 'findReady', FIND_READY),
+                        (OWNER, 'readyOwner', f'({ENGINE}{STRING}){ENGINE}'),
+                        (OWNER, 'publishReady', f'({ENGINE}{READY})V')}
 OWNED_START = (OWNER, 'startOwned', f'({PROCESS_BUILDER}{ENGINE}){PROCESS}')
 OWNED_PREPARE = (OWNER, 'prepareOwned', f'({ENGINE}){PROCESS_BUILDER}')
 OWNED_ENTRY_PC = 190
@@ -145,7 +154,9 @@ def wrapper_source(owned_ready=False, owner_bound=False):
     const/4 v0, 0x0
     return-object v0
 .end method
-
+'''
+    if owned_ready and not owner_bound:
+        body += f'''
 .method public static readyState({ENGINE}{STRING}){FLOW}
     .locals 1
     invoke-static {{p0}}, {ENGINE}->access$getProcess$p({ENGINE}){PROCESS}
@@ -172,6 +183,39 @@ def wrapper_source(owned_ready=False, owner_bound=False):
     invoke-static {{p0}}, {MAIN_HANDOFF}->prepareOriginal({OBJECT}){PROCESS_BUILDER}
     move-result-object p0
     return-object p0
+.end method
+'''
+    if owner_bound:
+        body += f'''
+.method public static readyOwner({ENGINE}{STRING}){ENGINE}
+    .locals 1
+    invoke-static {{p0}}, {ENGINE}->access$getProcess$p({ENGINE}){PROCESS}
+    move-result-object v0
+    invoke-static {{v0, p1}}, {STARTUP}->requireVerifiedReady({PROCESS}{STRING})V
+    return-object p0
+.end method
+
+.method public static publishReady({ENGINE}{READY})V
+    .locals 3
+    invoke-static {{p0}}, {ENGINE}->access$getProcess$p({ENGINE}){PROCESS}
+    move-result-object v0
+    invoke-virtual {{p1}}, {READY}->getUrl(){STRING}
+    move-result-object v1
+    invoke-static {{v0, v1}}, {STARTUP}->requireVerifiedReady({PROCESS}{STRING})V
+    monitor-enter v0
+    :ready_publish_start
+    invoke-static {{v0, v1}}, {STARTUP}->requireVerifiedReady({PROCESS}{STRING})V
+    invoke-static {{p0}}, {ENGINE}->access$get_state$p({ENGINE}){FLOW}
+    move-result-object v2
+    invoke-interface {{v2, p1}}, {FLOW}->setValue({OBJECT})V
+    :ready_publish_end
+    .catchall {{:ready_publish_start .. :ready_publish_end}} :ready_publish_failed
+    monitor-exit v0
+    return-void
+    :ready_publish_failed
+    move-exception v2
+    monitor-exit v0
+    throw v2
 .end method
 '''
     return body
@@ -249,9 +293,17 @@ def rewrite(key, source, sites, owned_ready=False, owner_bound=False):
         body = body.replace(old, new)
     if owned_ready and key == START:
         old = (f'    invoke-static {{v0}}, {ENGINE}->access$get_state$p({ENGINE}){FLOW}\n\n'
-               f'    move-result-object v0\n\n    new-instance v2, {ENGINE[:-1]}$State$Ready;\n')
-        new = (f'    invoke-static {{v0, v3}}, {OWNER}->readyState({ENGINE}{STRING}){FLOW}\n\n'
-               f'    move-result-object v0\n\n    new-instance v2, {ENGINE[:-1]}$State$Ready;\n')
+               f'    move-result-object v0\n\n    new-instance v2, {READY}\n\n'
+               f'    invoke-direct {{v2, v3}}, {READY}-><init>({STRING})V\n\n'
+               f'    invoke-interface {{v0, v2}}, {FLOW}->setValue({OBJECT})V\n')
+        if owner_bound:
+            new = old.replace(f'{{v0}}, {ENGINE}->access$get_state$p({ENGINE}){FLOW}',
+                              f'{{v0, v3}}, {OWNER}->readyOwner({ENGINE}{STRING}){ENGINE}')
+            new = new.replace(f'invoke-interface {{v0, v2}}, {FLOW}->setValue({OBJECT})V',
+                              f'invoke-static {{v0, v2}}, {OWNER}->publishReady({ENGINE}{READY})V')
+        else:
+            new = old.replace(f'{{v0}}, {ENGINE}->access$get_state$p({ENGINE}){FLOW}',
+                              f'{{v0, v3}}, {OWNER}->readyState({ENGINE}{STRING}){FLOW}')
         if body.count(old) != 2:
             raise ValueError('OWNED_READY_ORIGINAL_PUBLISH_ANCHOR')
         body = body.replace(old, new)
@@ -293,16 +345,18 @@ def verify_helper(strict, view, methods, owned_ready=False, owner_bound=False):
                 classes[0].get_superclassname() == OBJECT and not classes[0].get_interfaces() and
                 not classes[0].get_fields(), 'STARTUP_DIAGNOSTICS_HELPER_CLASS')
 
-    def compare(key, inputs, expected, frame=None):
+    def compare(key, inputs, expected, frame=None, protected=()):
         method = methods[key]
         code = method.get_code()
         strict.need(method.get_access_flags() == 0x9 and code is not None and
                     (code.get_registers_size(), code.get_ins_size(), code.get_outs_size()) ==
-                    (frame or (2, inputs, 2)) and
-                    not strict.decode(method, view.dex)[1], 'STARTUP_DIAGNOSTICS_HELPER_FRAME')
+                    (frame or (2, inputs, 2)), 'STARTUP_DIAGNOSTICS_HELPER_FRAME')
         rows = view.rows(method)
         strict.validate_targets(rows)
         ordinals = {pc: i for i, pc in enumerate(rows)}
+        length, tries = strict.decode(method, view.dex)
+        strict.need(strict.ordinal_tries(tries, {**ordinals, 2 * length: len(rows)}) == protected,
+                    'STARTUP_DIAGNOSTICS_HELPER_TRY')
         actual = [strict.relocated_instruction(view, rows, ordinals, pc, raw) for pc, raw in rows.items()]
         strict.need(actual == expected, 'STARTUP_DIAGNOSTICS_HELPER_BODY')
 
@@ -331,10 +385,24 @@ def verify_helper(strict, view, methods, owned_ready=False, owner_bound=False):
         get_process = ref(ENGINE, 'access$getProcess$p', (ENGINE,), PROCESS)
         get_state = ref(ENGINE, 'access$get_state$p', (ENGINE,), FLOW)
         require = ref(STARTUP, 'requireVerifiedReady', (PROCESS, STRING), 'V')
-        compare((OWNER, 'readyState', f'({ENGINE}{STRING}){FLOW}'), 2,
-                [(bytes.fromhex('71100100'), get_process), (b'\x0c\x00', None),
-                 (bytes.fromhex('71202000'), require), (bytes.fromhex('71100100'), get_state),
-                 (b'\x0c\x00', None), (b'\x11\x00', None)], frame=(3, 2, 2))
+        if owner_bound:
+            compare((OWNER, 'readyOwner', f'({ENGINE}{STRING}){ENGINE}'), 2,
+                    [(bytes.fromhex('71100100'), get_process), (b'\x0c\x00', None),
+                     (bytes.fromhex('71202000'), require), (b'\x11\x01', None)], frame=(3, 2, 2))
+            compare((OWNER, 'publishReady', f'({ENGINE}{READY})V'), 2,
+                    [(bytes.fromhex('71100300'), get_process), (b'\x0c\x00', None),
+                     (bytes.fromhex('6e100400'), ref(READY, 'getUrl', (), STRING)), (b'\x0c\x01', None),
+                     (bytes.fromhex('71201000'), require), (b'\x1d\x00', None),
+                     (bytes.fromhex('71201000'), require), (bytes.fromhex('71100300'), get_state),
+                     (b'\x0c\x02', None), (bytes.fromhex('72204200'), ref(FLOW, 'setValue', (OBJECT,), 'V')),
+                     (b'\x1e\x00', None), (b'\x0e\x00', None), (b'\x0d\x02', None),
+                     (b'\x1e\x00', None), (b'\x27\x02', None)],
+                    frame=(5, 2, 2), protected=((6, 10, ((), 12)),))
+        else:
+            compare((OWNER, 'readyState', f'({ENGINE}{STRING}){FLOW}'), 2,
+                    [(bytes.fromhex('71100100'), get_process), (b'\x0c\x00', None),
+                     (bytes.fromhex('71202000'), require), (bytes.fromhex('71100100'), get_state),
+                     (b'\x0c\x00', None), (b'\x11\x00', None)], frame=(3, 2, 2))
     if owner_bound:
         handoff = ref(MAIN_HANDOFF, 'claimOrDeny', (PROCESS_BUILDER, OBJECT), PROCESS)
         compare(OWNED_START, 2, [(bytes.fromhex('71201000'), handoff),

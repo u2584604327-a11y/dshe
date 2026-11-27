@@ -5,7 +5,7 @@ SERIAL="$(adb devices | awk '/device$/{print $1}' | head -n 1)"
 [[ -n "$SERIAL" && "$SERIAL" != *":"* ]]
 APK=.p310tmp/P310-ART-VERIFY-EMULATOR-ONLY.apk
 PROBE=.p311tmp/P311-PROBE-ANDROID35-TEST-ONLY.jar
-test -s "$APK" && test -s "$PROBE"
+test -s "$APK" && test -s "$PROBE" && test -s .p311tmp/owned-runtime.jar
 adb -s "$SERIAL" wait-for-device
 sdk="$(adb -s "$SERIAL" shell getprop ro.build.version.sdk | tr -d '\r')"
 arch="$(adb -s "$SERIAL" shell getprop ro.product.cpu.abi | tr -d '\r')"
@@ -22,6 +22,7 @@ if adb -s "$SERIAL" shell pm list packages com.dsh.android | grep -Fxq 'package:
 fi
 APP_UID=""
 PROBE_PATH=/data/local/tmp/p311-one-session-probe.jar
+OWNED_PATH=/data/local/tmp/p311-owned-runtime.jar
 cleanup() {
   adb -s "$SERIAL" root >/dev/null 2>&1 || true
   adb -s "$SERIAL" wait-for-device >/dev/null 2>&1 || true
@@ -32,7 +33,7 @@ cleanup() {
       adb -s "$SERIAL" shell ip6tables -w -D OUTPUT -m owner --uid-owner "$uid" -j REJECT >/dev/null 2>&1 || true
     fi
   done
-  adb -s "$SERIAL" shell rm -f "$PROBE_PATH" >/dev/null 2>&1 || true
+  adb -s "$SERIAL" shell rm -f "$PROBE_PATH" "$OWNED_PATH" >/dev/null 2>&1 || true
   adb -s "$SERIAL" shell pm uninstall com.dsh.android >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -92,10 +93,10 @@ echo P311_REAL_ANDROID35_TARGET_CLASS_LINK=PASS_NARROW
 echo P311_REAL_ANDROID35_INVOKESUSPEND_REFLECTION=PASS_NARROW
 
 exercise_entry() {
-  local mode="$1" status="$2" pid
+  local mode="$1" status="$2" path="${3:-$rawpath}" pid
   local report=".p311tmp/$mode.log"
   if ! adb -s "$SERIAL" shell su 2000 dalvikvm -Xint -Xverify:all -cp "$PROBE_PATH" \
-      com.dsh.p311.TargetClassProbe "$mode" "$rawpath" > "$report" 2>&1;then
+      com.dsh.p311.TargetClassProbe "$mode" "$path" > "$report" 2>&1;then
     echo "P311_INVOKESUSPEND_${mode}_EXECUTION=DENY";exit 2
   fi
   tr -d '\r' < "$report" > "$report.normalized"
@@ -110,6 +111,10 @@ exercise_entry() {
 exercise_entry failure P311_INVOKESUSPEND_RESUME_FAILURE_RETHROWN=PASS
 exercise_entry post-return P311_INVOKESUSPEND_POST_HELPER_OWNER_GUARD=PASS
 echo P311_REAL_ANDROID35_P245_HELPER_REACHED_ONLY_AFTER_NORMAL_RETURN=PASS
+adb -s "$SERIAL" push .p311tmp/owned-runtime.jar "$OWNED_PATH" > .p311tmp/owned-push.log
+adb -s "$SERIAL" shell chmod 444 "$OWNED_PATH"
+exercise_entry owned-failure P311_OWNED_RESUME_FAILURE_IDENTITY=PASS "$OWNED_PATH"
+exercise_entry owned-unarmed P311_OWNED_ORIGINAL_FOOTER_NO_LEASE=DENY "$OWNED_PATH"
 # Exercise the current Process implementation with native pipe endpoints in
 # the same network-denied shell UID, including blocked read/write revocation.
 if ! adb -s "$SERIAL" shell su 2000 dalvikvm -Xverify:all -cp "$PROBE_PATH" \

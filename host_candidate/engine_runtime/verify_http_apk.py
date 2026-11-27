@@ -64,7 +64,8 @@ def verify_owner_activation(view,methods):
           reference(startup,'requireVerifiedReady','V',process,string))
     calls(activity,'stopOriginalEngine',reference(activity,'originalState','Ljava/lang/Object;',launch),
           reference(activity,'originalProcess','Ljava/lang/Object;',launch))
-    calls(handoff,'prepareOriginal',reference(handoff,'requireFresh','V'),reference(plan,'requireSame','V',builder))
+    calls(handoff,'prepareOriginal',reference(handoff,'requireFresh','V'),
+          reference(session,'ownsReservation','Z',launch,child),reference(plan,'requireSame','V',builder))
     calls(handoff,'claimOrDeny',reference('Lcom/dsh/android/p47/P47LaunchGate;','startOrDeny',process,builder),
           reference(handoff,'activate',process,builder))
     calls(handoff,'activate',reference(plan,'requireSame','V',builder),reference(handoff,'requireFresh','V'),
@@ -72,7 +73,7 @@ def verify_owner_activation(view,methods):
           reference(startup,'await',startup,transport),reference(startup,'verifyForReady',string),
           reference(startup,'requireVerifiedReady','V',process,string),
           reference(session,'ownsLaunch','Z',launch,transport),reference(transport,'hasCurrentReadyProof','Z'))
-    calls(session,'openLaunchTransport',reference(session,'ownsChild','Z',child),
+    calls(session,'openLaunchTransport',reference(session,'ownsReservation','Z',launch,child),
           reference(session,'transferResources','V',child),reference(session,'ownsChild','Z',child),
           reference(transport,'forOriginalWebLaunch',transport,process,string,'J',plan,store))
     calls(session,'transferResources',reference('Lcom/dsh/android/p50/P50ModuleStream;','writeOriginalForService',

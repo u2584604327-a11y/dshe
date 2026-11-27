@@ -33,9 +33,9 @@ def verify(original, candidate, startup_diagnostics=False, owned_ready=False, ow
     if startup_diagnostics:
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'engine_runtime'))
         import original_startup_diagnostics as diagnostics
-        edits, extras = diagnostics.sanitizing_calls(owned_ready), diagnostics.METHODS
+        edits, extras = diagnostics.sanitizing_calls(owned_ready, owner_bound), diagnostics.METHODS
         if owned_ready:
-            extras = extras | diagnostics.READY_METHODS
+            extras = extras | (diagnostics.ATOMIC_READY_METHODS if owner_bound else diagnostics.READY_METHODS)
         if owner_bound:
             extras = extras | {diagnostics.OWNED_START, diagnostics.OWNED_PREPARE}
     else:
@@ -165,6 +165,10 @@ if __name__ == '__main__':
                 footer = entry + 2 * struct.unpack_from('<h', payload, entry + 2)[0]
                 argument = footer + 8  # method register word of prepareOwned in the verified footer
                 mutations['ORIGINAL_OWNER_FOOTER_ARGUMENT'] = (argument, bytes([payload[argument] ^ 1]))
+                publish = methods[(diagnostics.OWNER, 'publishReady', f'({diagnostics.ENGINE}{diagnostics.READY})V')]
+                entry_monitor = next(pc for pc, raw in view.rows(publish).items() if raw[0] == 0x1d)
+                offset = publish.get_code().get_off() + 16 + entry_monitor
+                mutations['READY_PUBLICATION_WITHOUT_MONITOR'] = (offset, b'\x00')
         del rows, methods, view, dump
         gc.collect()
         with tempfile.TemporaryDirectory(prefix='original-config-negative-') as directory:
@@ -187,6 +191,7 @@ if __name__ == '__main__':
                                 'ORIGINAL_OWNER_REGISTER': 'P246_DENY_OWNED_ENTRY_ORIGINAL_INSTRUCTION',
                                 'ORIGINAL_OWNER_ENTRY_BRANCH': 'P246_DENY_OWNED_ENTRY_BRANCH',
                                 'ORIGINAL_OWNER_FOOTER_ARGUMENT': 'P246_DENY_OWNED_ENTRY_FOOTER_BODY',
+                                'READY_PUBLICATION_WITHOUT_MONITOR': 'P246_DENY_STARTUP_DIAGNOSTICS_HELPER_BODY',
                                 'OWNED_READY_HELPER_BRANCH': 'P246_DENY_STARTUP_DIAGNOSTICS_HELPER_BODY'}
                     if label in expected and str(denied) != expected[label]:
                         raise RuntimeError('STARTUP_MUTATION_WRONG_DENIAL_' + label) from denied

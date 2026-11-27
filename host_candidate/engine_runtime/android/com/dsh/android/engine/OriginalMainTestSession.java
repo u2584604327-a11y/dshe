@@ -102,7 +102,7 @@ final class OriginalMainTestSession implements AutoCloseable {
   HttpProcessTransport openLaunchTransport(P37RemoteProcess exact,OriginalAndroidWebLaunch launch,
       DurableSessionSnapshot store)throws IOException{
     synchronized(this){
-      if(closed.get()||!handoffOffered||launchOwner!=launch||!ownsChild(exact)||transportOpened)
+      if(!ownsReservation(launch,exact))
         throw new IOException("MAIN_LAUNCH_AUTHENTICATED_CHILD_REQUIRED");
       transportOpened=true;
     }
@@ -134,6 +134,9 @@ final class OriginalMainTestSession implements AutoCloseable {
   }
   private boolean ownsChild(P37RemoteProcess exact){
     return childClaimed.get()&&exact!=null&&process==exact&&exact.isAlive();
+  }
+  synchronized boolean ownsReservation(OriginalAndroidWebLaunch owner,P37RemoteProcess exact){
+    return !closed.get()&&handoffOffered&&launchOwner==owner&&!transportOpened&&ownsChild(exact);
   }
   synchronized boolean ownsLaunch(OriginalAndroidWebLaunch owner,HttpProcessTransport transport){
     return !closed.get()&&launchOwner==owner&&launchTransport==transport&&ownsChild(process);
