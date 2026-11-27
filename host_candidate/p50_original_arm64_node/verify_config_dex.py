@@ -37,7 +37,7 @@ def verify(original, candidate, startup_diagnostics=False, owned_ready=False, ow
         if owned_ready:
             extras = extras | diagnostics.READY_METHODS
         if owner_bound:
-            extras = extras | {diagnostics.OWNED_START}
+            extras = extras | {diagnostics.OWNED_START, diagnostics.OWNED_PREPARE}
     else:
         edits, extras = {}, ()
     outside_bridges = {key: calls for key, calls in edits.items() if key != strict.START}
@@ -60,7 +60,10 @@ def verify(original, candidate, startup_diagnostics=False, owned_ready=False, ow
             calls[pc] = ((encoding, HOST_START), diagnostics.OWNED_START_INVOKE)
         else:
             calls[pc] = ((encoding, HOST_START), (b'\x71' + encoding[1:], replacement))
-        strict.compare_signed_code(old[key], new[key], signed, current, calls)
+        if owner_bound and key == strict.START:
+            diagnostics.verify_owned_entry(strict, signed, current, old[key], new[key], calls)
+        else:
+            strict.compare_signed_code(old[key], new[key], signed, current, calls)
         bridge = new[('Lcom/dsh/android/p40/P40ProcessBridge;', target,
                       '(Ljava/lang/ProcessBuilder;)Ljava/lang/Process;')]
         raw = list(current.rows(bridge).values())
@@ -80,6 +83,7 @@ def verify(original, candidate, startup_diagnostics=False, owned_ready=False, ow
             print('ORIGINAL_MAIN_OWNED_READY_REGEX_AND_TWO_PUBLICATIONS=PASS_STATIC')
         if owner_bound:
             print('ORIGINAL_MAIN_OWNER_BOUND_PC3912_AND_EXACT_HANDOFF_WRAPPER=PASS_STATIC')
+            print('ORIGINAL_MAIN_EXACT_ISOLATED_PRELAUNCH_AND_ORIGINAL_POST_SPAWN=PASS_STATIC')
         print('ORIGINAL_CONFIG_SIGNED_UNRELATED_METHODS=PASS count=' + str(counts['METHODS'] - len(outside_bridges)))
         print('ORIGINAL_CONFIG_THREE_TYPED_STARTS_AND_EXPLICIT_DIAGNOSTIC_SITES=PASS')
     else:
@@ -156,6 +160,11 @@ if __name__ == '__main__':
             if args.owner_bound:
                 offset = methods[strict.START].get_code().get_off() + 16 + diagnostics.OWNED_START_PC + 4
                 mutations['ORIGINAL_OWNER_REGISTER'] = (offset, bytes([payload[offset] ^ 0x10]))
+                entry = methods[strict.START].get_code().get_off() + 16 + diagnostics.OWNED_ENTRY_PC
+                mutations['ORIGINAL_OWNER_ENTRY_BRANCH'] = (entry + 2, struct.pack('<h', 2))
+                footer = entry + 2 * struct.unpack_from('<h', payload, entry + 2)[0]
+                argument = footer + 8  # method register word of prepareOwned in the verified footer
+                mutations['ORIGINAL_OWNER_FOOTER_ARGUMENT'] = (argument, bytes([payload[argument] ^ 1]))
         del rows, methods, view, dump
         gc.collect()
         with tempfile.TemporaryDirectory(prefix='original-config-negative-') as directory:
@@ -175,7 +184,9 @@ if __name__ == '__main__':
                     expected = {'STARTUP_HISTORY_REGISTER': 'P246_DENY_SIGNED_APPROVED_INVOKE',
                                 'STARTUP_HELPER_BRANCH': 'P246_DENY_STARTUP_DIAGNOSTICS_HELPER_BODY',
                                 'OWNED_READY_PROCESS_REGISTER': 'P246_DENY_SIGNED_APPROVED_INVOKE',
-                                'ORIGINAL_OWNER_REGISTER': 'P246_DENY_SIGNED_APPROVED_INVOKE',
+                                'ORIGINAL_OWNER_REGISTER': 'P246_DENY_OWNED_ENTRY_ORIGINAL_INSTRUCTION',
+                                'ORIGINAL_OWNER_ENTRY_BRANCH': 'P246_DENY_OWNED_ENTRY_BRANCH',
+                                'ORIGINAL_OWNER_FOOTER_ARGUMENT': 'P246_DENY_OWNED_ENTRY_FOOTER_BODY',
                                 'OWNED_READY_HELPER_BRANCH': 'P246_DENY_STARTUP_DIAGNOSTICS_HELPER_BODY'}
                     if label in expected and str(denied) != expected[label]:
                         raise RuntimeError('STARTUP_MUTATION_WRONG_DENIAL_' + label) from denied

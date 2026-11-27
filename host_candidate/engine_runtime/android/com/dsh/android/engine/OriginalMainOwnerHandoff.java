@@ -34,6 +34,7 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
     private final DurableSessionSnapshot store;
     private final long issuedAt = System.nanoTime();
     private boolean revoked;
+    private Thread preparedThread;
     private VerifiedLaunch verified;
 
     private OriginalMainOwnerHandoff(OriginalAndroidWebLaunch owner, OriginalMainTestSession session,
@@ -58,6 +59,25 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
         }
     }
 
+    /** Called by the guarded initial branch of the original TEST coroutine. */
+    public static ProcessBuilder prepareOriginal(Object receiver) throws IOException {
+        OriginalMainOwnerHandoff handoff;
+        synchronized (pending) { handoff = pending.get(receiver); }
+        if (handoff == null) throw new IOException("MAIN_OWNER_PRELAUNCH_NOT_ARMED");
+        synchronized (handoff) {
+            handoff.requireFresh();
+            if (handoff.preparedThread != null) throw new IOException("MAIN_OWNER_PRELAUNCH_ALREADY_USED");
+            handoff.owner.plan.requireSame(handoff.owner.original);
+            handoff.preparedThread = Thread.currentThread();
+            return handoff.owner.original;
+        }
+    }
+
+    private void requireFresh() throws IOException {
+        long age = System.nanoTime() - issuedAt;
+        if (revoked || age < 0 || age > MAX_AGE) throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
+    }
+
     /** The exact receiver comes from the checked main-DEX callsite. */
     public static Process claimOrDeny(ProcessBuilder builder, Object receiver) throws IOException {
         OriginalMainOwnerHandoff handoff;
@@ -71,8 +91,9 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
         try {
             owner.plan.requireSame(builder);
             synchronized (this) {
-                long age = System.nanoTime() - issuedAt;
-                if (revoked || age < 0 || age > MAX_AGE) throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
+                requireFresh();
+                if (preparedThread != Thread.currentThread()) throw new IOException("MAIN_OWNER_PRELAUNCH_REQUIRED");
+                preparedThread = null;
             }
             if (Looper.myLooper() == Looper.getMainLooper()) throw new IOException("MAIN_OWNER_BACKGROUND_REQUIRED");
             if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("MAIN_OWNER_START_INTERRUPTED");
@@ -113,6 +134,7 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
         synchronized (this) {
             if (revoked) return;
             revoked = true;
+            preparedThread = null;
             unclaimed = verified == null;
             verified = null;
         }

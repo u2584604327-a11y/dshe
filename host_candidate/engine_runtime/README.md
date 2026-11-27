@@ -390,18 +390,21 @@ buffer that can survive a change of reader thread.
 
 The isolated main TEST exercises the real HTTP proof and stdout handoff.
 The DEX verifier checks the original callsites and helper body independently.
-The separate TEST APK also uses `--owner-bound`. It changes the signed
-main-start call at byte PC 3912 to pass the exact original `EngineManager`
-receiver already in register `v2`. The strict verifier pins the register
-encoding and the new wrapper body. An unarmed wrapper reaches the ordinary
-P47 refusal. A one-use offer belongs to the exact receiver, captured argv,
-cwd, environment and authenticated child session. The bridge consumes that
-offer before it transfers the verified original modules or opens the loopback
-listener. It returns the Process after the current listener proves original
-authentication and frontend delivery. The TEST activity invokes the wrapper
-and checks the refusal for a retired receiver and for replay. The original
-coroutine still needs isolated preparation for its earlier Termux and Android
-integration steps before this activation path can be used in production.
+The separate TEST APK uses `--owner-bound`. A branch at the original
+coroutine's initial entry requires an armed receiver before it can obtain
+the approved launch plan. This branch proceeds to the original byte PC 3912
+without calling the Termux bootstrap or privileged preparation. The verifier
+checks the exact branch, launch registers, helper bodies and original
+exception table. The bridge transfers the verified modules to the
+authenticated child, opens the loopback listener and proves the live HTTP
+service before it returns the Process. With that Process, the original
+coroutine continues through its own output reader and Ready state publishers.
+
+The Android TEST activity invokes the original `EngineManager.start` and
+`stop` and checks the resulting Ready and Idle states, the exact Process,
+and denial for unarmed and retired launches. The fresh owner directory
+remains available through stop. The TEST package has its own ephemeral
+storage and does not register a production Supervisor.
 
 The TEST activity invokes the original `writeWorkspacePatch` and
 `buildEngineArgs` in its fresh owner directory. The launch adapter checks the

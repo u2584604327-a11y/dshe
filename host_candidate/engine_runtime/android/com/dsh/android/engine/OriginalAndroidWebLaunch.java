@@ -16,15 +16,17 @@ import java.util.Arrays;
 import java.util.List;
 
 /** Prepares the reviewed original workspace launch subset in a fresh TEST owner. */
-final class OriginalAndroidWebLaunch {
+final class OriginalAndroidWebLaunch implements AutoCloseable {
     final Object engine;
     final ProcessBuilder original;
     final OriginalWebLaunch plan;
+    private final Path root;
 
-    private OriginalAndroidWebLaunch(Object engine, ProcessBuilder original, OriginalWebLaunch plan) {
+    private OriginalAndroidWebLaunch(Object engine, ProcessBuilder original, OriginalWebLaunch plan, Path root) {
         this.engine = engine;
         this.original = original;
         this.plan = plan;
+        this.root = root;
     }
 
     static OriginalAndroidWebLaunch prepare(Context host, Integer port) throws Exception {
@@ -67,13 +69,26 @@ final class OriginalAndroidWebLaunch {
             OriginalWebLaunch plan = OriginalWebLaunch.capture(original, node, entry, workspace.toFile(),
                     patch.toFile(), workspacePatchBytes, mobilePatch.toFile(), mobilePatchBytes, mobile,
                     browserPatch.toFile(), browserPatchBytes, browser);
-            return new OriginalAndroidWebLaunch(engine, original, plan);
-        } finally {
-            clearPlugin(mobileEntry);
-            clearPlugin(browserEntry);
-            for (Path path : new Path[]{mobilePatch, browserPatch, patch, workspace, dshHome, home, root}) {
-                Files.deleteIfExists(path);
-            }
+            return new OriginalAndroidWebLaunch(engine, original, plan, root);
+        } catch (Exception | LinkageError failure) {
+            try { removeLayout(root); } catch (IOException cleanup) { failure.addSuppressed(cleanup); }
+            throw failure;
+        }
+    }
+
+    @Override public void close() throws IOException {
+        removeLayout(root);
+    }
+
+    private static void removeLayout(Path root) throws IOException {
+        Path home = root.resolve("home"), dshHome = home.resolve(".dsh");
+        for (OriginalClientPlugin.Kind kind : OriginalClientPlugin.Kind.values()) {
+            clearPlugin(dshHome.resolve(kind.entry));
+            Files.deleteIfExists(dshHome.resolve(kind.patch));
+        }
+        for (Path path : new Path[]{dshHome.resolve(OriginalWebLaunch.WORKSPACE_PATCH),
+                root.resolve("workspace"), dshHome, home, root}) {
+            Files.deleteIfExists(path);
         }
     }
 

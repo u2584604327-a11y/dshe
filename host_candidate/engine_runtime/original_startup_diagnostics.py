@@ -96,6 +96,8 @@ REDACT = (OWNER, 'publicLine', f'({STRING}){STRING}')
 METHODS = {REDACT, *(wrapper_key(name) for name in WRAPPERS)}
 READY_METHODS = {(OWNER, 'findReady', FIND_READY), (OWNER, 'readyState', f'({ENGINE}{STRING}){FLOW}')}
 OWNED_START = (OWNER, 'startOwned', f'({PROCESS_BUILDER}{ENGINE}){PROCESS}')
+OWNED_PREPARE = (OWNER, 'prepareOwned', f'({ENGINE}){PROCESS_BUILDER}')
+OWNED_ENTRY_PC = 190
 OWNED_START_PC = 3912
 OWNED_START_INVOKE = (bytes.fromhex('71202000'), ref(OWNER, 'startOwned', (PROCESS_BUILDER, ENGINE), PROCESS))
 
@@ -163,6 +165,15 @@ def wrapper_source(owned_ready=False, owner_bound=False):
     return-object p0
 .end method
 '''
+    if owner_bound:
+        body += f'''
+.method public static prepareOwned{OWNED_PREPARE[2]}
+    .locals 0
+    invoke-static {{p0}}, {MAIN_HANDOFF}->prepareOriginal({OBJECT}){PROCESS_BUILDER}
+    move-result-object p0
+    return-object p0
+.end method
+'''
     return body
 
 
@@ -200,6 +211,36 @@ def rewrite(key, source, sites, owned_ready=False, owner_bound=False):
         if not re.fullmatch(r'\s*(?:\.line \d+\s+)?:try_start_\w+\s*', body[begin:finish]):
             raise ValueError('OWNER_BOUND_ORIGINAL_RECEIVER_DRIFT')
         body = body.replace(old, new)
+        old_entry = ('    .line 7036\n'
+                     f'    iget-object v8, v1, {START[0]}->this$0:{ENGINE}\n\n'
+                     f'    invoke-static {{v8}}, {ENGINE}->access$getProcess$p({ENGINE}){PROCESS}\n')
+        # This TEST-only branch occupies the original iget's two code units.
+        # Keep the old method PCs and protected ranges, with a bounded footer.
+        if body.count(old_entry) != 1 or body.count(':try_start_1\n') != 1:
+            raise ValueError('OWNER_BOUND_ORIGINAL_ENTRY_ANCHOR')
+        body = body.replace(old_entry, old_entry.replace(
+            f'iget-object v8, v1, {START[0]}->this$0:{ENGINE}', 'goto/16 :owned_prelaunch'))
+        footer = f'''
+    :owned_prelaunch
+    iget-object v2, v1, {START[0]}->this$0:{ENGINE}
+    invoke-static {{v2}}, {OWNER}->prepareOwned{OWNED_PREPARE[2]}
+    move-result-object v10
+
+    invoke-static {{v2}}, {ENGINE}->access$get_state$p({ENGINE}){FLOW}
+    move-result-object v4
+    sget-object v5, {ENGINE[:-1]}$State$Starting;->INSTANCE:{ENGINE[:-1]}$State$Starting;
+    invoke-interface {{v4, v5}}, {FLOW}->setValue({OBJECT})V
+
+    const/4 v4, 0x0
+    invoke-static {{v2, v4}}, {ENGINE}->access$setUserStopped$p({ENGINE}Z)V
+    move-object v13, v0
+    move-object v0, v10
+    invoke-static {{}}, Ljava/lang/System;->currentTimeMillis()J
+    move-result-wide v8
+    goto/16 :try_start_1
+
+'''
+        body = body.removesuffix('.end method') + footer + '.end method'
     if owned_ready and key == READER:
         old = f'    invoke-static {{p5, v2, v0, v5, v4}}, {REGEX}->find$default{FIND}\n'
         new = f'    invoke-static {{p5, v2, v0, v5, p0}}, {OWNER}->findReady{FIND_READY}\n'
@@ -298,6 +339,57 @@ def verify_helper(strict, view, methods, owned_ready=False, owner_bound=False):
         handoff = ref(MAIN_HANDOFF, 'claimOrDeny', (PROCESS_BUILDER, OBJECT), PROCESS)
         compare(OWNED_START, 2, [(bytes.fromhex('71201000'), handoff),
                                 (b'\x0c\x00', None), (b'\x11\x00', None)])
+
+        prepare = ref(MAIN_HANDOFF, 'prepareOriginal', (OBJECT,), PROCESS_BUILDER)
+        compare(OWNED_PREPARE, 1, [(bytes.fromhex('71100000'), prepare),
+                                  (b'\x0c\x00', None), (b'\x11\x00', None)], frame=(1, 1, 1))
+
+
+def verify_owned_entry(strict, signed, current, old, new, replacements):
+    """Require unchanged old layout and exception tables plus one exact TEST prelaunch branch."""
+    import struct
+    left, right = signed.rows(old), current.rows(new)
+    original_size, original_tries = strict.decode(old, signed.dex)
+    _, candidate_tries = strict.decode(new, current.dex)
+    footer_pc = 2 * original_size
+    old_code, new_code = old.get_code(), new.get_code()
+    frame = lambda code: (code.get_registers_size(), code.get_ins_size(), code.get_outs_size())
+    strict.need(frame(old_code) == frame(new_code) == (35, 2, 9) and original_tries == candidate_tries
+                and tuple(left) == tuple(pc for pc in right if pc < footer_pc), 'OWNED_ENTRY_ORIGINAL_LAYOUT')
+    strict.validate_targets(left)
+    strict.validate_targets(right)
+    expected_this = (START[0].encode(), b'this$0', ENGINE.encode())
+    forward = b'\x29\x00' + struct.pack('<h', (footer_pc - OWNED_ENTRY_PC) // 2)
+    strict.need(signed.instruction(left[OWNED_ENTRY_PC]) == (b'\x54\x18', expected_this)
+                and right[OWNED_ENTRY_PC] == forward, 'OWNED_ENTRY_BRANCH')
+    strict.need(OWNED_ENTRY_PC not in replacements and set(replacements) <= left.keys(), 'OWNED_ENTRY_EDITS')
+    for pc, raw in left.items():
+        if pc == OWNED_ENTRY_PC:
+            continue
+        before, after = signed.instruction(raw), current.instruction(right[pc])
+        expected = replacements.get(pc, (before, before))
+        strict.need((before, after) == expected, 'OWNED_ENTRY_ORIGINAL_INSTRUCTION')
+
+    starting = ENGINE[:-1] + '$State$Starting;'
+    footer = [(bytes.fromhex('5412'), expected_this),
+              (bytes.fromhex('71100200'), ref(OWNER, 'prepareOwned', (ENGINE,), PROCESS_BUILDER)),
+              (bytes.fromhex('0c0a'), None),
+              (bytes.fromhex('71100200'), ref(ENGINE, 'access$get_state$p', (ENGINE,), FLOW)),
+              (bytes.fromhex('0c04'), None), (bytes.fromhex('6205'), (starting.encode(), b'INSTANCE', starting.encode())),
+              (bytes.fromhex('72205400'), ref(FLOW, 'setValue', (OBJECT,), 'V')),
+              (bytes.fromhex('1204'), None),
+              (bytes.fromhex('71204200'), ref(ENGINE, 'access$setUserStopped$p', (ENGINE, 'Z'), 'V')),
+              (bytes.fromhex('070d'), None), (bytes.fromhex('07a0'), None),
+              (bytes.fromhex('71000000'), ref('Ljava/lang/System;', 'currentTimeMillis', (), 'J')),
+              (bytes.fromhex('0b08'), None)]
+    additional = [(pc, raw) for pc, raw in right.items() if pc >= footer_pc]
+    strict.need(len(additional) == len(footer) + 1 and additional[0][0] == footer_pc,
+                'OWNED_ENTRY_FOOTER_SIZE')
+    strict.need([current.instruction(raw) for _, raw in additional[:-1]] == footer,
+                'OWNED_ENTRY_FOOTER_BODY')
+    last_pc, last = additional[-1]
+    strict.need(last == b'\x29\x00' + struct.pack('<h', (OWNED_START_PC - last_pc) // 2)
+                and original_tries[1][0] * 2 == OWNED_START_PC, 'OWNED_ENTRY_SPAWN_BRANCH')
 
 
 if __name__ == '__main__':

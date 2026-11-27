@@ -55,10 +55,19 @@ def verify_owner_activation(view,methods):
         actual=tuple(ref for ref in refs if isinstance(ref,tuple) and len(ref)==4 and ref[:2] in selected)
         require(actual==expected,'MAIN_TEST_OWNER_ACTIVATION_CALL_ORDER')
     calls(activity,'verify',reference(handoff,'offer',handoff,launch,session,child,store),
-          reference(activity,'invokeOwnedStart',process,launch),reference(handoff,'verifiedLaunch',verified))
+          reference(activity,'invokeOriginalCoroutine','V',launch),reference(handoff,'verifiedLaunch',verified),
+          reference(activity,'verifyOriginalReadyState','V',launch,verified),
+          reference(activity,'stopOriginalEngine','V',launch))
+    calls(activity,'expectUnarmedCoroutineDenied',reference(activity,'invokeOriginalCoroutine','V',launch))
+    calls(activity,'verifyOriginalReadyState',reference(activity,'originalProcess','Ljava/lang/Object;',launch),
+          reference(activity,'originalState','Ljava/lang/Object;',launch),
+          reference(startup,'requireVerifiedReady','V',process,string))
+    calls(activity,'stopOriginalEngine',reference(activity,'originalState','Ljava/lang/Object;',launch),
+          reference(activity,'originalProcess','Ljava/lang/Object;',launch))
+    calls(handoff,'prepareOriginal',reference(handoff,'requireFresh','V'),reference(plan,'requireSame','V',builder))
     calls(handoff,'claimOrDeny',reference('Lcom/dsh/android/p47/P47LaunchGate;','startOrDeny',process,builder),
           reference(handoff,'activate',process,builder))
-    calls(handoff,'activate',reference(plan,'requireSame','V',builder),
+    calls(handoff,'activate',reference(plan,'requireSame','V',builder),reference(handoff,'requireFresh','V'),
           reference(session,'openLaunchTransport',transport,child,launch,store),
           reference(startup,'await',startup,transport),reference(startup,'verifyForReady',string),
           reference(startup,'requireVerifiedReady','V',process,string),
@@ -70,6 +79,7 @@ def verify_owner_activation(view,methods):
           'Lcom/dsh/android/p77/P77TarAudit$Result;','Ljava/io/InputStream;','Ljava/io/OutputStream;'))
     require(not any(ref[0] in (session.encode(),startup.encode()) and
                     ref[1] in (b'openLaunchTransport',b'await',b'verifyForReady')
+                    or ref[:2]==(activity.encode(),b'invokeOwnedStart')
                     for ref in method_references(view,methods,activity,'verify')
                     if isinstance(ref,tuple) and len(ref)==4),'MAIN_TEST_ACTIVITY_STARTS_BEFORE_BRIDGE')
 
