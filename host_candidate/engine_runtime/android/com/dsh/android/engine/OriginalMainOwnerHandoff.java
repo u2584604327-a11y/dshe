@@ -30,6 +30,7 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
 
     static final class ActivationFailure extends IOException {
         final String workerFailure, childState, transportFailure;
+        final String earlyChildFailure, observedChildExit, workerStdinTermination;
         final long resourceWireBytes;
 
         private ActivationFailure(String code, OriginalMainTestSession session) {
@@ -37,6 +38,9 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
             workerFailure = session.failure();
             childState = session.childState();
             transportFailure = session.transportFailure();
+            earlyChildFailure = session.earlyChildFailure();
+            observedChildExit = session.observedChildExit();
+            workerStdinTermination = session.workerStdinTermination();
             resourceWireBytes = session.resourceWireBytes();
         }
     }

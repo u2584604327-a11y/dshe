@@ -135,6 +135,8 @@ public final class P50OriginalNodeFixedChild {
       if(data!=null)payload.putByteArray("data",data);
       if(kind==P48FixedIsolatedChild.EXIT)payload.putInt("exitCode",code);
       Message message=Message.obtain(null,kind);message.setData(payload);
+      if(kind==P48FixedIsolatedChild.EXIT&&webMainTest)
+        message.arg1=modulePipes.stdinTerminationCode();
       if(kind==P48FixedIsolatedChild.FAIL){
         message.arg1=failureStage;
         message.arg2=Integer.MIN_VALUE;
@@ -269,13 +271,15 @@ public final class P50OriginalNodeFixedChild {
       failureStage=3;
       node=pb.start(); child=node;
       if(aborted){node.destroyForcibly();throw new IOException("P50_CANCELLED");}
-      // P53: send on Binder only after actual original ARM64 Node
-      // ProcessBuilder.start() returns successfully. This is not READY.
+      if(modulePipes!=null){
+        failureStage=4;
+        modulePipes.attach(node);
+      }
+      // An authenticated receipt can now hand these pipes to the host. A real
+      // child and attached pipes are required here; HTTP Ready is separate.
       emit(P48FixedIsolatedChild.CHILD_STARTED,null,0);
 
       if(modulePipes!=null) {
-        failureStage=4;
-        modulePipes.attach(node);
         failureStage=5;
         if(!node.waitFor(90,TimeUnit.SECONDS) || aborted)
           throw new IOException("P50_ORIGINAL_MODULE_TIMEOUT");

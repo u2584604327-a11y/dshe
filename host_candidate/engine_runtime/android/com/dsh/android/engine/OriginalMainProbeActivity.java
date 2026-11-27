@@ -14,6 +14,7 @@ public final class OriginalMainProbeActivity extends Activity {
   private final AtomicReference<String> stage=new AtomicReference<>("BIND");
   private String transportFault="NONE/NONE",sessionFault="NONE";
   private String childState="NONE";
+  private String earlyChildFailure="NONE",observedChildExit="UNREPORTED",workerStdinTermination="UNREPORTED";
   private long failedResourceWireBytes;
   private final StringBuilder status=new StringBuilder();private TextView text;
   private volatile OriginalMainTestSession session;private volatile HttpProcessTransport transport;
@@ -108,6 +109,9 @@ public final class OriginalMainProbeActivity extends Activity {
             sessionFault=denied.workerFailure;
             childState=denied.childState;
             failedResourceWireBytes=denied.resourceWireBytes;
+            earlyChildFailure=denied.earlyChildFailure;
+            observedChildExit=denied.observedChildExit;
+            workerStdinTermination=denied.workerStdinTermination;
             throw denied;
           }catch(Exception|LinkageError denied){
             transportFault=bound.transportFailure();
@@ -137,6 +141,9 @@ public final class OriginalMainProbeActivity extends Activity {
       main.post(()->{report("ORIGINAL_MAIN_FIXED_FAILURE_CODE="+fixed);
         report("ORIGINAL_MAIN_WORKER_FAILURE="+sessionFault);
         report("ORIGINAL_MAIN_CHILD_STATE="+childState);
+        report("ORIGINAL_MAIN_CHILD_EARLY_STDERR="+earlyChildFailure);
+        report("ORIGINAL_MAIN_CHILD_EXIT_AT_FAILURE="+observedChildExit);
+        report("ORIGINAL_MAIN_WORKER_STDIN_TERMINATION="+workerStdinTermination);
         report("ORIGINAL_MAIN_RESOURCE_WIRE_BYTES_AT_FAILURE="+failedResourceWireBytes);
         report("ORIGINAL_MAIN_TRANSPORT_STATE="+transportFault);deny(stage.get());});
     }

@@ -18,6 +18,7 @@ import android.system.ErrnoException;
 import java.util.HashSet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /** Android framework sendingUid -> P67 ordered child-start -> P37 Process.
  * Test fixture only. HELLO never creates or hands out Process; no engine READY.
@@ -104,6 +105,7 @@ public final class P68AndroidBinderIntake {
     private final AtomicBoolean closed=new AtomicBoolean();
     private final AtomicBoolean failed=new AtomicBoolean();
     private final AtomicBoolean childEnded=new AtomicBoolean();
+    private volatile StdinTermination stdinTermination=StdinTermination.PENDING;
     private Thread input,output,error;
     private Process child;
     private WorkerPipes(ParcelFileDescriptor[] descriptors) {
@@ -156,9 +158,15 @@ public final class P68AndroidBinderIntake {
         if(!closed.get()&&!childEnded.get()&&child.isAlive()){
           failed.set(true);child.destroyForcibly();
         }
-      });
+      },termination->stdinTermination=termination);
       output=pumpOutput(child.getInputStream(),stdoutPipe,"dsh-child-stdout");
       error=pumpOutput(child.getErrorStream(),stderrPipe,"dsh-child-stderr");
+    }
+    public int stdinTerminationCode(){return stdinTermination.code;}
+    public static String stdinTerminationName(int code){
+      for(StdinTermination termination:StdinTermination.values())
+        if(termination.code==code)return termination.name();
+      return "UNREPORTED";
     }
     private Thread pumpOutput(InputStream source, OutputStream destination,String name) {
       Thread thread=new Thread(()->{
@@ -214,6 +222,11 @@ public final class P68AndroidBinderIntake {
       }
     }
   }
+  private enum StdinTermination {
+    PENDING(0), HOST_EOF(1), HOST_READ_ERROR(2), CHILD_STDIN_CLOSED(3), CHILD_STDIN_IO(4);
+    final int code;
+    StdinTermination(int code){this.code=code;}
+  }
   /**
    * A child may close stdin and keep running (including printing an error).
    * A failed write to child stdin closes the upstream reader so its producer
@@ -222,23 +235,33 @@ public final class P68AndroidBinderIntake {
    */
   static Thread forwardStdin(InputStream source,OutputStream childInput,
       Runnable onSourceFailure) {
+    return forwardStdin(source,childInput,onSourceFailure,ignored->{});
+  }
+  private static Thread forwardStdin(InputStream source,OutputStream childInput,
+      Runnable onSourceFailure,Consumer<StdinTermination> terminal) {
     if(source==null||childInput==null||onSourceFailure==null)
       throw new IllegalArgumentException("P68_STDIN_STREAMS_REQUIRED");
     Thread thread=new Thread(()->{
+      StdinTermination reason=StdinTermination.PENDING;
       try {
         byte[] bytes=new byte[8192];
         for(;;){
           final int count;
           try{count=source.read(bytes);}
-          catch(IOException sourceLost){onSourceFailure.run();return;}
-          if(count<0)return;
+          catch(IOException sourceLost){reason=StdinTermination.HOST_READ_ERROR;onSourceFailure.run();return;}
+          if(count<0){reason=StdinTermination.HOST_EOF;return;}
           if(count==0)continue;
           // Process stdin can be buffered. A live interactive child must see
           // a short preface/frame before the producer sends more data or EOF.
           try{childInput.write(bytes,0,count);childInput.flush();}
-          catch(IOException childClosedInput){return;}
+          catch(IOException childClosedInput){
+            reason=WorkerPipes.brokenPipe(childClosedInput)
+                ?StdinTermination.CHILD_STDIN_CLOSED:StdinTermination.CHILD_STDIN_IO;
+            return;
+          }
         }
       }finally{
+        terminal.accept(reason);
         try{source.close();}catch(IOException ignored){}
         try{childInput.close();}catch(IOException ignored){}
       }

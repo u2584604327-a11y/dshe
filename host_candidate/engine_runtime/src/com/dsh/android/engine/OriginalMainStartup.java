@@ -119,6 +119,48 @@ public final class OriginalMainStartup {
         try { input.close(); } catch (IOException ignored) { /* Original failure remains primary. */ }
     }
 
+    /** Classify a rejected child's bounded stderr, without retaining its text. */
+    static String earlyChildFailure(InputStream stderr) {
+        byte[] bytes = new byte[32768];
+        int length = 0;
+        boolean readFailed = false;
+        try {
+            try (InputStream input = stderr) {
+                while (length < bytes.length) {
+                    int count = input.read(bytes, length, bytes.length - length);
+                    if (count < 0) break;
+                    if (count == 0) {
+                        readFailed = true;
+                        break;
+                    }
+                    length += count;
+                }
+            } catch (IOException ignored) {
+                readFailed = true;
+            }
+            if (length == 0) return readFailed ? "STDERR_IO" : "NONE";
+            String text = new String(bytes, 0, length, StandardCharsets.UTF_8);
+            for (String row : text.split("\\r?\\n")) {
+                switch (row) {
+                    case "ORIGINAL_MAIN_DENY=E_DSH_MODULE_STREAM_TIMEOUT": return "MODULE_INPUT_TIMEOUT";
+                    case "ORIGINAL_MAIN_DENY=E_DSH_MODULE_STREAM_EOF": return "MODULE_INPUT_EOF";
+                    case "ORIGINAL_MAIN_DENY=E_DSH_MODULE_STREAM_VERSION": return "MODULE_INPUT_VERSION";
+                    case "ORIGINAL_MAIN_DENY=E_DSH_MODULE_TREE_SEAL": return "MODULE_INPUT_SEAL";
+                    case "ORIGINAL_MAIN_DENY=E_DSH_ADDON_RUNTIME": return "NATIVE_RUNTIME";
+                    default:
+                        if (CHILD_DENIAL.matcher(row).matches()) return "ORIGINAL_BOOTSTRAP_DENIED";
+                        if (row.startsWith("CANNOT LINK EXECUTABLE")) return "NATIVE_LINKER";
+                        if (row.endsWith(": OpenSSL configuration error:")) return "OPENSSL_CONFIG";
+                        if (row.startsWith("SyntaxError:")) return "JAVASCRIPT_SYNTAX";
+                        if (row.startsWith("FATAL ERROR:")) return "NODE_FATAL";
+                }
+            }
+            return "UNCLASSIFIED_STDERR";
+        } finally {
+            Arrays.fill(bytes, (byte) 0);
+        }
+    }
+
     static String launchTarget(String row, int port) throws IOException {
         String ownPrefix = PREFIX + "http://127.0.0.1:" + port;
         require(port > 0 && port <= 65535 && row.startsWith(ownPrefix), "MAIN_PRIVATE_URL");

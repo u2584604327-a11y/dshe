@@ -26,6 +26,7 @@ final class OriginalMainTestSession implements AutoCloseable {
   private final AtomicBoolean closed=new AtomicBoolean();
   private final AtomicBoolean bindRequested=new AtomicBoolean(),childClaimed=new AtomicBoolean();
   private final CompletableFuture<P37RemoteProcess> started=new CompletableFuture<>();
+  private final CountDownLatch terminalObserved=new CountDownLatch(1);
   final String session;final long epoch=SystemClock.elapsedRealtimeNanos();
   private long requestSequence=1;private boolean bound,linked,handedOut;
   private volatile Messenger worker;
@@ -37,6 +38,9 @@ final class OriginalMainTestSession implements AutoCloseable {
   private boolean transportOpened,handoffOffered;
   private volatile String failure="NONE";
   private volatile long resourceWireBytes;
+  private volatile String earlyChildFailure="NONE";
+  private volatile String workerStdinTermination="UNREPORTED";
+  private volatile String observedChildExit="UNREPORTED";
   private volatile LaunchPhase launchPhase=LaunchPhase.RESERVATION;
   private final IBinder.DeathRecipient died=()->main.post(()->reject("BINDER_DEATH"));
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()){
@@ -45,7 +49,21 @@ final class OriginalMainTestSession implements AutoCloseable {
       try{
         P68AndroidBinderIntake.Result result=intake.accept(message);
         if(result==P68AndroidBinderIntake.Result.REJECTED){reject("WORKER_PROTOCOL");return;}
-        if(result==P68AndroidBinderIntake.Result.FAIL){reject("SUPERVISOR_"+com.dsh.android.p50.P50OriginalNodeFixedChild.failureStageName(message.arg1));return;}
+        if(result==P68AndroidBinderIntake.Result.FAIL){
+          if(message.arg1==6&&message.arg2>=0&&message.arg2<=255)
+            observedChildExit=Integer.toString(message.arg2);
+          reject("SUPERVISOR_"+com.dsh.android.p50.P50OriginalNodeFixedChild.failureStageName(message.arg1));
+          return;
+        }
+        if(result==P68AndroidBinderIntake.Result.EXIT){
+          P37RemoteProcess exact=process;
+          if(exact!=null&&exact.terminalReason()==P37RemoteProcess.TerminalReason.REMOTE_EXIT){
+            observedChildExit=Integer.toString(exact.exitValue());
+            workerStdinTermination=P68AndroidBinderIntake.WorkerPipes.stdinTerminationName(message.arg1);
+          }
+          terminalObserved.countDown();
+          return;
+        }
         if(result!=P68AndroidBinderIntake.Result.CHILD_STARTED)return;
         if(handedOut){reject("CHILD_REPLAY");return;}handedOut=true;
         P37RemoteProcess received=(P37RemoteProcess)intake.processAfterAuthenticatedChildStart();
@@ -113,6 +131,9 @@ final class OriginalMainTestSession implements AutoCloseable {
   String failure(){return failure;}
   LaunchPhase launchPhase(){return launchPhase;}
   long resourceWireBytes(){return resourceWireBytes;}
+  String earlyChildFailure(){return earlyChildFailure;}
+  String observedChildExit(){return observedChildExit;}
+  String workerStdinTermination(){return workerStdinTermination;}
   String childState(){P37RemoteProcess child=process;return child==null?"NONE":child.terminalReason().name();}
   synchronized String transportFailure(){return launchTransport==null?"NONE/NONE":launchTransport.failure();}
   HttpProcessTransport openLaunchTransport(P37RemoteProcess exact,OriginalAndroidWebLaunch launch,
@@ -123,7 +144,11 @@ final class OriginalMainTestSession implements AutoCloseable {
       transportOpened=true;
     }
     launchPhase=LaunchPhase.RESOURCE_TRANSFER;
-    transferResources(exact);
+    try{transferResources(exact);}
+    catch(ResourceFailure denied){
+      if("MAIN_OWNER_RESOURCE_PIPE_CLOSED".equals(denied.getMessage()))observeEarlyChildFailure(exact);
+      throw denied;
+    }
     if(closed.get()||!ownsChild(exact))throw new IOException("MAIN_TEST_SESSION_CLOSED");
     launchPhase=LaunchPhase.LOOPBACK_TRANSPORT;
     HttpProcessTransport transport=HttpProcessTransport.forOriginalWebLaunch(exact,session,epoch,launch.plan,store);
@@ -135,6 +160,22 @@ final class OriginalMainTestSession implements AutoCloseable {
     }
     transport.close();
     throw new IOException("MAIN_TEST_SESSION_CLOSED");
+  }
+  private void observeEarlyChildFailure(P37RemoteProcess exact){
+    if(closed.get())return;
+    long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);
+    // The transport was never admitted. Releasing stdout allows the worker to
+    // drain it, and the reader below consumes only bounded diagnostic stderr.
+    try{exact.getInputStream().close();}catch(IOException ignored){}
+    Thread reader=new Thread(()->earlyChildFailure=OriginalMainStartup.earlyChildFailure(exact.getErrorStream()),
+        "dsh-main-rejected-stderr");
+    reader.setDaemon(true);
+    reader.start();
+    try{
+      terminalObserved.await(Math.max(0,deadline-System.nanoTime()),TimeUnit.NANOSECONDS);
+      long remaining=deadline-System.nanoTime();
+      if(remaining>0)reader.join(Math.max(1,TimeUnit.NANOSECONDS.toMillis(remaining)));
+    }catch(InterruptedException interrupted){Thread.currentThread().interrupt();}
   }
   private void transferResources(P37RemoteProcess exact)throws IOException{
     OutputStream pipe=new FilterOutputStream(exact.getOutputStream()){
@@ -214,6 +255,7 @@ final class OriginalMainTestSession implements AutoCloseable {
       active=launchTransport;
     }
     if(active!=null)active.revokeReady();
+    terminalObserved.countDown();
     started.completeExceptionally(new IOException("MAIN_TEST_SESSION_CLOSED"));
     if(process!=null&&process.isAlive())process.destroyForcibly();
     if(pipes!=null)pipes.close();
