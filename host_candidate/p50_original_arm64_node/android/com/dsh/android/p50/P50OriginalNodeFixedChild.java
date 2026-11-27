@@ -257,6 +257,9 @@ public final class P50OriginalNodeFixedChild {
         pb=new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--permission","--allow-addons",
           "--allow-fs-read="+addon.getAbsolutePath(),"--allow-fs-read=/dsh-runtime","--allow-fs-read=/dsh-home",
           "--input-type=module","--eval",script);
+        // The pinned libcrypto defaults to a Termux config that an isolated UID
+        // cannot read. Use Node and OpenSSL's built-in defaults for this test.
+        if(webMainTest)pb.command().add(1,"--openssl-config=/dev/null");
       }
       pb.directory(new File("/"));
       Map<String,String> env=pb.environment();

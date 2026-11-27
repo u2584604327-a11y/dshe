@@ -125,6 +125,14 @@ def main():
         require(all(any(key[0]==name for key in methods) for name in needed),'HTTP_CLASSES_MISSING')
         if args.owner_bound:
             verify_owner_activation(view,methods)
+            worker='Lcom/dsh/android/p50/P50OriginalNodeFixedChild;'
+            refs=method_references(view,methods,worker,'runFixedOriginalNode')
+            options={value for value in refs if isinstance(value,bytes)}
+            require(b'--permission' in options and
+                    {value for value in options if value.startswith(b'--openssl-config')}=={b'--openssl-config=/dev/null'},
+                    'MAIN_TEST_FIXED_OPENSSL_CONFIG')
+            require(not options.intersection({b'NODE_TLS_REJECT_UNAUTHORIZED',b'--openssl-legacy-provider'}),
+                    'MAIN_TEST_OPENSSL_POLICY_DRIFT')
         elif main:
             refs=method_references(view,methods,'Lcom/dsh/android/engine/OriginalMainProbeActivity;','verify')
             expected=([b'await',b'verifyForReady',b'requireVerifiedReady'] if args.owned_ready else
