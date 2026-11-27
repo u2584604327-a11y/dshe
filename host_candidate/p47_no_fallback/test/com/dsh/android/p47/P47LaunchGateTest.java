@@ -32,7 +32,7 @@ public final class P47LaunchGateTest {
     yes(!s.hasDirectory,"cwd default");
     yes(s.stderrMerged,"stderr config");
     yes(s.environmentEntries>0,"env count");
-    deny(pb,"P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK");
+    deny(pb,"P183_ORIGINAL_WORKDIR_REQUIRED");
     yes(!canary.exists(),"no file created by unauthorized host launch");
     pb.directory(new File("."));
     yes(P47LaunchGate.categorize(pb).hasDirectory,"cwd category");
