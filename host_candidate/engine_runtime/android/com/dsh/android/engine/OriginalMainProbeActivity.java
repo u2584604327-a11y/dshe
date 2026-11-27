@@ -11,7 +11,9 @@ import java.io.*;import java.nio.charset.StandardCharsets;import java.nio.file.*
  * Exercises the guarded original EngineManager coroutine with fresh storage in the separate TEST package. */
 public final class OriginalMainProbeActivity extends Activity {
   private final Handler main=new Handler(Looper.getMainLooper());private final AtomicBoolean closed=new AtomicBoolean();
-  private final AtomicReference<String> stage=new AtomicReference<>("BIND"),transportFault=new AtomicReference<>("NONE/NONE");
+  private final AtomicReference<String> stage=new AtomicReference<>("BIND");
+  private String transportFault="NONE/NONE",sessionFault="NONE";
+  private String childState="NONE";
   private final StringBuilder status=new StringBuilder();private TextView text;
   private volatile OriginalMainTestSession session;private volatile HttpProcessTransport transport;
   @Override public void onCreate(Bundle saved){
@@ -69,6 +71,7 @@ public final class OriginalMainProbeActivity extends Activity {
               transport=admitted.process;
               verifyOriginalReadyState(launch,admitted);
               expectOwnedStartDenied(launch);
+              offer.acceptOriginalReady(admitted);
             }
             HttpProcessTransport active=admitted.process;
             if(closed.get())return;
@@ -99,13 +102,22 @@ public final class OriginalMainProbeActivity extends Activity {
             post("ORIGINAL_MAIN_AUTH_FRONTEND_WORKSPACE_RPC_AND_WS=PASS generation="+generation);
             post("ORIGINAL_MAIN_ORIGINAL_STOP_IDLE=PASS generation="+generation);
             post("ORIGINAL_MAIN_ACTUAL_CHILD_EXIT=0 generation="+generation);
+          }catch(OriginalMainOwnerHandoff.ActivationFailure denied){
+            transportFault=denied.transportFailure;
+            sessionFault=denied.workerFailure;
+            childState=denied.childState;
+            throw denied;
+          }catch(Exception|LinkageError denied){
+            transportFault=bound.transportFailure();
+            sessionFault=bound.failure();
+            childState=bound.childState();
+            throw denied;
           }finally{
             try{
               HttpProcessTransport current=transport;
               if(current!=null){
                 current.close();
                 current.awaitClosed(5,TimeUnit.SECONDS);
-                transportFault.set(current.failure());
               }
             }finally{
               transport=null;
@@ -119,7 +131,10 @@ public final class OriginalMainProbeActivity extends Activity {
       post("ORIGINAL_MAIN_ENGINE_START_COROUTINE=PASS_TEST_OWNER");post("ORIGINAL_DSH_HTTP_READY=NOT_WIRED");post("FORMAL_V139=BLOCKED");main.post(this::close);
     }catch(Exception|LinkageError denied){
       final String fixed=denied.getMessage()!=null&&denied.getMessage().matches("[A-Z0-9_]{1,64}")?denied.getMessage():"OTHER";
-      main.post(()->{report("ORIGINAL_MAIN_FIXED_FAILURE_CODE="+fixed);report("ORIGINAL_MAIN_TRANSPORT_STATE="+transportFault.get());deny(stage.get());});
+      main.post(()->{report("ORIGINAL_MAIN_FIXED_FAILURE_CODE="+fixed);
+        report("ORIGINAL_MAIN_WORKER_FAILURE="+sessionFault);
+        report("ORIGINAL_MAIN_CHILD_STATE="+childState);
+        report("ORIGINAL_MAIN_TRANSPORT_STATE="+transportFault);deny(stage.get());});
     }
     finally{if(root!=null)try{Files.deleteIfExists(root.resolve("snapshot.bin"));Files.deleteIfExists(root.resolve("owner.lock"));Files.delete(root);}catch(IOException ignored){}}
   }
@@ -157,6 +172,11 @@ public final class OriginalMainProbeActivity extends Activity {
       Object result=start.invoke(launch.engine,callback);
       if(result==suspended)result=completion.get(95,TimeUnit.SECONDS);
       throwOnFailure.invoke(null,result);
+    }catch(TimeoutException timeout){
+      throw new IOException("MAIN_ORIGINAL_COROUTINE_TIMEOUT");
+    }catch(InterruptedException interrupted){
+      Thread.currentThread().interrupt();
+      throw new InterruptedIOException("MAIN_ORIGINAL_COROUTINE_INTERRUPTED");
     }catch(InvocationTargetException failure){
       if(failure.getCause() instanceof IOException)throw (IOException)failure.getCause();
       throw failure;

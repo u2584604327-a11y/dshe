@@ -57,6 +57,7 @@ def verify_owner_activation(view,methods):
     calls(activity,'verify',reference(handoff,'offer',handoff,launch,session,child,store),
           reference(activity,'invokeOriginalCoroutine','V',launch),reference(handoff,'verifiedLaunch',verified),
           reference(activity,'verifyOriginalReadyState','V',launch,verified),
+          reference(handoff,'acceptOriginalReady','V',verified),
           reference(activity,'stopOriginalEngine','V',launch))
     calls(activity,'expectUnarmedCoroutineDenied',reference(activity,'invokeOriginalCoroutine','V',launch))
     calls(activity,'verifyOriginalReadyState',reference(activity,'originalProcess','Ljava/lang/Object;',launch),

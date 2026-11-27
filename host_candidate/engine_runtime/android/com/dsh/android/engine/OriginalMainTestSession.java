@@ -12,6 +12,7 @@ import java.io.*;import java.security.*;import java.util.*;import java.util.conc
  * P47 registration. The physical main test can reuse the exact runtime wire.
  */
 final class OriginalMainTestSession implements AutoCloseable {
+  enum LaunchPhase { RESERVATION, RESOURCE_TRANSFER, LOOPBACK_TRANSPORT }
   private final Context context;private final LongConsumer progress;private final Handler main=new Handler(Looper.getMainLooper());
   private final AtomicBoolean closed=new AtomicBoolean();
   private final AtomicBoolean bindRequested=new AtomicBoolean(),childClaimed=new AtomicBoolean();
@@ -26,6 +27,7 @@ final class OriginalMainTestSession implements AutoCloseable {
   private OriginalAndroidWebLaunch launchOwner;
   private boolean transportOpened,handoffOffered;
   private volatile String failure="NONE";
+  private volatile LaunchPhase launchPhase=LaunchPhase.RESERVATION;
   private final IBinder.DeathRecipient died=()->main.post(()->reject("BINDER_DEATH"));
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()){
     @Override public void handleMessage(Message message){
@@ -99,6 +101,9 @@ final class OriginalMainTestSession implements AutoCloseable {
     catch(ExecutionException|TimeoutException bad){close();throw new IOException("MAIN_TEST_CHILD_"+failure);}
   }
   String failure(){return failure;}
+  LaunchPhase launchPhase(){return launchPhase;}
+  String childState(){P37RemoteProcess child=process;return child==null?"NONE":child.terminalReason().name();}
+  synchronized String transportFailure(){return launchTransport==null?"NONE/NONE":launchTransport.failure();}
   HttpProcessTransport openLaunchTransport(P37RemoteProcess exact,OriginalAndroidWebLaunch launch,
       DurableSessionSnapshot store)throws IOException{
     synchronized(this){
@@ -106,8 +111,10 @@ final class OriginalMainTestSession implements AutoCloseable {
         throw new IOException("MAIN_LAUNCH_AUTHENTICATED_CHILD_REQUIRED");
       transportOpened=true;
     }
+    launchPhase=LaunchPhase.RESOURCE_TRANSFER;
     transferResources(exact);
     if(closed.get()||!ownsChild(exact))throw new IOException("MAIN_TEST_SESSION_CLOSED");
+    launchPhase=LaunchPhase.LOOPBACK_TRANSPORT;
     HttpProcessTransport transport=HttpProcessTransport.forOriginalWebLaunch(exact,session,epoch,launch.plan,store);
     synchronized(this){
       if(!closed.get()){
@@ -158,6 +165,7 @@ final class OriginalMainTestSession implements AutoCloseable {
       if(!closed.compareAndSet(false,true))return;
       active=launchTransport;
     }
+    if(active!=null)active.revokeReady();
     started.completeExceptionally(new IOException("MAIN_TEST_SESSION_CLOSED"));
     if(process!=null&&process.isAlive())process.destroyForcibly();
     if(pipes!=null)pipes.close();

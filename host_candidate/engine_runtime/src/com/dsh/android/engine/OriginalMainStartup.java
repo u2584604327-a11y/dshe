@@ -369,8 +369,8 @@ public final class OriginalMainStartup {
 
     private static Denied denied(String code) { return new Denied(code); }
 
-    private static final class Denied extends IOException {
-        Denied(String code) { super(code); }
+    static final class Denied extends IOException {
+        private Denied(String code) { super(code); }
     }
 
     private static final class Reply {

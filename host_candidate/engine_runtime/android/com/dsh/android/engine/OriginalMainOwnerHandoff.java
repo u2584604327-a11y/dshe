@@ -28,14 +28,27 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
         }
     }
 
+    static final class ActivationFailure extends IOException {
+        final String workerFailure, childState, transportFailure;
+
+        private ActivationFailure(String code, OriginalMainTestSession session) {
+            super(code);
+            workerFailure = session.failure();
+            childState = session.childState();
+            transportFailure = session.transportFailure();
+        }
+    }
+
     private final OriginalAndroidWebLaunch owner;
     private final OriginalMainTestSession session;
     private final P37RemoteProcess child;
     private final DurableSessionSnapshot store;
     private final long issuedAt = System.nanoTime();
     private boolean revoked;
+    private boolean accepted;
     private Thread preparedThread;
     private VerifiedLaunch verified;
+    private ActivationFailure activationFailure;
 
     private OriginalMainOwnerHandoff(OriginalAndroidWebLaunch owner, OriginalMainTestSession session,
             P37RemoteProcess child, DurableSessionSnapshot store) {
@@ -67,7 +80,7 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
         synchronized (handoff) {
             handoff.requireFresh();
             if (!handoff.session.ownsReservation(handoff.owner, handoff.child)) {
-                throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
+                throw new IOException("MAIN_OWNER_CHILD_UNAVAILABLE");
             }
             if (handoff.preparedThread != null) throw new IOException("MAIN_OWNER_PRELAUNCH_ALREADY_USED");
             handoff.owner.plan.requireSame(handoff.owner.original);
@@ -78,7 +91,8 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
 
     private void requireFresh() throws IOException {
         long age = System.nanoTime() - issuedAt;
-        if (revoked || age < 0 || age > MAX_AGE) throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
+        if (revoked) throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
+        if (age < 0 || age > MAX_AGE) throw new IOException("MAIN_OWNER_LEASE_EXPIRED");
     }
 
     /** The exact receiver comes from the checked main-DEX callsite. */
@@ -100,6 +114,7 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
     }
 
     private Process activate(ProcessBuilder builder) throws IOException {
+        String stage = "CLAIM";
         boolean handedOff = false;
         try {
             owner.plan.requireSame(builder);
@@ -110,9 +125,13 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
             }
             if (Looper.myLooper() == Looper.getMainLooper()) throw new IOException("MAIN_OWNER_BACKGROUND_REQUIRED");
             if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("MAIN_OWNER_START_INTERRUPTED");
+            stage = "TRANSPORT";
             HttpProcessTransport process = session.openLaunchTransport(child, owner, store);
+            stage = "STARTUP_OUTPUT";
             OriginalMainStartup startup = OriginalMainStartup.await(process);
+            stage = "HTTP_READY";
             String cookie = startup.verifyForReady();
+            stage = "READY_PROOF";
             OriginalMainStartup.requireVerifiedReady(process, startup.privateUrl());
             synchronized (this) {
                 if (revoked || !session.ownsLaunch(owner, process) || !process.hasCurrentReadyProof()) throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
@@ -122,16 +141,42 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
             }
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
-            throw new InterruptedIOException("MAIN_OWNER_START_INTERRUPTED");
+            throw failActivation("MAIN_OWNER_START_INTERRUPTED");
+        } catch (OriginalMainStartup.Denied denied) {
+            throw failActivation(denied.getMessage());
+        } catch (IOException | RuntimeException | LinkageError failure) {
+            if ("CLAIM".equals(stage) && failure instanceof IOException) {
+                // This stage only calls the fixed plan and lease checks above.
+                throw failActivation(failure.getMessage());
+            }
+            String phase = "TRANSPORT".equals(stage) ? session.launchPhase().name() : stage;
+            throw failActivation("MAIN_OWNER_" + phase
+                    + (failure instanceof LinkageError ? "_LINKAGE_FAILURE" : "_FAILED"));
         } finally {
             if (!handedOff) disposeUnclaimed();
         }
     }
 
+    private synchronized ActivationFailure failActivation(String code) {
+        // The original coroutine catches startup failures and returns Unit. Retain
+        // only a fixed code so the TEST owner can recover it without reading logs,
+        // paths, private URLs or exception text supplied by IO or the worker.
+        if (activationFailure == null) activationFailure = new ActivationFailure(code, session);
+        return activationFailure;
+    }
+
     synchronized VerifiedLaunch verifiedLaunch() throws IOException {
-        if (revoked || verified == null || !session.ownsLaunch(owner, verified.process)
+        if (activationFailure != null) throw activationFailure;
+        if (revoked) throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
+        if (verified == null) throw new IOException("MAIN_OWNER_CLAIM_NOT_COMPLETED");
+        if (!session.ownsLaunch(owner, verified.process)
                 || !verified.process.hasCurrentReadyProof()) throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
         return verified;
+    }
+
+    synchronized void acceptOriginalReady(VerifiedLaunch launch) throws IOException {
+        if (accepted || launch != verifiedLaunch()) throw new IOException("MAIN_OWNER_READY_ACK_DENIED");
+        accepted = true;
     }
 
     private void disposeUnclaimed() {
@@ -148,7 +193,7 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
             if (revoked) return;
             revoked = true;
             preparedThread = null;
-            unclaimed = verified == null;
+            unclaimed = !accepted;
             verified = null;
         }
         synchronized (pending) { pending.remove(owner.engine, this); }

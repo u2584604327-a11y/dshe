@@ -472,8 +472,11 @@ final class HttpProcessTransport extends Process implements Closeable {
     }
     @Override public void close()throws IOException{synchronized(appInputLock){if(stdinOpen.compareAndSet(true,false)&&!closed.get()){appCredit.revoke();send(APP_END,0,new byte[0]);}}}
   };
+  synchronized void revokeReady(){
+    stopping.set(true);accepting.set(false);readyProof.set(null);
+  }
   private void stopListener(){
-    synchronized(this){stopping.set(true);accepting.set(false);readyProof.set(null);}
+    revokeReady();
     try{listener.close();}catch(IOException ignored){}
     for(Peer peer:peers.values())peer.close(false);
   }
