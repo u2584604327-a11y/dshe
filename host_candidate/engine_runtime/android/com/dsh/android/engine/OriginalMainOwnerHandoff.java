@@ -30,12 +30,14 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
 
     static final class ActivationFailure extends IOException {
         final String workerFailure, childState, transportFailure;
+        final long resourceWireBytes;
 
         private ActivationFailure(String code, OriginalMainTestSession session) {
             super(code);
             workerFailure = session.failure();
             childState = session.childState();
             transportFailure = session.transportFailure();
+            resourceWireBytes = session.resourceWireBytes();
         }
     }
 
@@ -143,6 +145,8 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
             Thread.currentThread().interrupt();
             throw failActivation("MAIN_OWNER_START_INTERRUPTED");
         } catch (OriginalMainStartup.Denied denied) {
+            throw failActivation(denied.getMessage());
+        } catch (OriginalMainTestSession.ResourceFailure denied) {
             throw failActivation(denied.getMessage());
         } catch (IOException | RuntimeException | LinkageError failure) {
             if ("CLAIM".equals(stage) && failure instanceof IOException) {

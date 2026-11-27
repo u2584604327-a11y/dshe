@@ -33,6 +33,7 @@ public final class P77TarAudit {
   /** Receives bounded canonical members. Consumers must not execute before sealOriginal. */
   public interface MemberSink {
     void begin(String canonical,boolean directory,long size)throws IOException;
+    /** The byte range is valid for this call and the buffer is reused. */
     void accept(byte[] bytes,int offset,int length)throws IOException;
     void endMember()throws IOException;
     void sealOriginal(Result complete)throws IOException;
@@ -128,19 +129,11 @@ public final class P77TarAudit {
         throw new IOException("P77_PATH_TRAVERSAL");
     return name;
   }
-  private static void consume(InputStream in,long bytes,MessageDigest md)throws IOException{
-    consume(in,bytes,md,null,null,null,null);
-  }
-  private static void consume(InputStream in,long bytes,MessageDigest md,
-                              P78ModuleSlot selected,P144ScopedSourceBroker leased,
-                              P145ExactBootEntry boot,P147ScopedCandidateLease candidate)throws IOException{
-    consume(in,bytes,md,selected,leased,boot,candidate,null);
-  }
-  private static void consume(InputStream in,long bytes,MessageDigest md,
+  private static void consume(InputStream in,long bytes,byte[] buffer,MessageDigest md,
                               P78ModuleSlot selected,P144ScopedSourceBroker leased,
                               P145ExactBootEntry boot,P147ScopedCandidateLease candidate,
                               MemberSink sink)throws IOException{
-    byte[] buffer=new byte[65536];long remaining=bytes;
+    long remaining=bytes;
     while(remaining>0){
       int n=in.read(buffer,0,(int)Math.min(remaining,buffer.length));
       if(n<0)throw new EOFException("P77_TRUNCATED_MEMBER");
@@ -154,13 +147,13 @@ public final class P77TarAudit {
       remaining-=n;
     }
   }
-  private static void pad(InputStream in,long bytes)throws IOException{
-    consume(in,(BLOCK-bytes%BLOCK)%BLOCK,null);
+  private static void pad(InputStream in,long bytes,byte[] buffer)throws IOException{
+    consume(in,(BLOCK-bytes%BLOCK)%BLOCK,buffer,null,null,null,null,null,null);
   }
-  private static byte[] extended(InputStream in,long bytes)throws IOException{
+  private static byte[] extended(InputStream in,long bytes,byte[] buffer)throws IOException{
     if(bytes<0||bytes>65536)throw new IOException("P77_PAX_TOO_LARGE");
     byte[] raw=new byte[(int)bytes];
-    readExact(in,raw);pad(in,bytes);
+    readExact(in,raw);pad(in,bytes,buffer);
     return raw;
   }
   private static Map<String,String> pax(byte[] raw)throws IOException{
@@ -214,6 +207,7 @@ public final class P77TarAudit {
       root.update("P54_IMMUTABLE_ENGINE_TREE_V1\0".getBytes(StandardCharsets.US_ASCII));
       Set<String> seen=new HashSet<>();
       byte[] header=new byte[BLOCK];int members=0,addons=0;long total=0;
+      byte[] buffer=new byte[65536];
       String longName=null;Map<String,String> pending=new HashMap<>();
       for(;;){
         int n=fill(tar,header);
@@ -229,7 +223,7 @@ public final class P77TarAudit {
         long size=octal(header,124,12);
         if(size<0||size>MAX_MEMBER)throw new IOException("P77_TAR_ITEM_TOO_LARGE");
         if(type=='x'||type=='g'){
-          Map<String,String> attrs=pax(extended(tar,size));
+          Map<String,String> attrs=pax(extended(tar,size,buffer));
           if(type=='g'){
             if(attrs.containsKey("path")||attrs.containsKey("size"))
               throw new IOException("P77_GLOBAL_PATH_OVERRIDE");
@@ -237,7 +231,7 @@ public final class P77TarAudit {
           continue;
         }
         if(type=='L'){
-          byte[] longData=extended(tar,size);
+          byte[] longData=extended(tar,size,buffer);
           longName=decoded(longData,0,longData.length);
           continue;
         }
@@ -270,14 +264,14 @@ public final class P77TarAudit {
         boolean target=candidate!=null && candidate.begin(name,directory,size);
         if(sink!=null)sink.begin(name,directory,size);
         MessageDigest member=digest();
-        consume(tar,size,member,selected?selectedModule:null,
+        consume(tar,size,buffer,member,selected?selectedModule:null,
                 leased?broker:null,exact?boot:null,target?candidate:null,sink);
         if(selected)selectedModule.endMember();
         if(leased)broker.endMember();
         if(exact)boot.endMember();
         if(target)candidate.endMember();
         if(sink!=null)sink.endMember();
-        pad(tar,size);
+        pad(tar,size,buffer);
         byte[] path=name.getBytes(StandardCharsets.UTF_8);
         root.update(ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN)
                   .putInt(path.length).array());

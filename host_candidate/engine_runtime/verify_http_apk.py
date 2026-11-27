@@ -77,7 +77,15 @@ def verify_owner_activation(view,methods):
     calls(session,'openLaunchTransport',reference(session,'ownsReservation','Z',launch,child),
           reference(session,'transferResources','V',child),reference(session,'ownsChild','Z',child),
           reference(transport,'forOriginalWebLaunch',transport,process,string,'J',plan,store))
-    calls(session,'transferResources',reference('Lcom/dsh/android/p50/P50ModuleStream;','writeOriginalForService',
+    zip_file='Ljava/util/zip/ZipFile;'
+    zip_entry='Ljava/util/zip/ZipEntry;'
+    output_stream='Ljava/io/OutputStream;'
+    input_stream='Ljava/io/InputStream;'
+    calls(session,'transferResources',reference(session,'openResourceApk',zip_file),
+          reference(zip_file,'getEntry',zip_entry,string),
+          reference(zip_file,'getInputStream',input_stream,zip_entry),
+          reference('Ljava/io/BufferedOutputStream;','<init>','V',output_stream,'I'),
+          reference('Lcom/dsh/android/p50/P50ModuleStream;','writeOriginalForService',
           'Lcom/dsh/android/p77/P77TarAudit$Result;','Ljava/io/InputStream;','Ljava/io/OutputStream;'))
     require(not any(ref[0] in (session.encode(),startup.encode()) and
                     ref[1] in (b'openLaunchTransport',b'await',b'verifyForReady')

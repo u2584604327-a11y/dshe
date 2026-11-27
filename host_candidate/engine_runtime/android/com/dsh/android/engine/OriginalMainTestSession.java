@@ -1,18 +1,27 @@
 package com.dsh.android.engine;
 import android.content.*;import android.os.*;
+import android.system.ErrnoException;
+import android.system.OsConstants;
 import com.dsh.android.p48.P48FixedIsolatedChild;
 import com.dsh.android.p50.P50ModuleStream;
 import com.dsh.android.p68.P68AndroidBinderIntake;
 import com.dsh.android.p68.P184ChildStartReceipt;
 import com.dsh.p37.P37RemoteProcess;
 import java.io.*;import java.security.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.*;import java.util.function.LongConsumer;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /** One authenticated, separately named Android isolated instance, TEST ONLY.
  * No argv/path/owner supplied by an Intent or Binder payload; no production
  * P47 registration. The physical main test can reuse the exact runtime wire.
  */
 final class OriginalMainTestSession implements AutoCloseable {
+  private static final String MODULE_RESOURCE="assets/engine.bin";
+  private static final long MODULE_RESOURCE_BYTES=57_724_933L;
   enum LaunchPhase { RESERVATION, RESOURCE_TRANSFER, LOOPBACK_TRANSPORT }
+  static final class ResourceFailure extends IOException {
+    private ResourceFailure(String code){super(code);}
+  }
   private final Context context;private final LongConsumer progress;private final Handler main=new Handler(Looper.getMainLooper());
   private final AtomicBoolean closed=new AtomicBoolean();
   private final AtomicBoolean bindRequested=new AtomicBoolean(),childClaimed=new AtomicBoolean();
@@ -27,6 +36,7 @@ final class OriginalMainTestSession implements AutoCloseable {
   private OriginalAndroidWebLaunch launchOwner;
   private boolean transportOpened,handoffOffered;
   private volatile String failure="NONE";
+  private volatile long resourceWireBytes;
   private volatile LaunchPhase launchPhase=LaunchPhase.RESERVATION;
   private final IBinder.DeathRecipient died=()->main.post(()->reject("BINDER_DEATH"));
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()){
@@ -102,6 +112,7 @@ final class OriginalMainTestSession implements AutoCloseable {
   }
   String failure(){return failure;}
   LaunchPhase launchPhase(){return launchPhase;}
+  long resourceWireBytes(){return resourceWireBytes;}
   String childState(){P37RemoteProcess child=process;return child==null?"NONE":child.terminalReason().name();}
   synchronized String transportFailure(){return launchTransport==null?"NONE/NONE":launchTransport.failure();}
   HttpProcessTransport openLaunchTransport(P37RemoteProcess exact,OriginalAndroidWebLaunch launch,
@@ -126,18 +137,55 @@ final class OriginalMainTestSession implements AutoCloseable {
     throw new IOException("MAIN_TEST_SESSION_CLOSED");
   }
   private void transferResources(P37RemoteProcess exact)throws IOException{
-    OutputStream output=new FilterOutputStream(exact.getOutputStream()){
-      private long sent,next=32L*1024*1024;
-      @Override public void write(int value)throws IOException{out.write(value);advanced(1);}
-      @Override public void write(byte[] bytes,int offset,int length)throws IOException{out.write(bytes,offset,length);advanced(length);}
+    OutputStream pipe=new FilterOutputStream(exact.getOutputStream()){
+      private long next=32L*1024*1024;
+      @Override public void write(int value)throws IOException{
+        try{out.write(value);}catch(IOException failure){throw pipeFailure(failure);}
+        advanced(1);
+      }
+      @Override public void write(byte[] bytes,int offset,int length)throws IOException{
+        try{out.write(bytes,offset,length);}catch(IOException failure){throw pipeFailure(failure);}
+        advanced(length);
+      }
+      @Override public void flush()throws IOException{
+        try{out.flush();}catch(IOException failure){throw pipeFailure(failure);}
+      }
       private void advanced(int count){
-        sent+=count;
-        if(progress!=null&&sent>=next){next=sent+32L*1024*1024;progress.accept(sent);}
+        resourceWireBytes+=count;
+        if(progress!=null&&resourceWireBytes>=next){
+          next=resourceWireBytes+32L*1024*1024;
+          progress.accept(resourceWireBytes);
+        }
       }
     };
-    try(InputStream original=context.getAssets().open("engine.bin")){
-      P50ModuleStream.writeOriginalForService(original,output);
+    // Use the fixed base-APK member from the authenticated TEST host package.
+    // P50/P77 still check the complete original tree before flushing its seal.
+    try(ZipFile apk=openResourceApk()){
+      ZipEntry entry=apk.getEntry(MODULE_RESOURCE);
+      if(entry==null||entry.isDirectory()||entry.getSize()!=MODULE_RESOURCE_BYTES)
+        throw new ResourceFailure("MAIN_OWNER_RESOURCE_ENTRY");
+      try(InputStream original=apk.getInputStream(entry)){
+        // P50 flushes the final frame after checking the seal. Leave the pipe
+        // open for the HTTP preface.
+        P50ModuleStream.writeOriginalForService(original,new BufferedOutputStream(pipe,65536));
+      }
+    }catch(ResourceFailure fixed){throw fixed;}
+    catch(IOException failure){throw new ResourceFailure("MAIN_OWNER_RESOURCE_READ_OR_SEAL");}
+  }
+  private ZipFile openResourceApk()throws ResourceFailure{
+    try{return new ZipFile(context.getApplicationInfo().sourceDir);}
+    catch(IOException failure){throw new ResourceFailure("MAIN_OWNER_RESOURCE_APK_OPEN");}
+  }
+  private static ResourceFailure pipeFailure(IOException failure){
+    Throwable cause=failure;
+    for(int depth=0;cause!=null&&depth<8;depth++,cause=cause.getCause()){
+      if(cause instanceof ErrnoException){
+        int errno=((ErrnoException)cause).errno;
+        if(errno==OsConstants.EPIPE)return new ResourceFailure("MAIN_OWNER_RESOURCE_PIPE_CLOSED");
+        if(errno==OsConstants.EBADF)return new ResourceFailure("MAIN_OWNER_RESOURCE_PIPE_FD");
+      }
     }
+    return new ResourceFailure("MAIN_OWNER_RESOURCE_PIPE_IO");
   }
   private boolean ownsChild(P37RemoteProcess exact){
     return childClaimed.get()&&exact!=null&&process==exact&&exact.isAlive();

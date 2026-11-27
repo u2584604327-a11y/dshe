@@ -14,6 +14,7 @@ public final class OriginalMainProbeActivity extends Activity {
   private final AtomicReference<String> stage=new AtomicReference<>("BIND");
   private String transportFault="NONE/NONE",sessionFault="NONE";
   private String childState="NONE";
+  private long failedResourceWireBytes;
   private final StringBuilder status=new StringBuilder();private TextView text;
   private volatile OriginalMainTestSession session;private volatile HttpProcessTransport transport;
   @Override public void onCreate(Bundle saved){
@@ -106,11 +107,13 @@ public final class OriginalMainProbeActivity extends Activity {
             transportFault=denied.transportFailure;
             sessionFault=denied.workerFailure;
             childState=denied.childState;
+            failedResourceWireBytes=denied.resourceWireBytes;
             throw denied;
           }catch(Exception|LinkageError denied){
             transportFault=bound.transportFailure();
             sessionFault=bound.failure();
             childState=bound.childState();
+            failedResourceWireBytes=bound.resourceWireBytes();
             throw denied;
           }finally{
             try{
@@ -134,6 +137,7 @@ public final class OriginalMainProbeActivity extends Activity {
       main.post(()->{report("ORIGINAL_MAIN_FIXED_FAILURE_CODE="+fixed);
         report("ORIGINAL_MAIN_WORKER_FAILURE="+sessionFault);
         report("ORIGINAL_MAIN_CHILD_STATE="+childState);
+        report("ORIGINAL_MAIN_RESOURCE_WIRE_BYTES_AT_FAILURE="+failedResourceWireBytes);
         report("ORIGINAL_MAIN_TRANSPORT_STATE="+transportFault);deny(stage.get());});
     }
     finally{if(root!=null)try{Files.deleteIfExists(root.resolve("snapshot.bin"));Files.deleteIfExists(root.resolve("owner.lock"));Files.delete(root);}catch(IOException ignored){}}
