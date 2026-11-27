@@ -44,8 +44,13 @@ final class OriginalAndroidWebLaunch implements AutoCloseable {
         try {
             Files.createDirectories(dshHome);
             Files.createDirectory(workspace);
-            OriginalClientPlugin mobile = stagePlugin(host, mobileKind, mobileEntry);
-            OriginalClientPlugin browser = stagePlugin(host, browserKind, browserEntry);
+            OriginalClientPlugin mobile, browser;
+            try (OriginalRuntimeSource source = OriginalRuntimeSource.open(host)) {
+                mobile = source.clientPlugin(mobileKind);
+                browser = source.clientPlugin(browserKind);
+            }
+            stagePlugin(mobile, mobileEntry);
+            stagePlugin(browser, browserEntry);
             Context owner = new ContextWrapper(host) {
                 @Override public File getFilesDir() { return root.toFile(); }
                 @Override public Context getApplicationContext() { return this; }
@@ -92,16 +97,10 @@ final class OriginalAndroidWebLaunch implements AutoCloseable {
         }
     }
 
-    private static OriginalClientPlugin stagePlugin(Context host, OriginalClientPlugin.Kind kind, Path entry)
-            throws IOException {
-        OriginalClientPlugin plugin;
-        try (InputStream input = host.getAssets().open(kind.asset)) {
-            plugin = OriginalClientPlugin.read(kind, input);
-        }
+    private static void stagePlugin(OriginalClientPlugin plugin, Path entry) throws IOException {
         // The signed patch generator requires a regular entry in this private layout.
         Files.createDirectories(entry.getParent());
         Files.write(entry, plugin.entryBytes(), StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-        return plugin;
     }
 
     private static void clearPlugin(Path entry) throws IOException {

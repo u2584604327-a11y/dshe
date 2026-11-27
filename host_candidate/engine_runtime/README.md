@@ -429,10 +429,21 @@ owner authorization, model egress, browser/profile B3/B4 and original signing
 remain separate release requirements. Returning from `runCli` alone is not
 READY.
 
-The user's latest reported native-prerequisite result includes the real
-original binding/five internal APIs and 200 modules on the vivo 4 KiB ARM64
-device. This is reported device evidence, not an independent installed-APK
-hash measurement, full main run, Android restart or production attestation.
+The vivo Android 36 ARM64 report for TEST APK
+`a124400ba840bdb3fff319de343df1b4b08707f672504a2cd90f25cb46a3849c`
+shows that the original coroutine reaches Ready, serves the authenticated
+frontend and workspace RPC/WebSocket, returns to Idle, and observes the
+real Node exit in both generations. It also reports durable workspace
+restore and retired-token denial. Android SSE and model response remain
+untested. The APK is from commit `22e48e76187b573e29707a0f3257d9a3ddf9b2ff`,
+[build 45983006660 / job 140451413571](https://github.com/u2584604327-a11y/dshe/actions/runs/45983006660/job/140451413571).
+
+The shared runtime source opens the current Android user's installed base APK
+after matching the framework package and process UID. For `com.dsh.android`
+it requires the exact sole current signer of v138. It accepts only the pinned
+engine archive and the two sealed client archives. The receiver still verifies
+the complete tree before loading modules. This resource capability does not
+select a user account, register the production Supervisor or migrate data.
 
 `original_android_bundles.py` verifies and stages a selected additional source
 set used by the original Android `ensure*` methods: eleven signed-APK ZIPs

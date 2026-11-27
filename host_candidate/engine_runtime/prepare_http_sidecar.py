@@ -59,6 +59,7 @@ def patches(sources):
         'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalMainStartup.java',
         'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalWebLaunch.java',
         'host_candidate/engine_runtime/src/com/dsh/android/engine/OriginalClientPlugin.java',
+        'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalRuntimeSource.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalAndroidWebLaunch.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainOwnerHandoff.java',
         'host_candidate/engine_runtime/android/com/dsh/android/engine/OriginalMainTestSession.java',

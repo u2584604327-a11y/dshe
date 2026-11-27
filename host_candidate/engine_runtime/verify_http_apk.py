@@ -42,6 +42,9 @@ def verify_owner_activation(view,methods):
     plan=prefix+'OriginalWebLaunch;'
     launch=prefix+'OriginalAndroidWebLaunch;'
     store=prefix+'DurableSessionSnapshot;'
+    source=prefix+'OriginalRuntimeSource;'
+    plugin=prefix+'OriginalClientPlugin;'
+    kind=prefix+'OriginalClientPlugin$Kind;'
     verified=prefix+'OriginalMainOwnerHandoff$VerifiedLaunch;'
     child='Lcom/dsh/p37/P37RemoteProcess;'
     builder='Ljava/lang/ProcessBuilder;'
@@ -81,12 +84,23 @@ def verify_owner_activation(view,methods):
     zip_entry='Ljava/util/zip/ZipEntry;'
     output_stream='Ljava/io/OutputStream;'
     input_stream='Ljava/io/InputStream;'
-    calls(session,'transferResources',reference(session,'openResourceApk',zip_file),
+    context='Landroid/content/Context;'
+    calls(session,'transferResources',reference(source,'open',source,context),
+          reference('Ljava/io/BufferedOutputStream;','<init>','V',output_stream,'I'),
+          reference(source,'streamEngine','V',output_stream))
+    calls(launch,'prepare',reference(source,'open',source,context),
+          reference(source,'clientPlugin',plugin,kind),reference(source,'clientPlugin',plugin,kind))
+    calls(source,'open',reference('Landroid/content/pm/PackageManager;','getPackageInfo',
+          'Landroid/content/pm/PackageInfo;',string,'I'),
+          reference('Landroid/content/pm/SigningInfo;','getApkContentsSigners','[Landroid/content/pm/Signature;'),
+          reference(zip_file,'<init>','V','Ljava/io/File;'))
+    calls(source,'streamEngine',
           reference(zip_file,'getEntry',zip_entry,string),
           reference(zip_file,'getInputStream',input_stream,zip_entry),
-          reference('Ljava/io/BufferedOutputStream;','<init>','V',output_stream,'I'),
           reference('Lcom/dsh/android/p50/P50ModuleStream;','writeOriginalForService',
-          'Lcom/dsh/android/p77/P77TarAudit$Result;','Ljava/io/InputStream;','Ljava/io/OutputStream;'))
+          'Lcom/dsh/android/p77/P77TarAudit$Result;',input_stream,output_stream))
+    calls(source,'clientPlugin',reference(zip_file,'getEntry',zip_entry,string),
+          reference(zip_file,'getInputStream',input_stream,zip_entry),reference(plugin,'read',plugin,kind,input_stream))
     require(not any(ref[0] in (session.encode(),startup.encode()) and
                     ref[1] in (b'openLaunchTransport',b'await',b'verifyForReady')
                     or ref[:2]==(activity.encode(),b'invokeOwnedStart')

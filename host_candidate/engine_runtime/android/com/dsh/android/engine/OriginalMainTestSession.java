@@ -3,21 +3,16 @@ import android.content.*;import android.os.*;
 import android.system.ErrnoException;
 import android.system.OsConstants;
 import com.dsh.android.p48.P48FixedIsolatedChild;
-import com.dsh.android.p50.P50ModuleStream;
 import com.dsh.android.p68.P68AndroidBinderIntake;
 import com.dsh.android.p68.P184ChildStartReceipt;
 import com.dsh.p37.P37RemoteProcess;
 import java.io.*;import java.security.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.*;import java.util.function.LongConsumer;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 /** One authenticated, separately named Android isolated instance, TEST ONLY.
  * No argv/path/owner supplied by an Intent or Binder payload; no production
  * P47 registration. The physical main test can reuse the exact runtime wire.
  */
 final class OriginalMainTestSession implements AutoCloseable {
-  private static final String MODULE_RESOURCE="assets/engine.bin";
-  private static final long MODULE_RESOURCE_BYTES=57_724_933L;
   enum LaunchPhase { RESERVATION, RESOURCE_TRANSFER, LOOPBACK_TRANSPORT }
   static final class ResourceFailure extends IOException {
     private ResourceFailure(String code){super(code);}
@@ -199,23 +194,13 @@ final class OriginalMainTestSession implements AutoCloseable {
         }
       }
     };
-    // Use the fixed base-APK member from the authenticated TEST host package.
-    // P50/P77 still check the complete original tree before flushing its seal.
-    try(ZipFile apk=openResourceApk()){
-      ZipEntry entry=apk.getEntry(MODULE_RESOURCE);
-      if(entry==null||entry.isDirectory()||entry.getSize()!=MODULE_RESOURCE_BYTES)
-        throw new ResourceFailure("MAIN_OWNER_RESOURCE_ENTRY");
-      try(InputStream original=apk.getInputStream(entry)){
-        // P50 flushes the final frame after checking the seal. Leave the pipe
-        // open for the HTTP preface.
-        P50ModuleStream.writeOriginalForService(original,new BufferedOutputStream(pipe,65536));
-      }
-    }catch(ResourceFailure fixed){throw fixed;}
+    try(OriginalRuntimeSource source=OriginalRuntimeSource.open(context)){
+      // P50 flushes the final frame after checking the seal. Leave the pipe
+      // open for the HTTP preface.
+      source.streamEngine(new BufferedOutputStream(pipe,65536));
+    }catch(OriginalRuntimeSource.Denied denied){throw new ResourceFailure(denied.getMessage());}
+    catch(ResourceFailure fixed){throw fixed;}
     catch(IOException failure){throw new ResourceFailure("MAIN_OWNER_RESOURCE_READ_OR_SEAL");}
-  }
-  private ZipFile openResourceApk()throws ResourceFailure{
-    try{return new ZipFile(context.getApplicationInfo().sourceDir);}
-    catch(IOException failure){throw new ResourceFailure("MAIN_OWNER_RESOURCE_APK_OPEN");}
   }
   private static ResourceFailure pipeFailure(IOException failure){
     Throwable cause=failure;
