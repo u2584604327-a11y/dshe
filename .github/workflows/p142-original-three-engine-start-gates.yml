@@ -1,0 +1,101 @@
+name: P142 actual original EngineManager triple spawn interposition (host deny, no APK)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p142_original_three_seams/**'
+      - 'host_candidate/p149_prelaunch_witness/**'
+      - 'host_candidate/p47_no_fallback/android/com/dsh/android/p47/P47LaunchGate.java'
+      - '.github/workflows/p142-original-three-engine-start-gates.yml'
+permissions:
+  contents: read
+concurrency:
+  group: p142-original-three-spawn-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  original-mit-source-intercept-compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    env:
+      ORIGINAL_SHA: 4dddb12fd076d052e788a16638a658b7a447b669
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: changes
+      - uses: actions/checkout@v4
+        with:
+          repository: pht88888888/DSHAPP
+          ref: 4dddb12fd076d052e788a16638a658b7a447b669
+          persist-credentials: false
+          path: original
+      - name: Exact one-line sites and deny-all class inclusion (original source only in CI)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original rev-parse HEAD)" = "$ORIGINAL_SHA"
+          cmp original/LICENSE changes/THIRD_PARTY_LICENSES/DSHAPP-MIT.txt
+          python3 -m py_compile changes/host_candidate/p142_original_three_seams/patch_pinned_original.py
+          python3 changes/host_candidate/p142_original_three_seams/patch_pinned_original.py --upstream-dir original --changes-dir changes
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          changed=subprocess.check_output(['git','-C','original','diff','--name-only'],text=True).splitlines()
+          added=subprocess.check_output(['git','-C','original','ls-files','--others','--exclude-standard'],text=True).splitlines()
+          assert set(changed+added)=={
+            'app/src/main/java/com/dsh/android/EngineManager.kt',
+            'app/src/main/java/com/dsh/android/p142/P142OriginalEngineSpawnSeam.java',
+            'app/src/main/java/com/dsh/android/p149/P149OriginalBuilderWitness.java',
+          },'P142_EXCESS_ORIGINAL_SOURCE_CHANGE'
+          s=Path('original/app/src/main/java/com/dsh/android/EngineManager.kt').read_text()
+          assert s.count('P142OriginalEngineSpawnSeam.')==3
+          assert 'val proc = pb.start()' not in s
+          assert '            pb.start()' not in s
+          assert s.count('val urlPattern = URL_PATTERN')==1
+          print('P142_ONLY_THREE_ENGINE_START_SITES_REWRITTEN=PASS')
+          PY
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Actual Java deny gate tests and bytecode no ProcessBuilder.start
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/p142-test"
+          javac --release 8 -d "$RUNNER_TEMP/p142-test" \
+            changes/host_candidate/p149_prelaunch_witness/src/com/dsh/android/p149/P149OriginalBuilderWitness.java \
+            changes/host_candidate/p149_prelaunch_witness/test/com/dsh/android/p149/P149WitnessTest.java \
+            changes/host_candidate/p142_original_three_seams/src/com/dsh/android/p142/P142OriginalEngineSpawnSeam.java \
+            changes/host_candidate/p142_original_three_seams/test/com/dsh/android/p142/P142OriginalEngineSpawnSeamTest.java
+          java -cp "$RUNNER_TEMP/p142-test" com.dsh.android.p149.P149WitnessTest
+          java -cp "$RUNNER_TEMP/p142-test" com.dsh.android.p142.P142OriginalEngineSpawnSeamTest
+          javap -c -p -classpath "$RUNNER_TEMP/p142-test" com.dsh.android.p142.P142OriginalEngineSpawnSeam > "$RUNNER_TEMP/p142-bytecode"
+          javap -c -p -classpath "$RUNNER_TEMP/p142-test" com.dsh.android.p149.P149OriginalBuilderWitness >> "$RUNNER_TEMP/p142-bytecode"
+          if grep -Eq "java/lang/ProcessBuilder.start|java/lang/Runtime.exec|java/lang/ProcessHandle" "$RUNNER_TEMP/p142-bytecode"; then
+            echo P142_UNAUTHORIZED_EXEC_IN_GATE; exit 1
+          fi
+          echo P142_BYTECODE_HOST_EXEC_INVOKES=ZERO
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Compile actual pinned original EngineManager Kotlin and Java with exactly three interceptors
+        shell: bash
+        working-directory: original
+        run: |
+          set -euo pipefail
+          test ! -e keystore.properties && test ! -e dsh-release.jks
+          gradle --no-daemon --console=plain --max-workers=2 :app:compileSystemDebugKotlin :app:compileSystemDebugJavaWithJavac
+          echo P142_PATCHED_ORIGINAL_ENGINEMANAGER_KOTLIN_JAVA_COMPILE=PASS
+      - name: Deny production admission and remove scratch bytecode
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/p142-test" "$RUNNER_TEMP/p142-bytecode"
+          echo P142_SAME_PACKAGE_TRUSTED_BINDER_FD_BROKER=NOT_WIRED >> "$GITHUB_STEP_SUMMARY"
+          echo P142_NO_REAL_ORIGINAL_NODE_PRODUCTION_EXEC=YES >> "$GITHUB_STEP_SUMMARY"
+          echo P142_NO_APK_SIGNING_OR_DEVICE_CHANGE=YES >> "$GITHUB_STEP_SUMMARY"
+          echo P142_P109_SENSITIVE_TOOLS=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P142_FORMAL_FIXED_SIGNED_V139=BLOCKED >> "$GITHUB_STEP_SUMMARY"

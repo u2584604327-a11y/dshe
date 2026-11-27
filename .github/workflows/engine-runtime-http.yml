@@ -1,0 +1,61 @@
+name: Engine runtime HTTP transport with original authentication and frontend
+on:
+  pull_request:
+    types: [labeled]
+permissions:
+  contents: read
+concurrency:
+  group: engine-runtime-http-${{ github.event.pull_request.number }}-${{ github.event.action }}-${{ github.event.label.name }}
+  cancel-in-progress: true
+jobs:
+  original-http-services:
+    if: >-
+      github.event.label.name == 'v139-check-runtime' &&
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.4.0'
+      - name: Verify original closure and run real HTTP, auth, frontend and protocol rejection
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/original-http"
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo u2584604327-a11y/dshe \
+            --pattern DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk --dir "$RUNNER_TEMP/original-http"
+          node host_candidate/engine_runtime/test/ci_selector.test.cjs
+          python3 -u host_candidate/engine_runtime/test_original_native_bundle.py \
+            "$RUNNER_TEMP/original-http/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk"
+          python3 -u host_candidate/engine_runtime/test_original_android_bundles.py \
+            "$RUNNER_TEMP/original-http/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk"
+          python3 -u host_candidate/engine_runtime/verify_original_http.py \
+            --apk "$RUNNER_TEMP/original-http/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk" \
+            --android-jar "${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/platforms/android-35/android.jar" \
+            --node "$(command -v node)" | tee "$RUNNER_TEMP/http-result.txt"
+          cat "$RUNNER_TEMP/http-result.txt" >> "$GITHUB_STEP_SUMMARY"
+      - name: Clear disposable original source and test credential directory
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/original-http" "$RUNNER_TEMP/http-result.txt"
+          echo DSH_PRODUCTION_ENGINE_HTTP_READY=NOT_ATTESTED >> "$GITHUB_STEP_SUMMARY"
+          echo ANDROID_ARM64_INSTALL_AND_USER_PROFILE=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"

@@ -1,6 +1,9 @@
 package com.dsh.android.p77;
 
 import com.dsh.android.p78.P78ModuleSlot;
+import com.dsh.android.p144.P144ScopedSourceBroker;
+import com.dsh.android.p145.P145ExactBootEntry;
+import com.dsh.android.p147.P147ScopedCandidateLease;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -12,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.charset.CodingErrorAction;
 import java.security.MessageDigest;
 import java.util.HashMap;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -26,12 +30,30 @@ public final class P77TarAudit {
   private static final int BLOCK=512;
   private static final long MAX_MEMBER=128L*1024*1024, MAX_TOTAL=4L*1024*1024*1024;
   private P77TarAudit(){}
+  /** Receives bounded canonical members. Consumers must not execute before sealOriginal. */
+  public interface MemberSink {
+    void begin(String canonical,boolean directory,long size)throws IOException;
+    /** The byte range is valid for this call and the buffer is reused. */
+    void accept(byte[] bytes,int offset,int length)throws IOException;
+    void endMember()throws IOException;
+    void sealOriginal(Result complete)throws IOException;
+  }
+  public static Result inspectGzipTo(InputStream source,MemberSink sink)throws IOException{
+    if(sink==null)throw new IllegalArgumentException("P77_SINK_REQUIRED");
+    return inspectGzip(source,null,null,null,null,sink);
+  }
   public static final class Result {
     public final int members,addons;
     public final long bytes;
     public final String treeSha256;
-    private Result(int m,int a,long b,String h){
+    private final Set<String> canonicalMembers;
+    private Result(int m,int a,long b,String h,Set<String> names){
       members=m;addons=a;bytes=b;treeSha256=h;
+      canonicalMembers=Collections.unmodifiableSet(names);
+    }
+    /** Isolated worker only; never enumerate original member names to host. */
+    public boolean hasOriginalMember(String canonical){
+      return isExactOriginal() && canonical!=null && canonicalMembers.contains(canonical);
     }
     public boolean isExactOriginal(){
       return members==EXPECTED_MEMBERS && addons==EXPECTED_ADDONS &&
@@ -107,28 +129,31 @@ public final class P77TarAudit {
         throw new IOException("P77_PATH_TRAVERSAL");
     return name;
   }
-  private static void consume(InputStream in,long bytes,MessageDigest md)throws IOException{
-    consume(in,bytes,md,null);
-  }
-  private static void consume(InputStream in,long bytes,MessageDigest md,
-                              P78ModuleSlot selected)throws IOException{
-    byte[] buffer=new byte[65536];long remaining=bytes;
+  private static void consume(InputStream in,long bytes,byte[] buffer,MessageDigest md,
+                              P78ModuleSlot selected,P144ScopedSourceBroker leased,
+                              P145ExactBootEntry boot,P147ScopedCandidateLease candidate,
+                              MemberSink sink)throws IOException{
+    long remaining=bytes;
     while(remaining>0){
       int n=in.read(buffer,0,(int)Math.min(remaining,buffer.length));
       if(n<0)throw new EOFException("P77_TRUNCATED_MEMBER");
       if(n==0)continue;
       if(md!=null)md.update(buffer,0,n);
       if(selected!=null)selected.accept(buffer,0,n);
+      if(leased!=null)leased.accept(buffer,0,n);
+      if(boot!=null)boot.accept(buffer,0,n);
+      if(candidate!=null)candidate.accept(buffer,0,n);
+      if(sink!=null)sink.accept(buffer,0,n);
       remaining-=n;
     }
   }
-  private static void pad(InputStream in,long bytes)throws IOException{
-    consume(in,(BLOCK-bytes%BLOCK)%BLOCK,null);
+  private static void pad(InputStream in,long bytes,byte[] buffer)throws IOException{
+    consume(in,(BLOCK-bytes%BLOCK)%BLOCK,buffer,null,null,null,null,null,null);
   }
-  private static byte[] extended(InputStream in,long bytes)throws IOException{
+  private static byte[] extended(InputStream in,long bytes,byte[] buffer)throws IOException{
     if(bytes<0||bytes>65536)throw new IOException("P77_PAX_TOO_LARGE");
     byte[] raw=new byte[(int)bytes];
-    readExact(in,raw);pad(in,bytes);
+    readExact(in,raw);pad(in,bytes,buffer);
     return raw;
   }
   private static Map<String,String> pax(byte[] raw)throws IOException{
@@ -157,11 +182,32 @@ public final class P77TarAudit {
   }
   public static Result inspectGzip(InputStream source,
                                     P78ModuleSlot selectedModule)throws IOException{
+    return inspectGzip(source,selectedModule,null,null);
+  }
+  public static Result inspectGzip(InputStream source,P78ModuleSlot selectedModule,
+                                    P144ScopedSourceBroker broker)throws IOException{
+    return inspectGzip(source,selectedModule,broker,null);
+  }
+  public static Result inspectGzip(InputStream source,P78ModuleSlot selectedModule,
+                                    P144ScopedSourceBroker broker,
+                                    P145ExactBootEntry boot)throws IOException{
+    return inspectGzip(source,selectedModule,broker,boot,null);
+  }
+  public static Result inspectGzip(InputStream source,P78ModuleSlot selectedModule,
+                                    P144ScopedSourceBroker broker,
+                                    P145ExactBootEntry boot,
+                                    P147ScopedCandidateLease candidate)throws IOException{
+    return inspectGzip(source,selectedModule,broker,boot,candidate,null);
+  }
+  private static Result inspectGzip(InputStream source,P78ModuleSlot selectedModule,
+                                    P144ScopedSourceBroker broker,P145ExactBootEntry boot,
+                                    P147ScopedCandidateLease candidate,MemberSink sink)throws IOException{
     try(GZIPInputStream tar=new GZIPInputStream(source,65536)){
       MessageDigest root=digest();
       root.update("P54_IMMUTABLE_ENGINE_TREE_V1\0".getBytes(StandardCharsets.US_ASCII));
       Set<String> seen=new HashSet<>();
       byte[] header=new byte[BLOCK];int members=0,addons=0;long total=0;
+      byte[] buffer=new byte[65536];
       String longName=null;Map<String,String> pending=new HashMap<>();
       for(;;){
         int n=fill(tar,header);
@@ -177,7 +223,7 @@ public final class P77TarAudit {
         long size=octal(header,124,12);
         if(size<0||size>MAX_MEMBER)throw new IOException("P77_TAR_ITEM_TOO_LARGE");
         if(type=='x'||type=='g'){
-          Map<String,String> attrs=pax(extended(tar,size));
+          Map<String,String> attrs=pax(extended(tar,size,buffer));
           if(type=='g'){
             if(attrs.containsKey("path")||attrs.containsKey("size"))
               throw new IOException("P77_GLOBAL_PATH_OVERRIDE");
@@ -185,7 +231,7 @@ public final class P77TarAudit {
           continue;
         }
         if(type=='L'){
-          byte[] longData=extended(tar,size);
+          byte[] longData=extended(tar,size,buffer);
           longName=decoded(longData,0,longData.length);
           continue;
         }
@@ -213,10 +259,19 @@ public final class P77TarAudit {
         }
         boolean selected=selectedModule!=null &&
              selectedModule.begin(name,directory,size);
+        boolean leased=broker!=null && broker.begin(name,directory,size);
+        boolean exact=boot!=null && boot.begin(name,directory,size);
+        boolean target=candidate!=null && candidate.begin(name,directory,size);
+        if(sink!=null)sink.begin(name,directory,size);
         MessageDigest member=digest();
-        consume(tar,size,member,selected?selectedModule:null);
+        consume(tar,size,buffer,member,selected?selectedModule:null,
+                leased?broker:null,exact?boot:null,target?candidate:null,sink);
         if(selected)selectedModule.endMember();
-        pad(tar,size);
+        if(leased)broker.endMember();
+        if(exact)boot.endMember();
+        if(target)candidate.endMember();
+        if(sink!=null)sink.endMember();
+        pad(tar,size,buffer);
         byte[] path=name.getBytes(StandardCharsets.UTF_8);
         root.update(ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN)
                   .putInt(path.length).array());
@@ -229,8 +284,12 @@ public final class P77TarAudit {
       }
       if(longName!=null||!pending.isEmpty())
         throw new IOException("P77_DANGLING_EXTENDED_HEADER");
-      Result complete=new Result(members,addons,total,hex(root.digest()));
+      Result complete=new Result(members,addons,total,hex(root.digest()),seen);
       if(selectedModule!=null)selectedModule.sealOriginal(complete);
+      if(broker!=null)broker.sealOriginal(complete);
+      if(boot!=null)boot.sealOriginal(complete);
+      if(candidate!=null)candidate.sealOriginal(complete);
+      if(sink!=null)sink.sealOriginal(complete);
       return complete;
     }
   }

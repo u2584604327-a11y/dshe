@@ -4,6 +4,7 @@ import android.os.*;
 import com.dsh.p37.P37RemoteProcess;
 import com.dsh.android.p53.P53StartOrder;
 import com.dsh.android.p68.P68AndroidBinderIntake;
+import com.dsh.android.p68.P184ChildStartReceipt;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -29,12 +30,18 @@ public final class P48HostProcessProbe {
   public interface LiveProcessReceiver {
     void onLiveProxy(java.lang.Process proxy,int isolatedUid);
   }
+  /** Real P68-issued receipt, fixed isolated test-child only. */
+  public interface VerifiedReceiptReceiver {
+    void onFrameworkVerifiedChild(P37RemoteProcess process,P184ChildStartReceipt receipt);
+  }
   private final Handler main=new Handler(Looper.getMainLooper());
   private final Messenger isolated;
   private final String session;
   private final Listener listener;
   private final boolean exactOriginalArm64Node;
   private final LiveProcessReceiver liveProcessReceiver;
+  private final VerifiedReceiptReceiver verifiedReceiptReceiver;
+  private final long p184OwnerEpoch;
   private final CountDownLatch readers=new CountDownLatch(2);
   private final AtomicReference<String> stdout=new AtomicReference<>("");
   private final AtomicReference<String> stderr=new AtomicReference<>("");
@@ -43,6 +50,7 @@ public final class P48HostProcessProbe {
   private P37RemoteProcess proxy;
   private final boolean p68Mode;
   private P68AndroidBinderIntake p68;
+  private P68AndroidBinderIntake.HostPipes processPipes;
   private boolean complete,failed,started,childStartedAck;
   private final Messenger inbox=new Messenger(new Handler(Looper.getMainLooper()) {
     @Override public void handleMessage(Message m) {
@@ -149,15 +157,32 @@ public final class P48HostProcessProbe {
                              Listener listener,boolean exactOriginalArm64Node,
                              LiveProcessReceiver liveProcessReceiver,
                              boolean enableP68ForFixtureOnly) {
-    if(isolated==null||listener==null||session==null||
-       !session.matches("[a-f0-9]{64}"))
-      throw new IllegalArgumentException("P48_BAD_HOST_SESSION");
+    this(isolated,session,listener,exactOriginalArm64Node,
+         liveProcessReceiver,enableP68ForFixtureOnly,null,0L);
+  }
+  /**
+   * P184 test-only opt-in: a scoped host epoch plus real P68 framework sender.
+   * Does not grant any original Node, HTTP or arbitrary shell capabilities.
+   */
+  public P48HostProcessProbe(Messenger isolated,String session,Listener listener,
+      boolean exactOriginalArm64Node,LiveProcessReceiver liveProcessReceiver,
+      boolean enableP68ForFixtureOnly,
+      VerifiedReceiptReceiver verifiedReceiptReceiver,long trustedOwnerEpoch){
+    if(isolated==null || listener==null || session==null ||
+       !session.matches("[a-f0-9]{64}") ||
+       (verifiedReceiptReceiver!=null &&
+        (!enableP68ForFixtureOnly || exactOriginalArm64Node ||
+         liveProcessReceiver!=null || trustedOwnerEpoch<=0L)) ||
+       (verifiedReceiptReceiver==null && trustedOwnerEpoch!=0L))
+      throw new IllegalArgumentException("P48_P184_TEST_ONLY_TRUST_REQUIRED");
     this.isolated=isolated;
     this.session=session;
     this.listener=listener;
     this.exactOriginalArm64Node=exactOriginalArm64Node;
     this.liveProcessReceiver=liveProcessReceiver;
     this.p68Mode=enableP68ForFixtureOnly;
+    this.verifiedReceiptReceiver=verifiedReceiptReceiver;
+    this.p184OwnerEpoch=trustedOwnerEpoch;
   }
   /**
    * P68 opt-in test path: Binder-supplied framework sendingUid is checked
@@ -166,15 +191,15 @@ public final class P48HostProcessProbe {
    */
   private void handleP68Message(Message message) {
     if(p68==null){
-      p68=new P68AndroidBinderIntake(session,
-          new P37RemoteProcess.RemoteControl(){
-            @Override public void requestGracefulStop(){
-              sendControl(P48FixedIsolatedChild.STOP);
-            }
-            @Override public void requestForceStop(){
-              sendControl(P48FixedIsolatedChild.KILL);
-            }
-          });
+      P37RemoteProcess.RemoteControl control=new P37RemoteProcess.RemoteControl(){
+        @Override public void requestGracefulStop(){sendControl(P48FixedIsolatedChild.STOP);}
+        @Override public void requestForceStop(){sendControl(P48FixedIsolatedChild.KILL);}
+      };
+      if(processPipes!=null)
+        p68=new P68AndroidBinderIntake(session,control,processPipes,p184OwnerEpoch);
+      else p68=verifiedReceiptReceiver==null ?
+          new P68AndroidBinderIntake(session,control) :
+          new P68AndroidBinderIntake(session,control,false,p184OwnerEpoch);
     }
     P68AndroidBinderIntake.Result result=p68.accept(message);
     if(result==P68AndroidBinderIntake.Result.REJECTED){
@@ -197,6 +222,7 @@ public final class P48HostProcessProbe {
       }
       proxy=(P37RemoteProcess)p68.processAfterAuthenticatedChildStart();
       childStartedAck=true;
+      if(processPipes!=null)listener.report("P68_AUTHENTICATED_OWNED_PROCESS_PIPES=PASS");
       new Thread(()->collect(proxy.getInputStream(),stdout),
                  "p68-host-stdout").start();
       new Thread(()->collect(proxy.getErrorStream(),stderr),
@@ -207,6 +233,19 @@ public final class P48HostProcessProbe {
         catch(RuntimeException rejection){
           failClosed("P68_PROCESS_RECEIVER_REJECTED");return;
         }
+      }
+      if(verifiedReceiptReceiver!=null){
+        P184ChildStartReceipt receipt=p68.takeVerifiedChildStartReceipt();
+        if(receipt==null){
+          failClosed("P184_VERIFIED_CHILD_RECEIPT_NOT_ISSUED");return;
+        }
+        try {
+          verifiedReceiptReceiver.onFrameworkVerifiedChild(proxy,receipt);
+        }catch(RuntimeException rejected){
+          receipt.revoke();
+          failClosed("P184_VERIFIED_RECEIPT_RECEIVER_DENIED");return;
+        }
+        listener.report("P184_P68_REAL_FRAMEWORK_RECEIPT_DELIVERED=PASS");
       }
       listener.report("P68_ANDROID_BINDER_P67_P37_CHILD_HANDOFF=PASS");
       listener.report("P68_CHILD_STARTED_NOT_ENGINE_READY=PASS");
@@ -229,10 +268,22 @@ public final class P48HostProcessProbe {
     Bundle b=new Bundle();b.putString("session",session);
     b.putString("p50_mode",exactOriginalArm64Node?
         "p50-exact-original-node":"p48-fixed-id");
+    if(verifiedReceiptReceiver!=null) {
+      try {
+        processPipes=P68AndroidBinderIntake.HostPipes.create();
+        b.putBundle("process_pipes",processPipes.workerBundle());
+      }catch(IOException|RuntimeException failedPipes) {
+        failClosed("P68_HOST_PROCESS_PIPE_CREATION_FAILED");return;
+      }
+    }
     m.setData(b);
     m.replyTo=inbox;
     try{isolated.send(m);}
     catch(Exception e){failClosed("P48_INIT_SEND_FAILED");return;}
+    finally{
+      if(processPipes!=null&&!processPipes.closeWorkerCopies())
+        failClosed("P68_SENDER_PIPE_OWNERSHIP_RELEASE_FAILED");
+    }
     main.postDelayed(()->{
       if(!failed&&!complete)failClosed("P48_ISOLATED_CHILD_DEADLINE");
     },14000);
@@ -298,11 +349,13 @@ public final class P48HostProcessProbe {
     failed=true;
     if(p68!=null)p68.disconnected();
     if(proxy!=null)proxy.onTransportLost();
+    if(processPipes!=null)processPipes.close();
     listener.fail(code);
   }
   public void close(){
     if(p68!=null)p68.disconnected();
     if(proxy!=null&&proxy.isAlive())proxy.destroyForcibly();
     if(!complete&&!failed)failClosed("P48_HOST_CLOSED");
+    if(processPipes!=null)processPipes.close();
   }
 }

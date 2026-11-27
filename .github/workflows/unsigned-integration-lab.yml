@@ -12,6 +12,13 @@ on:
       - 'host_candidate/test-only/**'
       - 'host_candidate/p12_native/**'
       - '.github/workflows/unsigned-integration-lab.yml'
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '.github/workflows/unsigned-integration-lab.yml'
+      - 'host_candidate/p120_p13_fusion.py'
+      - 'host_candidate/test-only/**'
+      - 'host_candidate/run_emulator_smoke.sh'
   workflow_dispatch:
 
 concurrency:
@@ -45,7 +52,7 @@ jobs:
           set -euo pipefail
           bash -n host_candidate/run_emulator_smoke.sh
           bash -n host_candidate/build_instrumentation_lab.sh
-          python3 -m py_compile host_candidate/assemble_unsigned_lab.py host_candidate/p13_manifest_inject.py
+          python3 -m py_compile host_candidate/assemble_unsigned_lab.py host_candidate/p13_manifest_inject.py host_candidate/p120_p13_fusion.py
           echo 'EMULATOR_SCRIPT_SYNTAX=PASS' >> "$GITHUB_STEP_SUMMARY"
       - name: Fetch both SHA-pinned inputs from PRIVATE Releases only
         shell: bash
@@ -133,6 +140,55 @@ jobs:
             out/native-dex/classes.dex \
             --output out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk \
             --report out/fusion-report.json
+          # P120 original-APK laboratory integration: one deny-only isolated
+          # Service, no Node migration, no new privileged capabilities.
+          mkdir -p out/p120-src/com/dsh/p120 out/p120-classes out/p120-dex
+          python - <<'PY'
+          import pathlib,zipfile,sys
+          sys.path.insert(0,'host_candidate')
+          from p120_p13_fusion import patched_manifest,JAVA
+          apk=pathlib.Path('out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk')
+          with zipfile.ZipFile(apk) as archive:
+              new_manifest=patched_manifest(archive.read('AndroidManifest.xml'))
+          pathlib.Path('out/p120-manifest.bin').write_bytes(new_manifest)
+          pathlib.Path('out/p120-src/com/dsh/p120/P120IsolatedDenyService.java').write_text(JAVA)
+          print('P120_PINNED_P13_MANIFEST=PASS')
+          PY
+          javac --release 8 -cp "$SDK_ROOT/platforms/android-35/android.jar" -d out/p120-classes out/p120-src/com/dsh/p120/P120IsolatedDenyService.java
+          jar cf out/p120-service.jar -C out/p120-classes .
+          "$SDK_ROOT/build-tools/35.0.0/d8" --min-api 26 --lib "$SDK_ROOT/platforms/android-35/android.jar" --output out/p120-dex out/p120-service.jar
+          python - <<'PY'
+          import copy,pathlib,zipfile
+          from androguard.core.dex import DEX
+          root=pathlib.Path('out')
+          dex=(root/'p120-dex/classes.dex').read_bytes()
+          classes={cls.get_name() for cls in DEX(dex).get_classes()}
+          if ('Lcom/dsh/p120/P120IsolatedDenyService;' not in classes or
+              not all(k=='Lcom/dsh/p120/P120IsolatedDenyService;' or
+                k.startswith('Lcom/dsh/p120/P120IsolatedDenyService$') for k in classes)):
+              raise SystemExit('P120_FORBIDDEN_CLASS_IN_ADDON_DEX')
+          before=root/'UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk'
+          candidate=root/'P120_UNSIGNED_STAGE_ONLY.apk'
+          with zipfile.ZipFile(before) as original,zipfile.ZipFile(candidate,'w',allowZip64=True) as out:
+              expected={'classes.dex','classes2.dex','classes3.dex','AndroidManifest.xml'}
+              if not expected.issubset(original.namelist()) or 'classes4.dex' in original.namelist():
+                  raise SystemExit('P120_BASE_DEX_LAYOUT_INVALID')
+              manifest=(root/'p120-manifest.bin').read_bytes()
+              for member in original.infolist():
+                  meta=copy.copy(member)
+                  meta.extra=b''
+                  data=manifest if member.filename=='AndroidManifest.xml' else original.read(member.filename)
+                  out.writestr(meta,data)
+              out.writestr('classes4.dex',dex,compress_type=zipfile.ZIP_DEFLATED)
+          with zipfile.ZipFile(before) as original,zipfile.ZipFile(candidate) as out:
+              if out.testzip():raise SystemExit('P120_ZIP_INVALID')
+              for name in original.namelist():
+                  if name!='AndroidManifest.xml' and original.read(name)!=out.read(name):
+                      raise SystemExit('P120_UNRELATED_ASSET_MUTATED_'+name)
+              if out.read('classes4.dex')!=dex:raise SystemExit('P120_DEX_MISMATCH')
+          candidate.replace(before)
+          print('P120_ORIGINAL_DSH_P13_ASSET_PRESERVING_FUSION=PASS')
+          PY
           "$SDK_ROOT/build-tools/35.0.0/zipalign" -f 4 \
             out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
           "$SDK_ROOT/build-tools/35.0.0/zipalign" -c 4 out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk
@@ -141,12 +197,13 @@ jobs:
           pkgline="$(printf '%s\n' "$badging" | grep '^package: ' | head -n1)"
           [[ "$pkgline" == *"name='com.dsh.android'"* ]]
           [[ "$pkgline" == *"versionCode='138'"* ]]
-          test "$(unzip -Z1 out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk | grep -Ec '^classes(2|3)?\.dex$')" -eq 3
+          test "$(unzip -Z1 out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk | grep -Ec '^classes([234])?\.dex$')" -eq 4
           if "$SDK_ROOT/build-tools/35.0.0/apksigner" verify out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk >/dev/null 2>&1; then
             echo 'Unexpected valid APK signing detected: fail closed.'
             exit 1
           fi
           echo 'UNSIGNED_APK_STRUCTURAL_ASSEMBLY=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P120_DENY_ONLY_SERVICE_CLASSES4_AND_AXML_FUSED=PASS_LAB' >> "$GITHUB_STEP_SUMMARY"
           echo 'P13_MANIFEST_AUTOHOOK_METADATA=PINNED_SHA_ONLY' >> "$GITHUB_STEP_SUMMARY"
           echo 'UNSIGNED_APK_ZIPALIGN_AND_AAPT=PASS' >> "$GITHUB_STEP_SUMMARY"
           echo 'ORIGINAL_APK_SIGNATURE_INTENTIONALLY_INVALIDATED=PASS' >> "$GITHUB_STEP_SUMMARY"
@@ -202,11 +259,21 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
           script: bash host_candidate/run_emulator_smoke.sh out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk
+      - name: Android36 original-host P120 isolated Binder UID and legacy P13 regressions
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: bash host_candidate/run_emulator_smoke.sh out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk
       - name: Destroy transient APK and state remaining blockers
         if: always()
         shell: bash
         run: |
-          rm -f out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/EMULATOR_ONLY_EPHEMERAL.p12 out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk out/P5_INSTRUMENTATION_ALIGNED_DO_NOT_SHARE.apk out/P5_INSTRUMENTATION_UNSIGNED_DO_NOT_SHARE.apk /tmp/dsh-private-emulator-logcat.txt
+          rm -f out/P120_UNSIGNED_STAGE_ONLY.apk out/p120-manifest.bin out/UNSIGNED_LAB_ONLY_DO_NOT_INSTALL.apk out/ALIGNED_UNSIGNED_LAB_DO_NOT_INSTALL.apk out/EMULATOR_DEBUG_ONLY_DO_NOT_DISTRIBUTE.apk out/EMULATOR_ONLY_EPHEMERAL.p12 out/P5_INSTRUMENTATION_EPHEMERAL_SAME_SIGNER.apk out/P5_INSTRUMENTATION_ALIGNED_DO_NOT_SHARE.apk out/P5_INSTRUMENTATION_UNSIGNED_DO_NOT_SHARE.apk /tmp/dsh-private-emulator-logcat.txt
           {
             echo 'PRODUCTION_V139_APK_BUILT=NO'
             echo 'FIXED_CERTIFICATE_SIGNING=NOT_PERFORMED'

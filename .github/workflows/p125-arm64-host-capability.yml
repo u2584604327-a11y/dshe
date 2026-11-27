@@ -1,0 +1,56 @@
+name: P125 ARM64 Android emulator host capability preflight (no APK)
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '.github/workflows/p125-arm64-host-capability.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p125-arm64-preflight-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  arm64-emulator-capability:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 7
+    steps:
+      - name: ARM64 host and Android emulator KVM prerequisites read-only probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          arch="$(uname -m)"
+          echo "P125_REAL_RUNNER_ARCH=$arch"
+          test "$arch" = "aarch64"
+          test "$(getconf LONG_BIT)" = 64
+          if test -e /dev/kvm; then
+            echo 'P125_KVM_DEVICE=EXISTS'
+          else
+            echo 'P125_KVM_DEVICE=ABSENT'
+          fi
+          if test -r /dev/kvm && test -w /dev/kvm; then
+            echo 'P125_KVM_CURRENT_UID_ACCESS=YES'
+          else
+            echo 'P125_KVM_CURRENT_UID_ACCESS=NO'
+          fi
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if test -n "$sdk" && test -x "$sdk/emulator/emulator"; then
+            file "$sdk/emulator/emulator"
+            echo 'P125_ANDROID_SDK_EMULATOR_PREBUILT=FOUND_UNVERIFIED_ARCH'
+          else
+            echo 'P125_ANDROID_SDK_EMULATOR_PREBUILT=NOT_PRESENT'
+          fi
+          echo "P125_ARM64_ANDROID_DEVICE_BOOT=NOT_TESTED"
+          echo "P125_ISOLATED_ARM64_NODE_EXECUTION=NOT_TESTED"
+          echo "P125_P109_SENSITIVE_TOOLS=DENY_ALL"
+          {
+            echo 'P125_REAL_ARM64_GITHUB_RUNNER=PASS'
+            echo 'P125_KVM_AND_EMULATOR_CAPABILITIES=OBSERVED_ONLY'
+            echo 'P125_ANDROID_ARM64_EMULATOR_BOOT=NOT_TESTED'
+            echo 'P125_NODE_ISOLATED_UID=NOT_TESTED'
+            echo 'P125_PRODUCTION_V139=BLOCKED'
+          } >> "$GITHUB_STEP_SUMMARY"

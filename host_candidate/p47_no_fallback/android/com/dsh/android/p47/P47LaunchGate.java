@@ -1,5 +1,7 @@
 package com.dsh.android.p47;
 import java.io.File;
+import com.dsh.android.p149.P149OriginalBuilderWitness;
+import com.dsh.android.p150.P150OriginalCoroutineObserver;
 import java.io.IOException;
 import java.lang.ProcessBuilder;
 import java.util.List;
@@ -44,6 +46,25 @@ public final class P47LaunchGate {
   }
 
   /**
+   * P183: run the same original PIPE and stderr-mode shape checks on all
+   * three P40 entrypoints, before P149 witness or any future Binder broker.
+   * This is NOT an authorization: all routes still throw DENY.
+   */
+  private static void validateOriginalStreams(ProcessBuilder builder,int mode)
+      throws IOException {
+    if(builder.directory()==null)
+      throw new IOException("P183_ORIGINAL_WORKDIR_REQUIRED");
+    if(builder.redirectErrorStream()!=(mode!=2))
+      throw new IOException(mode==3 ? "P183_PRIMARY_STDERR_DRIFT" :
+                                      "P182_ORIGINAL_MODE_STDERR_DRIFT");
+    if(builder.redirectInput()!=ProcessBuilder.Redirect.PIPE ||
+        builder.redirectOutput()!=ProcessBuilder.Redirect.PIPE ||
+        builder.redirectError()!=ProcessBuilder.Redirect.PIPE)
+      throw new IOException(mode==3 ? "P183_PRIMARY_STDIO_REDIRECT_DENIED" :
+                                      "P182_ORIGINAL_MODE_STDIO_REDIRECT_DENIED");
+  }
+
+  /**
    * Bridge target in original classes.dex: fail-closed is the ONLY path in
    * P47. An IOException is intentional and must be surfaced to original
    * EngineManager, NEVER replaced by a host Process.
@@ -52,6 +73,30 @@ public final class P47LaunchGate {
     Shape shape=categorize(builder);
     if(shape.argvCount<1 || shape.argvCount>128)
       throw new IOException("P47_INVALID_ORIGINAL_LAUNCH_SHAPE");
+    validateOriginalStreams(builder,3);
+    P150OriginalCoroutineObserver.recordFromP47();
+    P149OriginalBuilderWitness.observeWithoutLaunch(builder,3);
     throw new IOException("P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK");
+  }
+
+  /** P182: original v138 probe/config mode is selected by the exact DEX
+   * callsite, never by an untrusted Bundle, command flag or env override.
+   * Both modes remain strictly DENY; no Broker/Node is executed.
+   */
+  private static Process secondaryDeny(ProcessBuilder builder,int mode)
+      throws IOException {
+    Shape shape=categorize(builder);
+    if (shape.argvCount<1 || shape.argvCount>128)
+      throw new IOException("P47_INVALID_ORIGINAL_LAUNCH_SHAPE");
+    validateOriginalStreams(builder,mode);
+    P149OriginalBuilderWitness.observeWithoutLaunch(builder,mode);
+    throw new IOException("P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK");
+  }
+
+  public static Process probeOrDeny(ProcessBuilder builder) throws IOException {
+    return secondaryDeny(builder,1);
+  }
+  public static Process configOrDeny(ProcessBuilder builder) throws IOException {
+    return secondaryDeny(builder,2);
   }
 }

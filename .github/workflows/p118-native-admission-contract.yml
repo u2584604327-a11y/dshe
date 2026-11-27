@@ -1,0 +1,62 @@
+name: P118 production native admission nonforgeability and release blocker contract
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/P118_NATIVE_ADMISSION_PRODUCTION_GATES.md'
+      - 'host_candidate/p115_original_helper_ci_only_hook.py'
+      - 'host_candidate/p116_original_helper_hard_deny_ci.py'
+      - 'host_candidate/p117_original_helper_scope_probe_ci.py'
+      - 'host_candidate/p109_original_native_port_source_patch.py'
+      - 'host_candidate/p111_original_process_bound_native_port_patch.py'
+      - '.github/workflows/p118-native-admission-contract.yml'
+permissions:
+  contents: read
+jobs:
+  no-false-native-authority-and-third-party-attribution:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source candidate and proof language remain fail closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          doc=Path('host_candidate/P118_NATIVE_ADMISSION_PRODUCTION_GATES.md').read_text()
+          p109=Path('host_candidate/p109_original_native_port_source_patch.py').read_text()
+          p111=Path('host_candidate/p111_original_process_bound_native_port_patch.py').read_text()
+          p115=Path('host_candidate/p115_original_helper_ci_only_hook.py').read_text()
+          p116=Path('host_candidate/p116_original_helper_hard_deny_ci.py').read_text()
+          p117=Path('host_candidate/p117_original_helper_scope_probe_ci.py').read_text()
+          notice=Path('NOTICE.md').read_text()
+          license=Path('THIRD_PARTY_LICENSES/DSHAPP-MIT.txt').read_text()
+          assert 'PRODUCTION_BLOCKED' in doc
+          assert 'not yet proven' in doc.lower() or 'NOT' in doc
+          assert 'same-process plugins may spoof' in doc
+          assert 'OriginalCallVerifier' in doc and 'false' in doc
+          assert 'TrustedExecutor' in doc and 'false' in doc
+          assert 'executeToolCalls(ctx, turn, step, toolCalls, signal, acceptContext)' in doc
+          assert 'P116' in doc and 'P117' in doc
+          assert 'pht88888888' in notice and 'MIT' in license
+          assert "P102TrustedToolGate.OriginalCallVerifier { _, _ ->" in p109
+          assert 'false // Original still-live SessionStore' in p109
+          assert 'false // No device tool execution' in p109
+          assert 'p111ProcessSnapshot.observe(hostProcessEpoch)' in p111
+          assert 'P115 isolated CI ONLY' in p115
+          assert 'P116 CI-only negative admission' in p116
+          assert 'P117 CI-only scope and signal' in p117
+          print('P118_ORIGINAL_SOURCE_AND_ATTRIBUTION_GATES=PASS')
+          print('P118_NATIVE_CALL_VERIFIER_AND_EXECUTOR=DEFAULT_DENY')
+          print('P118_CI_ONLY_HOOK_NOT_PRODUCTION_GRANT=PASS')
+          print('P118_PRODUCTION_ORIGINAL_BINDER_CALL_PROOF=NOT_WIRED')
+          PY
+          echo 'P118_SOURCE_TRUST_AND_PRODUCTION_BLOCKER_INVARIANTS=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P118_ORIGINAL_DSH_V139_PRODUCTION=BLOCKED' >> "$GITHUB_STEP_SUMMARY"

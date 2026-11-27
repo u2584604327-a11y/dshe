@@ -1,0 +1,73 @@
+name: P106 pinned original MIT Android host Kotlin compile (no APK)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/P106_PINNED_ORIGINAL_HOST_COMPILE_GATE.md'
+      - '.github/workflows/p106-pinned-upstream-system-kotlin-compile.yml'
+permissions:
+  contents: read
+jobs:
+  compile-public-original-host-only:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030' &&
+      github.event.pull_request.base.ref == 'dsh/p95-stream-to-message-tool-boundary-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      EXPECTED_UPSTREAM: 4dddb12fd076d052e788a16638a658b7a447b669
+      JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
+      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
+    steps:
+      - name: Checkout exact public MIT original into isolated workspace
+        uses: actions/checkout@v4
+        with:
+          repository: pht88888888/DSHAPP
+          ref: 4dddb12fd076d052e788a16638a658b7a447b669
+          persist-credentials: false
+          path: original
+      - name: Validate upstream identity and source/gradle path
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C original rev-parse HEAD)" = "$EXPECTED_UPSTREAM"
+          grep -Fq 'MIT License' original/LICENSE
+          grep -Fq 'versionCode = 91' original/app/build.gradle.kts
+          grep -Fq 'applicationId = "com.dsh.android"' original/app/build.gradle.kts
+          test -s original/app/src/main/java/com/dsh/android/EngineManager.kt
+          test -s original/app/src/main/java/com/dsh/android/MainActivity.kt
+          test -s original/app/src/main/java/com/dsh/android/browser/BrowserBridge.kt
+          test -s original/app/src/main/java/com/dsh/android/EngineService.kt
+          echo 'P106_EXACT_PINNED_MIT_SOURCE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P106_SOURCE_V91_EQUALS_MODIFIED_APK_V138=NOT_PROVEN' >> "$GITHUB_STEP_SUMMARY"
+      - name: Setup JDK17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Gradle 8.13, no production keystore
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Compile only original system debug Kotlin, no APK assemble or signing
+        shell: bash
+        working-directory: original
+        env:
+          ORG_GRADLE_PROJECT_android_dot_overridePathCheck: 'true'
+        run: |
+          set -euo pipefail
+          test ! -e keystore.properties
+          test ! -e dsh-release.jks
+          gradle --no-daemon --console=plain --max-workers=2 \
+            :app:compileSystemDebugKotlin
+          echo 'P106_ORIGINAL_KOTLIN_COMPILE=PASS' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P106_PRODUCTION_ANDROID_BINDER_WIRED=NO' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P106_RELEASE_APK_SIGNED_OR_INSTALLED=NO' >> "$GITHUB_STEP_SUMMARY"
+      - name: No artifact upload or release
+        if: always()
+        shell: bash
+        run: |
+          echo 'P106_PUBLIC_UPSTREAM_IS_NOT_SIGNED_V138=YES' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P106_PHONE_ORIGINAL_DSH_DATA_TOUCHED=NO' >> "$GITHUB_STEP_SUMMARY"

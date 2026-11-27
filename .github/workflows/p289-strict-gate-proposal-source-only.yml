@@ -1,0 +1,110 @@
+name: P289 source-only independently decoded 35c strict Log.i candidate comparator, release DENY
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - '.github/workflows/p289-strict-gate-proposal-source-only.yml'
+      - 'host_candidate/p289_strict_gate_proposal/**'
+permissions:
+  contents: read
+concurrency:
+  group: p289-source-only-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  p289-source-only:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate original P245/P285/P287 and independent P289 source hashes
+        run: |
+          set -euo pipefail
+          test "$(git hash-object host_candidate/p281_helper_predicates/p281_helper_predicates.py)" = 9fc33a0adef992fc8a7c295432d77fb4ce62df73
+          test "$(git hash-object host_candidate/p283_descriptor_normalization/p283_descriptor_normalization.py)" = 76877acfabd19e79ce56610a80b89cb9410bc400
+          test "$(git hash-object host_candidate/p285_shadow_verifier/p285_shadow_verifier.py)" = fdb305c94fa3d82c36943de0686f290c1716db5c
+          test "$(git hash-object host_candidate/p287_gate_delta/p287_gate_delta.py)" = db5e404a4799ca8f67704dd0ffaf79bd34c085e8
+          test "$(git hash-object host_candidate/p289_strict_gate_proposal/p289_strict_gate_proposal.py)" = 1ebd0c9991398f2af76cb163b9ffaffe836b6fd5
+          test "$(git hash-object host_candidate/p245_build_only_probe/p245_build_only_probe.py)" = 06f62f4d8c8ee141b6b2030ee6556c9a43d9e499
+          test "$(git hash-object host_candidate/p273_exception_relocation/p273_exception_relocation.py)" = 24eb168ec2536ca38f1fddcb3df38963972f8dd6
+          test "$(git hash-object host_candidate/p275_encoding_width/p275_encoding_width.py)" = 970e071eb4eaafec8e68f3eddcdb1f23172d09b7
+          test "$(git hash-object host_candidate/p277_string_pool/p277_string_pool.py)" = ee234d2485ab7a0b5878661d00789761f5778c85
+          test "$(git hash-object host_candidate/p279_counterfactual/p279_counterfactual.py)" = 1a1612eeefc45506601769a12e42ab492da18cdd
+          test "$(git hash-object host_candidate/p267_invoke_words/p267_invoke_words.py)" = 36b295a65ef1063f9a68a1b2e8ca60c0fddf98f1
+          test "$(git hash-object host_candidate/p269_method_pool/p269_method_pool.py)" = 5680d35aeb18f0869eeb368487105d54680fb748
+          test "$(git hash-object host_candidate/p271_word_delta/p271_word_delta.py)" = 8c30641560d5e2c38c36ea7138f28319f7142200
+          test "$(git hash-object host_candidate/p246_exception_semantics/p246_exception_semantics.py)" = 59e64268fe80ceec0169417b83e96772b3e015a0
+          test "$(git hash-object host_candidate/p249_dual_diff/p249_dual_diff.py)" = 44248b92504cbf6d3406ffdccbde61e1099dcc7f
+          test "$(git hash-object host_candidate/p251_method_relation/p251_method_relation.py)" = 136289c3d270d130270ce0b648070996df73b14a
+          test "$(git hash-object host_candidate/p253_cfg_ordinal/p253_cfg_ordinal.py)" = 9ff606e656fce61eb11c83e3dd4b2ab93385f7e0
+          test "$(git hash-object host_candidate/p257_opcode_family/p257_opcode_family.py)" = 5afdef13bd3999744be931c457d3b514fd1459e2
+          test "$(git hash-object host_candidate/p261_all_method_census/p261_all_method_census.py)" = d4724ef5045857b6583a27251171ea4e3f1413e9
+          python3 - <<'PY'
+          from pathlib import Path
+          for folder, names in (
+              ('p281_helper_predicates',('p281_helper_predicates.py','test_p281_helper_predicates.py')),
+              ('p283_descriptor_normalization',('p283_descriptor_normalization.py','test_p283_descriptor_normalization.py')),
+              ('p285_shadow_verifier',('p285_shadow_verifier.py','test_p285_shadow_verifier.py')),
+              ('p287_gate_delta',('p287_gate_delta.py','test_p287_gate_delta.py')),
+              ('p289_strict_gate_proposal',('p289_strict_gate_proposal.py','test_p289_strict_gate_proposal.py')),
+          ):
+              for name in names:
+                  f=Path('host_candidate')/folder/name
+                  compile(f.read_text(),str(f),'exec')
+          print('P289_SOURCE_SYNTAX=PASS')
+          PY
+      - name: Execute and sum all 732 baseline and 34 P289 adversarial tests
+        run: |
+          set -euo pipefail
+          total=0
+          for entry in \
+            "host_candidate/p245_build_only_probe/test_p245_build_only_probe.py 15" \
+            "host_candidate/p246_exception_semantics/test_p246_exception_semantics.py 30" \
+            "host_candidate/p246_exception_semantics/test_p247_classifier_contract.py 12" \
+            "host_candidate/p249_dual_diff/test_p249_dual_diff.py 26" \
+            "host_candidate/p251_method_relation/test_p251_method_relation.py 32" \
+            "host_candidate/p253_cfg_ordinal/test_p253_cfg_ordinal.py 30" \
+            "host_candidate/p255_branch_separation/test_p255_branch_separation.py 22" \
+            "host_candidate/p257_opcode_family/test_p257_opcode_family.py 36" \
+            "host_candidate/p259_all_operands/test_p259_all_operands.py 38" \
+            "host_candidate/p261_all_method_census/test_p261_all_method_census.py 36" \
+            "host_candidate/p263_operand_correlation/test_p263_operand_correlation.py 26" \
+            "host_candidate/p265_operand_shape/test_p265_operand_shape.py 28" \
+            "host_candidate/p267_invoke_words/test_p267_invoke_words.py 31" \
+            "host_candidate/p269_method_pool/test_p269_method_pool.py 21" \
+            "host_candidate/p271_word_delta/test_p271_word_delta.py 34" \
+            "host_candidate/p273_exception_relocation/test_p273_exception_relocation.py 35" \
+            "host_candidate/p275_encoding_width/test_p275_encoding_width.py 39" \
+            "host_candidate/p277_string_pool/test_p277_string_pool.py 28" \
+            "host_candidate/p279_counterfactual/test_p279_counterfactual.py 25" \
+            "host_candidate/p281_helper_predicates/test_p281_helper_predicates.py 37" \
+            "host_candidate/p283_descriptor_normalization/test_p283_descriptor_normalization.py 35" \
+            "host_candidate/p285_shadow_verifier/test_p285_shadow_verifier.py 52" \
+            "host_candidate/p287_gate_delta/test_p287_gate_delta.py 64" \
+            "host_candidate/p289_strict_gate_proposal/test_p289_strict_gate_proposal.py 34"; do
+            read -r script expected <<< "$entry"
+            python3 -B "$script" > "$RUNNER_TEMP/fixture.log" 2>&1 || { cat "$RUNNER_TEMP/fixture.log"; exit 1; }
+            grep -Eq "^Ran $expected tests in" "$RUNNER_TEMP/fixture.log"
+            grep -Fxq 'OK' "$RUNNER_TEMP/fixture.log"
+            total=$((total+expected))
+          done
+          test "$total" -eq 766
+          echo P289_ACTUAL_PER_SUITE_TEST_TOTAL="$total"
+          echo P289_SYNTHETIC_766_OF_766=PASS
+      - name: P289 source-only explicit denial
+        run: |
+          set -euo pipefail
+          python3 -B host_candidate/p289_strict_gate_proposal/p289_strict_gate_proposal.py > "$RUNNER_TEMP/p289-source-only.log"
+          grep -Fxq P289_SOURCE_ONLY=YES "$RUNNER_TEMP/p289-source-only.log"
+          grep -Fxq P289_REAL_RAW_METHOD_REF=NOT_ATTESTED "$RUNNER_TEMP/p289-source-only.log"
+          grep -Fxq P289_RELEASE=DENY "$RUNNER_TEMP/p289-source-only.log"
+          grep -Fxq P289_V139=STRUCTURAL_BLOCKED "$RUNNER_TEMP/p289-source-only.log"
+          echo P289_NO_APK_ADB_EMULATOR_SIGN_INSTALL_OR_RELEASE=YES

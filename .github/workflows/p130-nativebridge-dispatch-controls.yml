@@ -1,0 +1,45 @@
+name: P130 synthetic ARM64 translated ELF dispatch gate (offline)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/p130_arm64_nativebridge_dispatch_probe.sh'
+      - '.github/workflows/p130-nativebridge-dispatch-controls.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: p130-nativebridge-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  synthetic-arm64-dispatch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Local compile-only ARM64 static/dynamic preflight
+        run: |
+          set -euo pipefail
+          bash -n host_candidate/p130_arm64_nativebridge_dispatch_probe.sh
+          P130_COMPILE_ONLY=1 bash host_candidate/p130_arm64_nativebridge_dispatch_probe.sh
+      - name: Enable KVM for disposable Android emulator
+        run: if test -c /dev/kvm; then sudo chmod 666 /dev/kvm; fi
+      - name: Probe fixed synthetic ELF exec dispatch under offline Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: P130_COMPILE_ONLY=0 bash host_candidate/p130_arm64_nativebridge_dispatch_probe.sh
+      - name: Preserve release deny gate
+        if: always()
+        run: |
+          echo P130_ORIGINAL_NODE=NOT_EXECUTED >> "$GITHUB_STEP_SUMMARY"
+          echo P130_ISOLATED_UID=NOT_TESTED >> "$GITHUB_STEP_SUMMARY"
+          echo P130_P109_NATIVE_AUTHORITY=DENY_ALL >> "$GITHUB_STEP_SUMMARY"
+          echo P130_V139_RELEASE=BLOCKED >> "$GITHUB_STEP_SUMMARY"

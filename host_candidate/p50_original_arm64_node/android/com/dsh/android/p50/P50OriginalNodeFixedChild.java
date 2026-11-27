@@ -9,7 +9,10 @@ import android.os.Message;
 import android.os.Messenger;
 import android.os.Process;
 import android.os.RemoteException;
+import android.system.Os;
+import com.dsh.android.p134.P134RealArm64Gate;
 import com.dsh.android.p48.P48FixedIsolatedChild;
+import com.dsh.android.p68.P68AndroidBinderIntake.WorkerPipes;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -50,6 +53,56 @@ public final class P50OriginalNodeFixedChild {
   private volatile boolean aborted;
   private long sequence=0;
   private boolean started;
+  private WorkerPipes modulePipes;
+  private boolean freshConfig,httpServices,webMainTest;
+
+  // Fixed supervisor diagnostics, never authority, paths or exception text.
+  public static String failureStageName(int stage) {
+    switch(stage){
+      case 1:return "VERIFY_RUNTIME";
+      case 2:return "LOAD_BOOTSTRAP";
+      case 3:return "CREATE_CHILD";
+      case 4:return "ATTACH_PIPES";
+      case 5:return "WAIT_CHILD_EXIT";
+      case 6:return "DRAIN_PIPES";
+      default:return "UNSPECIFIED";
+    }
+  }
+
+  /** Explicit permissionless sidecar only; never authorizes production P47. */
+  public static P50OriginalNodeFixedChild originalDefaultConfig(Context context,
+      Messenger authenticatedHost,String session,WorkerPipes authenticatedPipes) {
+    if(context==null || authenticatedPipes==null ||
+       !"com.dsh.p51.isolatedprobe".equals(context.getPackageName()))
+      throw new SecurityException("P50_DEFAULT_CONFIG_SIDECAR_ONLY");
+    P50OriginalNodeFixedChild result=new P50OriginalNodeFixedChild(context,authenticatedHost,session);
+    result.modulePipes=authenticatedPipes;
+    return result;
+  }
+
+  /** Fresh-profile runDumpConfig parity only. No production profile capability. */
+  public static P50OriginalNodeFixedChild originalFreshConfig(Context context,
+      Messenger authenticatedHost,String session,WorkerPipes pipes) {
+    P50OriginalNodeFixedChild result=originalDefaultConfig(context,authenticatedHost,session,pipes);
+    result.freshConfig=true;return result;
+  }
+
+  /** Distinct host-network test only. Never authorizes production P47. */
+  public static P50OriginalNodeFixedChild originalHttpServices(Context context,
+      Messenger authenticatedHost,String session,WorkerPipes pipes) {
+    if(context==null||pipes==null||!"com.dsh.p51.networkprobe".equals(context.getPackageName()))
+      throw new SecurityException("HTTP_COMPONENT_TEST_ONLY");
+    P50OriginalNodeFixedChild result=new P50OriginalNodeFixedChild(context,authenticatedHost,session);
+    result.modulePipes=pipes;result.httpServices=true;return result;
+  }
+
+  /** Full original runCli in the separate fresh-owner test package only.
+   * Still no original EngineManager/P47/profile or production authority. */
+  public static P50OriginalNodeFixedChild originalWebMainTest(Context context,
+      Messenger authenticatedHost,String session,WorkerPipes pipes) {
+    P50OriginalNodeFixedChild result=originalHttpServices(context,authenticatedHost,session,pipes);
+    result.webMainTest=true;return result;
+  }
 
   public P50OriginalNodeFixedChild(Context context, Messenger host, String session) {
     if(context==null || host==null || session==null ||
@@ -68,8 +121,12 @@ public final class P50OriginalNodeFixedChild {
     aborted=true;
     java.lang.Process p=child;
     if(p!=null){if(force)p.destroyForcibly();else p.destroy();}
+    if(modulePipes!=null)modulePipes.close();
   }
   private void emit(int kind,byte[] data,int code){
+    emit(kind,data,code,0);
+  }
+  private void emit(int kind,byte[] data,int code,int failureStage){
     synchronized(sendLock){
       if(aborted)return;
       Bundle payload=new Bundle();
@@ -78,6 +135,14 @@ public final class P50OriginalNodeFixedChild {
       if(data!=null)payload.putByteArray("data",data);
       if(kind==P48FixedIsolatedChild.EXIT)payload.putInt("exitCode",code);
       Message message=Message.obtain(null,kind);message.setData(payload);
+      if(kind==P48FixedIsolatedChild.EXIT&&webMainTest)
+        message.arg1=modulePipes.stdinTerminationCode();
+      if(kind==P48FixedIsolatedChild.FAIL){
+        message.arg1=failureStage;
+        message.arg2=Integer.MIN_VALUE;
+        java.lang.Process p=child;
+        if(failureStage==6&&p!=null&&!p.isAlive())message.arg2=p.exitValue();
+      }
       try{host.send(message);}
       catch(RemoteException lost){stop(true);}
     }
@@ -124,9 +189,16 @@ public final class P50OriginalNodeFixedChild {
   }
   private void runFixedOriginalNode(){
     java.lang.Process node=null;
+    android.os.IBinder.DeathRecipient hostDied=()->stop(true);
+    boolean deathLinked=false;
+    int failureStage=1;
     try{
-      if(!Process.isIsolated() || Build.VERSION.SDK_INT<34 ||
-         !Arrays.asList(Build.SUPPORTED_ABIS).contains("arm64-v8a"))
+      host.getBinder().linkToDeath(hostDied,0);deathLinked=true;
+      // P134: x86_64 Google APIs Native Bridge advertises arm64-v8a in
+      // SUPPORTED_ABIS. That is NOT evidence of an ARM64 kernel/process.
+      // Reject translated guest architectures before any asset read/exec.
+      if(!P134RealArm64Gate.allow(Process.isIsolated(),
+            Build.VERSION.SDK_INT,Build.SUPPORTED_ABIS,Os.uname().machine))
         throw new SecurityException("P50_REQUIRES_REAL_ARM64_ISOLATED_ANDROID");
       if(context.checkSelfPermission(Manifest.permission.INTERNET)
            ==PackageManager.PERMISSION_GRANTED)
@@ -171,20 +243,55 @@ public final class P50OriginalNodeFixedChild {
       }
       if(aborted)throw new IOException("P50_STOP_BEFORE_SPAWN");
 
-      ProcessBuilder pb=new ProcessBuilder(executable.getAbsolutePath(),
-          "--no-warnings","--eval",FIXED_JS);
+      failureStage=2;
+      String script=modulePipes==null?FIXED_JS:loadModuleBootstrap();
+      ProcessBuilder pb=modulePipes==null?
+          new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--eval",script):
+          new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--input-type=module","--eval",script);
+      if(httpServices){
+        File addon=new File(dir,"libdsh_original_require_builtin.so").getCanonicalFile();
+        if(!dir.equals(addon.getParentFile())||addon.length()!=91840||
+            Os.sysconf(android.system.OsConstants._SC_PAGESIZE)!=4096||
+            !"b69021cecbe48a62395b6a30c4975d17c4277ccb2429adada78dd74bc0fb0c44".equals(sha256(addon)))
+          throw new SecurityException("P50_EXACT_ANDROID_ADDON_OR_PAGE_SIZE_INVALID");
+        pb=new ProcessBuilder(executable.getAbsolutePath(),"--no-warnings","--permission","--allow-addons",
+          "--allow-fs-read="+addon.getAbsolutePath(),"--allow-fs-read=/dsh-runtime","--allow-fs-read=/dsh-home",
+          "--input-type=module","--eval",script);
+        // The pinned libcrypto defaults to a Termux config that an isolated UID
+        // cannot read. Use Node and OpenSSL's built-in defaults for this test.
+        if(webMainTest)pb.command().add(1,"--openssl-config=/dev/null");
+      }
       pb.directory(new File("/"));
       Map<String,String> env=pb.environment();
       env.clear();
       env.put("PATH","/system/bin");
-      env.put("HOME","/");
+      env.put("HOME",modulePipes==null?"/":"/dsh-home");
+      if(modulePipes!=null){env.put("DSH_HOME","/dsh-home");
+        env.put("DSH_ORIGINAL_CONFIG_MODE",freshConfig?"fresh-config":"default");
+        env.put("NODE_OPTIONS","--max-old-space-size=1024");}
       env.put("LD_LIBRARY_PATH",dir.getAbsolutePath());
       env.put("LD_PRELOAD",preloadsEnv.toString());
+      failureStage=3;
       node=pb.start(); child=node;
       if(aborted){node.destroyForcibly();throw new IOException("P50_CANCELLED");}
-      // P53: send on Binder only after actual original ARM64 Node
-      // ProcessBuilder.start() returns successfully. This is not READY.
+      if(modulePipes!=null){
+        failureStage=4;
+        modulePipes.attach(node);
+      }
+      // An authenticated receipt can now hand these pipes to the host. A real
+      // child and attached pipes are required here; HTTP Ready is separate.
       emit(P48FixedIsolatedChild.CHILD_STARTED,null,0);
+
+      if(modulePipes!=null) {
+        failureStage=5;
+        if(!node.waitFor(90,TimeUnit.SECONDS) || aborted)
+          throw new IOException("P50_ORIGINAL_MODULE_TIMEOUT");
+        failureStage=6;
+        if(!modulePipes.finishAfterChildExit(5000))
+          throw new IOException("P50_ORIGINAL_MODULE_PIPE_FAILURE");
+        emit(P48FixedIsolatedChild.EXIT,null,node.exitValue());
+        return;
+      }
 
       final java.lang.Process running=node;
       AtomicReference<String> failure=new AtomicReference<>();
@@ -202,10 +309,33 @@ public final class P50OriginalNodeFixedChild {
       emit(P48FixedIsolatedChild.EXIT,null,node.exitValue());
     }catch(Exception | LinkageError failure) {
       // No raw exception string, environment, user data, or executable path.
-      emit(P48FixedIsolatedChild.FAIL,null,125);
+      emit(P48FixedIsolatedChild.FAIL,null,125,modulePipes==null?0:failureStage);
     }finally {
       if(node!=null && node.isAlive())node.destroyForcibly();
+      if(modulePipes!=null)modulePipes.close();
+      if(deathLinked)host.getBinder().unlinkToDeath(hostDied,0);
       child=null;
     }
   }
+  private String loadModuleBootstrap()throws Exception {
+    byte[] bytes;
+    try(InputStream input=context.getAssets().open(webMainTest?"engine-original-main.mjs":httpServices?"engine-http-services.mjs":"p50-original-modules.mjs");
+        ByteArrayOutputStream output=new ByteArrayOutputStream()) {
+      byte[] chunk=new byte[4096];int n;
+      while((n=input.read(chunk))!=-1) {
+        if(n>(webMainTest?131072:httpServices?65536:32768)-output.size())throw new IOException("P50_BOOTSTRAP_BOUND");
+        output.write(chunk,0,n);
+      }
+      bytes=output.toByteArray();
+    }
+    StringBuilder hash=new StringBuilder(64);
+    for(byte b:MessageDigest.getInstance("SHA-256").digest(bytes))
+      hash.append(String.format(Locale.ROOT,"%02x",b&255));
+    if(!(webMainTest?MAIN_TEST_BOOTSTRAP_SHA:httpServices?HTTP_BOOTSTRAP_SHA:MODULE_BOOTSTRAP_SHA).equals(hash.toString()))
+      throw new SecurityException("P50_BOOTSTRAP_HASH_MISMATCH");
+    return new String(bytes,StandardCharsets.UTF_8);
+  }
+  private static final String HTTP_BOOTSTRAP_SHA="c78ea5b631d5716d9cf3aa324613637f5a88919f0744058b382f4b8e503f30b1";
+  private static final String MAIN_TEST_BOOTSTRAP_SHA="c25e4f8be63a7bc1a6b8d5ee114a6e81c5362febba3ab4c9387909b92cdafde3";
+  private static final String MODULE_BOOTSTRAP_SHA="bc0c4c874e617016de0bd909c7c665795a7d6ff728e8245677f4e71074bbf140";
 }

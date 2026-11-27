@@ -94,7 +94,8 @@ def data_offset(apk,entry):
     fields=struct.unpack("<IHHHHHIIIHH",raw)
     return entry.header_offset+30+fields[-2]+fields[-1]
 
-def verify(original,apk):
+def verify(original,apk,original_default_config=False,original_http_services=False,original_main_profile=False):
+    fail(sum(map(bool,(original_default_config,original_http_services,original_main_profile)))<=1,"EXCLUSIVE_TEST_ASSET_MODE")
     original=pathlib.Path(original);apk=pathlib.Path(apk)
     fail(hash_file(original)==ORIGINAL_APK_SHA,"ORIGINAL_SHA_AFTER_STAGE_DRIFT")
     with zipfile.ZipFile(original) as orig,zipfile.ZipFile(apk) as derived:
@@ -120,12 +121,49 @@ def verify(original,apk):
                  "/" not in alias and ".." not in alias,"INVALID_ALIAS")
             required["lib/arm64-v8a/"+alias]=lib["sha256"]
         fail(len(required)==11,"REQUIRED_ELF_COUNT")
+        if original_http_services or original_main_profile:
+            # Only these explicitly separate isolated network tests admit
+            # the original external supplement. Default/config stay at 11 ELF.
+            from engine_runtime.original_native_bundle import ALIAS, MEMBERS, NATIVE
+            required["lib/arm64-v8a/"+ALIAS]=MEMBERS[NATIVE][1]
         installed={x for x in allnames if x.startswith("lib/arm64-v8a/") and
                    x not in base and not x.endswith("/")}
         fail(installed==set(required),"ADDITIONAL_ARM64_LIB_SET_CHANGED")
+        allowed_assets={LOCK_PATH}
+        if original_default_config:
+            # Explicitly scoped addition, preserving the default P49 allowlist.
+            from p51_side_by_side.p51_manifest import verify_apk
+            verify_apk(apk)  # no original app components, permissions or identity
+            bootstrap="assets/p50-original-modules.mjs"
+            fail(bootstrap not in base and bootstrap in allnames,"MODULE_BOOTSTRAP_MISSING")
+            payload=derived.read(bootstrap)
+            fail(len(payload)==18501 and hash_bytes(payload)==
+                 "bc0c4c874e617016de0bd909c7c665795a7d6ff728e8245677f4e71074bbf140",
+                 "MODULE_BOOTSTRAP_SHA_OR_LENGTH")
+            allowed_assets.add(bootstrap)
+        if original_http_services:
+            from engine_runtime.http_manifest import verify_apk
+            verify_apk(apk)
+            bootstrap="assets/engine-http-services.mjs"
+            fail(bootstrap not in base and bootstrap in allnames,"HTTP_BOOTSTRAP_MISSING")
+            payload=derived.read(bootstrap)
+            fail(len(payload)==50210 and hash_bytes(payload)==
+                 "c78ea5b631d5716d9cf3aa324613637f5a88919f0744058b382f4b8e503f30b1",
+                 "HTTP_BOOTSTRAP_SHA_OR_LENGTH")
+            allowed_assets.add(bootstrap)
+        if original_main_profile:
+            from engine_runtime.main_manifest import verify_apk
+            verify_apk(apk)
+            bootstrap="assets/engine-original-main.mjs"
+            fail(bootstrap not in base and bootstrap in allnames,"MAIN_BOOTSTRAP_MISSING")
+            payload=derived.read(bootstrap)
+            fail(len(payload)==94971 and hash_bytes(payload)==
+                 "c25e4f8be63a7bc1a6b8d5ee114a6e81c5362febba3ab4c9387909b92cdafde3",
+                 "MAIN_BOOTSTRAP_SHA_OR_LENGTH")
+            allowed_assets.add(bootstrap)
         fail({x for x in allnames if x.startswith(("lib/","assets/")) and
               x not in base and not x.endswith("/")}==
-             set(required)|{LOCK_PATH},"UNAUTHORIZED_EXTRA_ASSET_OR_LIB")
+             set(required)|allowed_assets,"UNAUTHORIZED_EXTRA_ASSET_OR_LIB")
         for name,digest in required.items():
             e=derived.getinfo(name)
             fail(e.compress_type==zipfile.ZIP_STORED,"NATIVE_ELF_COMPRESSED")
@@ -136,7 +174,7 @@ def verify(original,apk):
                  int.from_bytes(payload[18:20],"little")==183,"NOT_ARM64_ELF")
         fail(derived.read(LOCK_PATH).endswith(b"\n"),"LOCK_NOT_FINAL_NEWLINE")
     print("P49_REAL_ORIGINAL_DSH_ASSETS_AND_LIBRARIES_BYTE_PRESERVED=PASS")
-    print("P49_11_ADDITIONAL_ARM64_ELF_STORED_16K_AND_SHA=PASS")
+    print("P49_"+str(len(required))+"_ADDITIONAL_ARM64_ELF_STORED_16K_AND_SHA=PASS")
     print("P49_ORIGINAL_NODE_SOURCE_SHA256_MATCH=PASS")
     print("P49_EXTRA_APK_MEMBERS_ALLOWLIST=PASS")
     print("P49_REAL_NODE_EXECUTED_IN_ORIGINAL_APK=NO")
@@ -146,7 +184,12 @@ if __name__=="__main__":
     p=argparse.ArgumentParser()
     p.add_argument("mode",choices=["prepare","embed","verify"])
     p.add_argument("a");p.add_argument("b")
+    p.add_argument("--original-default-config",action="store_true")
+    p.add_argument("--original-http-services",action="store_true")
+    p.add_argument("--original-main-profile",action="store_true")
     args=p.parse_args()
+    if (args.original_default_config or args.original_http_services or args.original_main_profile) and args.mode!="verify":
+        p.error("--original-default-config is verify-only")
     if args.mode=="prepare":prepare(args.a,args.b)
     elif args.mode=="embed":embed(args.a,args.b)
-    else:verify(args.a,args.b)
+    else:verify(args.a,args.b,args.original_default_config,args.original_http_services,args.original_main_profile)

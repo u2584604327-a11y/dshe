@@ -5,6 +5,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.nio.channels.Channels;
+import java.nio.channels.Pipe;
 
 /** No Android stubs, APK, network, personal data or original DSH files. */
 public final class P37RemoteProcessTest {
@@ -37,6 +41,10 @@ public final class P37RemoteProcessTest {
   }
   private static void testLifecycle()throws Exception {
     Port port=new Port(); P37RemoteProcess p=start(port);
+    ok(p.matchesBoundIdentity(UID,S),"same verified P37 bound identity");
+    ok(!p.matchesBoundIdentity(UID+1,S),"wrong platform UID cannot match");
+    ok(!p.matchesBoundIdentity(UID,S.replace('a','b')),"wrong session cannot match");
+    ok(!p.matchesBoundIdentity(UID,null),"missing host session cannot match");
     ok(p.isAlive(),"alive at create");
     try {p.exitValue();throw new AssertionError("exitValue did not throw");}
     catch(IllegalThreadStateException expected){checks.incrementAndGet();}
@@ -108,9 +116,383 @@ public final class P37RemoteProcessTest {
     try {new P37RemoteProcess(10000,S,uid->false,invalid);throw new AssertionError("wrong uid accepted");}
     catch(IllegalArgumentException expected){checks.incrementAndGet();}
   }
+  private static void testLocalReaderCloseKeepsChildAlive()throws Exception {
+    Port port=new Port();P37RemoteProcess p=start(port);
+    p.getInputStream().close();
+    ok(p.getInputStream().read()==-1,"closed stdout stays EOF");
+    ok(p.onAuthenticatedStdout(UID,S,b("discard after close\\n")),
+        "valid bounded stdout after reader close is discarded");
+    ok(p.onAuthenticatedStderr(UID,S,b("still readable\\n")),
+        "other stream remains live");
+    ok(p.isAlive()&&port.kill==0,"reader close must not terminate child");
+    ok(p.onAuthenticatedExit(UID,S,0)&&p.waitFor()==0,
+        "actual child exit remains authoritative after reader close");
+    ok("still readable\\n".equals(readAll(p.getErrorStream())),
+        "stderr retained independently");
+
+    Port mergedPort=new Port();
+    P37RemoteProcess merged=new P37RemoteProcess(UID,S,uid->uid==UID,mergedPort,true);
+    merged.getInputStream().close();
+    ok(merged.onAuthenticatedStderr(UID,S,b("merged after close\\n")),
+        "merged stderr follows closed stdout discard");
+    ok(merged.getErrorStream().read()==-1,"merged error pipe stays EOF");
+    ok(merged.isAlive()&&mergedPort.kill==0,
+        "closing merged reader does not kill isolated child");
+    ok(merged.onAuthenticatedExit(UID,S,0)&&merged.waitFor()==0,
+        "merged child exit remains authentic");
+
+    Port oversizedPort=new Port();P37RemoteProcess oversized=start(oversizedPort);
+    oversized.getInputStream().close();
+    ok(!oversized.onAuthenticatedStdout(UID,S,
+        new byte[P37RemoteProcess.MAX_FRAME_BYTES+1]),
+        "reader close cannot bypass frame-size cap");
+    ok(oversized.waitFor()==125&&oversizedPort.kill==1&&
+        oversized.terminalReason()==P37RemoteProcess.TerminalReason.BUFFER_OVERFLOW,
+        "oversized frame still fails closed");
+
+    Port spoofedPort=new Port();P37RemoteProcess spoofed=start(spoofedPort);
+    spoofed.getInputStream().close();
+    ok(!spoofed.onAuthenticatedStdout(UID+1,S,b("spoofed")),
+        "reader close cannot bypass Binder identity");
+    ok(spoofed.waitFor()==125&&spoofedPort.kill==1&&
+        spoofed.terminalReason()==P37RemoteProcess.TerminalReason.IDENTITY_MISMATCH,
+        "wrong UID still fails closed");
+  }
+  /** Synthetic token only; inspect private buffer without exposing its contents. */
+  private static boolean bufferZeroized(InputStream stream)throws Exception {
+    java.lang.reflect.Field f=stream.getClass().getDeclaredField("buffer");
+    f.setAccessible(true);
+    for(byte value:(byte[])f.get(stream))if(value!=0)return false;
+    return true;
+  }
+  private static void testBufferedReadyTokenErasure()throws Exception {
+    byte[] token=b("dsh web: http://127.0.0.1:3080/?token=synthetic-test-only\n");
+    Port livePort=new Port();P37RemoteProcess live=start(livePort);
+    ok(live.onAuthenticatedStdout(UID,S,token),"synthetic READY buffered");
+    ok(!bufferZeroized(live.getInputStream()),"buffer positive control");
+    byte[] read=new byte[token.length];
+    ok(live.getInputStream().read(read)==token.length && Arrays.equals(read,token),
+       "valid READY delivered intact");
+    ok(bufferZeroized(live.getInputStream()),"consumed READY bytes zeroized");
+    ok(live.isAlive()&&livePort.kill==0,"read zeroization cannot kill child");
+    live.onAuthenticatedExit(UID,S,0);
+    ok(live.waitFor()==0,"authentic exit after erasure");
+
+    Port closePort=new Port();P37RemoteProcess closed=start(closePort);
+    ok(closed.onAuthenticatedStdout(UID,S,token),"close fixture");
+    ok(closed.getInputStream().read()==(token[0]&255),"partial read");
+    closed.getInputStream().close();
+    ok(bufferZeroized(closed.getInputStream()),"close zeroizes unread token");
+    ok(closed.isAlive()&&closePort.kill==0,"local close cannot revoke child");
+    closed.onAuthenticatedExit(UID,S,0);
+
+    Port lostPort=new Port();P37RemoteProcess lost=start(lostPort);
+    ok(lost.onAuthenticatedStdout(UID,S,token),"transport loss fixture");
+    lost.onTransportLost();
+    ok(bufferZeroized(lost.getInputStream()),"transport loss zeroizes token");
+    ok(lost.waitFor()==125&&lostPort.kill==1,"transport loss still revokes");
+
+    Port exitPort=new Port();P37RemoteProcess exited=start(exitPort);
+    ok(exited.onAuthenticatedStdout(UID,S,token),"clean exit fixture");
+    ok(exited.onAuthenticatedExit(UID,S,0),"clean exit authenticated");
+    ok(!bufferZeroized(exited.getInputStream()),"clean exit preserves unread bytes");
+    byte[] afterExit=new byte[token.length];
+    ok(exited.getInputStream().read(afterExit)==token.length &&
+       Arrays.equals(afterExit,token),"unread READY delivered after exit");
+    ok(bufferZeroized(exited.getInputStream()),"post-exit read erases bytes");
+
+    Port mergedPort=new Port();
+    P37RemoteProcess merged=new P37RemoteProcess(UID,S,uid->uid==UID,mergedPort,true);
+    ok(merged.onAuthenticatedStderr(UID,S,token),"merged stderr fixture");
+    byte[] mergedRead=new byte[token.length];
+    ok(merged.getInputStream().read(mergedRead)==token.length &&
+       Arrays.equals(mergedRead,token),"merged stderr order preserved");
+    ok(bufferZeroized(merged.getInputStream()),"merged stderr bytes zeroized");
+    merged.onAuthenticatedExit(UID,S,0);
+    System.out.println("P37_BUFFERED_TOKEN_BYTES_ZEROIZED_AFTER_READ_DISCARD=PASS");
+  }
+
+  /** Force frame enqueue to wait on the stream while EXIT tries to commit.
+   * A terminal exit must never be published before an already admitted frame
+   * is queued. The old implementation set REMOTE_EXIT while frame.offer()
+   * was still blocked, and this deterministic schedule caught the inversion.
+   */
+  private static void awaitBlocked(Thread t, String label)throws Exception {
+    long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(5);
+    while(t.getState()!=Thread.State.BLOCKED && System.nanoTime()<deadline) {
+      if(!t.isAlive())throw new AssertionError(label+" ended unexpectedly");
+      Thread.sleep(2);
+    }
+    ok(t.getState()==Thread.State.BLOCKED,label+" must reach bounded contention");
+  }
+  private static void testExitFrameAtomicity()throws Exception {
+    Port port=new Port();P37RemoteProcess p=start(port);
+    java.lang.reflect.Field f=P37RemoteProcess.class.getDeclaredField("stdout");
+    f.setAccessible(true);
+    Object stream=f.get(p);
+    byte[] frame=b("synthetic-pre-exit-frame\\n");
+    AtomicBoolean frameAccepted=new AtomicBoolean(false);
+    AtomicBoolean exitAccepted=new AtomicBoolean(false);
+    AtomicReference<Throwable> failure=new AtomicReference<>();
+    Thread writer=new Thread(()->{
+      try {frameAccepted.set(p.onAuthenticatedStdout(UID,S,frame));}
+      catch(Throwable t){failure.compareAndSet(null,t);}
+    },"p37-test-frame");
+    Thread exiter=new Thread(()->{
+      try {exitAccepted.set(p.onAuthenticatedExit(UID,S,0));}
+      catch(Throwable t){failure.compareAndSet(null,t);}
+    },"p37-test-exit");
+    synchronized(stream) {
+      writer.start();
+      awaitBlocked(writer,"frame waiting for stream");
+      exiter.start();
+      awaitBlocked(exiter,"exit waiting for lifecycle lock");
+      ok(p.terminalReason()==P37RemoteProcess.TerminalReason.RUNNING,
+         "terminal exit must not overtake in-flight admitted frame");
+    }
+    writer.join(5000);exiter.join(5000);
+    ok(!writer.isAlive()&&!exiter.isAlive(),"both callbacks terminate");
+    ok(failure.get()==null,"callbacks do not throw");
+    ok(frameAccepted.get()&&exitAccepted.get(),"frame accepted before exit");
+    ok("synthetic-pre-exit-frame\\n".equals(readAll(p.getInputStream())),
+       "pre-exit frame remains readable after authentic exit");
+    ok(p.waitFor()==0&&port.kill==0,"clean exit without spurious child kill");
+    ok(!p.onAuthenticatedStdout(UID,S,b("late")),
+       "post-exit frame still rejected");
+    System.out.println("P37_EXIT_FRAME_ORDER_SERIALIZED_WITH_TERMINAL=PASS");
+  }
+  /** A full bounded stream must revoke the proxy before an authenticated
+   * clean EXIT can overtake its already-admitted invalid frame. The worker
+   * kill is requested outside lifecycle lock; no real Node/Android process.
+   */
+  private static void testOverflowExitAtomicity()throws Exception {
+    Port port=new Port();P37RemoteProcess p=start(port);
+    byte[] full=new byte[P37RemoteProcess.MAX_FRAME_BYTES];
+    Arrays.fill(full,(byte)'s');
+    for(int i=0;i<P37RemoteProcess.BUFFER_BYTES/full.length;i++)
+      ok(p.onAuthenticatedStdout(UID,S,full),"bounded buffer fill "+i);
+    java.lang.reflect.Field f=P37RemoteProcess.class.getDeclaredField("stdout");
+    f.setAccessible(true);
+    Object stream=f.get(p);
+    AtomicBoolean overflowAccepted=new AtomicBoolean(true);
+    AtomicBoolean exitAccepted=new AtomicBoolean(true);
+    AtomicReference<Throwable> failure=new AtomicReference<>();
+    Thread overflow=new Thread(()->{
+      try {overflowAccepted.set(p.onAuthenticatedStdout(UID,S,b("overflow"))); }
+      catch(Throwable t){failure.compareAndSet(null,t);}
+    },"p37-test-overflow");
+    Thread exiter=new Thread(()->{
+      try {exitAccepted.set(p.onAuthenticatedExit(UID,S,0));}
+      catch(Throwable t){failure.compareAndSet(null,t);}
+    },"p37-test-exit-after-overflow");
+    synchronized(stream) {
+      overflow.start();
+      awaitBlocked(overflow,"overflow waiting for full stream");
+      exiter.start();
+      awaitBlocked(exiter,"exit waiting behind overflow");
+      ok(p.terminalReason()==P37RemoteProcess.TerminalReason.RUNNING,
+         "no terminal event before contended overflow decision");
+    }
+    overflow.join(5000);exiter.join(5000);
+    ok(!overflow.isAlive()&&!exiter.isAlive(),"overflow and exit terminate");
+    ok(failure.get()==null,"overflow and exit callbacks do not throw");
+    ok(!overflowAccepted.get()&&!exitAccepted.get(),
+       "invalid frame denied and later clean EXIT rejected");
+    ok(p.terminalReason()==P37RemoteProcess.TerminalReason.BUFFER_OVERFLOW,
+       "overflow terminal cannot be overwritten by clean exit");
+    ok(p.waitFor()==125&&port.kill==1,
+       "overflow discards stream and requests exactly one force stop");
+    ok(p.getInputStream().read()==-1,
+       "overflow erases unread stream bytes before exit can publish READY");
+    System.out.println("P37_OVERFLOW_EXIT_ORDER_FAIL_CLOSED=PASS");
+  }
+  /**
+   * A platform UID lookup may fail after construction. It must revoke a
+   * token-bearing stdout stream or EXIT callback without throwing through
+   * Android Messenger/Binder and without accepting a forged clean exit.
+   */
+  private static void testVerifierExceptionFailsClosed() throws Exception {
+    AtomicBoolean throwOnCheck=new AtomicBoolean(false);
+    Port stdoutPort=new Port();
+    P37RemoteProcess stdoutProcess=new P37RemoteProcess(UID,S,uid->{
+      if (throwOnCheck.get()) throw new IllegalStateException("verifier unavailable");
+      return uid==UID;
+    },stdoutPort);
+    ok(stdoutProcess.onAuthenticatedStdout(UID,S,
+          b("dsh web: http://127.0.0.1:3080/?token=synthetic-only\\n")),
+       "pre-failure frame accepted while native UID verifier healthy");
+    ok(!bufferZeroized(stdoutProcess.getInputStream()),
+       "pre-failure buffered READY synthetic positive control");
+    throwOnCheck.set(true);
+    ok(!stdoutProcess.onAuthenticatedStdout(UID,S,b("late frame")),
+       "throwing native UID verifier rejects stdout without escaping callback");
+    ok(stdoutProcess.terminalReason()==P37RemoteProcess.TerminalReason.IDENTITY_MISMATCH,
+       "runtime verifier error must publish identity failure terminal");
+    ok(stdoutProcess.waitFor()==125&&stdoutPort.kill==1,
+       "runtime verifier error requests one force stop");
+    ok(bufferZeroized(stdoutProcess.getInputStream())&&
+       stdoutProcess.getInputStream().read()==-1,
+       "runtime verifier failure discards unread token-bearing READY");
+    ok(!stdoutProcess.onAuthenticatedExit(UID,S,0),
+       "post-revocation authentic-looking clean exit cannot rewrite terminal");
+
+    AtomicBoolean exitVerifierFailure=new AtomicBoolean(false);
+    Port exitPort=new Port();
+    P37RemoteProcess exitProcess=new P37RemoteProcess(UID,S,uid->{
+      if(exitVerifierFailure.get())throw new IllegalArgumentException("temporary lookup failure");
+      return uid==UID;
+    },exitPort);
+    ok(exitProcess.onAuthenticatedStdout(UID,S,b("unread synthetic token\\n")),
+       "healthy verifier permits pre-exit stream");
+    exitVerifierFailure.set(true);
+    ok(!exitProcess.onAuthenticatedExit(UID,S,0),
+       "throwing verifier rejects exit without trusting zero status");
+    ok(exitProcess.terminalReason()==P37RemoteProcess.TerminalReason.IDENTITY_MISMATCH &&
+       exitProcess.waitFor()==125 && exitPort.kill==1,
+       "exit verifier exception revokes proxy instead of clean exit");
+    ok(bufferZeroized(exitProcess.getInputStream()),
+       "exit verifier exception removes unread stream bytes");
+    System.out.println("P37_UID_VERIFIER_RUNTIME_FAILURE_FAIL_CLOSED=PASS");
+  }
+  private static final class NativePipes implements Closeable {
+    final Pipe input = Pipe.open();
+    final Pipe output = Pipe.open();
+    final Pipe error = Pipe.open();
+    final OutputStream childOutput = Channels.newOutputStream(output.sink());
+    final OutputStream childError = Channels.newOutputStream(error.sink());
+    final InputStream childInput = Channels.newInputStream(input.source());
+    final P37RemoteProcess.Stdio stdio;
+    NativePipes(boolean merged) throws IOException {
+      OutputStream stdin = Channels.newOutputStream(input.sink());
+      InputStream stdout = Channels.newInputStream(output.source());
+      stdio = merged ? P37RemoteProcess.Stdio.merged(stdin, stdout) :
+          P37RemoteProcess.Stdio.split(stdin, stdout, Channels.newInputStream(error.source()));
+    }
+    @Override public void close() throws IOException {
+      for (Pipe pipe : new Pipe[] {input, output, error}) {
+        pipe.source().close();
+        pipe.sink().close();
+      }
+    }
+  }
+  private static void testNativePipeBackpressure() throws Exception {
+    ExecutorService tasks = Executors.newFixedThreadPool(2);
+    try (NativePipes pipes = new NativePipes(false)) {
+      Port port = new Port();
+      P37RemoteProcess process = new P37RemoteProcess(UID, S, uid -> uid == UID, port, pipes.stdio);
+      byte[] payload = new byte[2 * 1024 * 1024];
+      for (int i = 0; i < payload.length; i++) payload[i] = (byte) ('a' + i % 23);
+      CountDownLatch started = new CountDownLatch(1);
+      Future<?> writer = tasks.submit(() -> {
+        started.countDown();
+        pipes.childOutput.write(payload);
+        pipes.childOutput.close();
+        return null;
+      });
+      ok(started.await(2, TimeUnit.SECONDS), "native pipe writer started");
+      try {
+        writer.get(100, TimeUnit.MILLISECONDS);
+        throw new AssertionError("pipe writer did not apply backpressure");
+      } catch (TimeoutException expected) {
+        ok(process.isAlive() && port.kill == 0, "slow reader preserves live child");
+      }
+      Future<String> reader = tasks.submit(() -> readAll(process.getInputStream()));
+      writer.get(5, TimeUnit.SECONDS);
+      ok(new String(payload, StandardCharsets.US_ASCII).equals(reader.get(5, TimeUnit.SECONDS)),
+          "two MiB stream crosses native pipe without loss or frame overflow");
+      Future<String> stdin = tasks.submit(() -> readAll(pipes.childInput));
+      ok(process.getOutputStream() == process.getOutputStream(), "stdin endpoint identity stable");
+      process.getOutputStream().write(b("child input"));
+      process.getOutputStream().flush();
+      process.getOutputStream().close();
+      ok("child input".equals(stdin.get(2, TimeUnit.SECONDS)), "stdin write and close deliver EOF");
+      pipes.childError.write(b("tail"));
+      pipes.childError.close();
+      ok(process.onAuthenticatedExit(UID, S, 17), "pipe child exit accepted");
+      ok(process.waitFor() == 17, "pipe waitFor uses actual exit code");
+      ok("tail".equals(readAll(process.getErrorStream())), "exit preserves unread stderr tail");
+      ok(port.kill == 0, "normal pipe exit does not kill child");
+    } finally {
+      tasks.shutdownNow();
+      tasks.awaitTermination(2, TimeUnit.SECONDS);
+    }
+    System.out.println("P37_NATIVE_PIPE_BACKPRESSURE_STDIN_AND_EXIT=PASS");
+  }
+  private static void testNativePipeRevocation() throws Exception {
+    try (NativePipes pipes = new NativePipes(true)) {
+      Port port = new Port();
+      P37RemoteProcess process = new P37RemoteProcess(UID, S, uid -> uid == UID, port, pipes.stdio);
+      ok(process.getErrorStream().read() == -1, "merged pipe stderr is immediate EOF");
+      boolean reused=false;
+      try {new P37RemoteProcess(UID,S,uid->uid==UID,new Port(),pipes.stdio);}
+      catch(IllegalArgumentException denied){reused=true;}
+      ok(reused,"owned endpoints cannot be handed to a second Process");
+      process.getInputStream().close();
+      ok(process.isAlive() && port.kill == 0, "local pipe reader close keeps child alive");
+      process.onTransportLost();
+      ok(process.waitFor() == 125 && port.kill == 1, "pipe Binder death fails closed");
+      try {
+        process.getOutputStream().write(1);
+        throw new AssertionError("stdin remained writable after transport loss");
+      } catch (IOException expected) { checks.incrementAndGet(); }
+    }
+    try (NativePipes pipes = new NativePipes(false)) {
+      Port port = new Port();
+      P37RemoteProcess process = new P37RemoteProcess(UID, S, uid -> uid == UID, port, pipes.stdio);
+      ok(!process.onAuthenticatedStdout(UID, S, b("mixed")), "pipe mode rejects Binder data frames");
+      ok(process.waitFor() == 125 && port.kill == 1, "mixed transport revokes pipe process");
+      ok(!process.onAuthenticatedExit(UID, S, 0), "revoked pipe process rejects late clean exit");
+    }
+    try (NativePipes pipes = new NativePipes(false)) {
+      pipes.stdio.close();
+      boolean rejected=false;
+      try {new P37RemoteProcess(UID,S,uid->uid==UID,new Port(),pipes.stdio);}
+      catch(IllegalArgumentException denied){rejected=true;}
+      ok(rejected,"closed endpoints cannot create a live Process");
+    }
+    System.out.println("P37_NATIVE_PIPE_REVOCATION_AND_MERGED_EOF=PASS");
+  }
+  private static void testNativePipeBlockedIoCancellation() throws Exception {
+    ExecutorService tasks = Executors.newFixedThreadPool(3);
+    try (NativePipes pipes = new NativePipes(false)) {
+      Port port = new Port();
+      P37RemoteProcess process = new P37RemoteProcess(UID, S, uid -> uid == UID, port, pipes.stdio);
+      CountDownLatch entered = new CountDownLatch(2);
+      Future<Boolean> reader = tasks.submit(() -> {
+        entered.countDown();
+        try { process.getInputStream().read(); return false; }
+        catch (IOException closed) { return true; }
+      });
+      Future<Boolean> writer = tasks.submit(() -> {
+        entered.countDown();
+        try { process.getOutputStream().write(new byte[2 * 1024 * 1024]); return false; }
+        catch (IOException closed) { return true; }
+      });
+      ok(entered.await(2, TimeUnit.SECONDS), "native blocking IO started");
+      try {
+        writer.get(100, TimeUnit.MILLISECONDS);
+        throw new AssertionError("stdin writer did not block");
+      } catch (TimeoutException expected) { checks.incrementAndGet(); }
+      Future<?> cancel = tasks.submit(() -> process.onTransportLost());
+      cancel.get(2, TimeUnit.SECONDS);
+      ok(reader.get(2, TimeUnit.SECONDS), "revocation interrupts blocked native stdout read");
+      ok(writer.get(2, TimeUnit.SECONDS), "revocation interrupts blocked native stdin write");
+      ok(process.waitFor() == 125 && port.kill == 1, "IO cancellation publishes one terminal failure");
+    } finally {
+      tasks.shutdownNow();
+      tasks.awaitTermination(2, TimeUnit.SECONDS);
+    }
+    System.out.println("P37_NATIVE_PIPE_BLOCKED_IO_CANCELLED=PASS");
+  }
   public static void main(String[] args)throws Exception {
     testLifecycle();testIsolationAndReplay();testBoundedBuffer();
     testTimeoutAndDisconnect();testStdinAndFailures();
+    testLocalReaderCloseKeepsChildAlive();
+    testBufferedReadyTokenErasure();
+    testExitFrameAtomicity();testOverflowExitAtomicity();
+    testVerifierExceptionFailsClosed();
+    testNativePipeBackpressure();testNativePipeRevocation();
+    testNativePipeBlockedIoCancellation();
     System.out.println("P37_JAVA_PROCESS_LIFECYCLE_PROXY_TESTS=PASS assertions="+checks);
     System.out.println("P37_ORIGINAL_ENGINEMANAGER_WIRING=NO");
     System.out.println("P37_ANDROID_BINDER_RUNTIME_E2E=NOT_TESTED");

@@ -1,6 +1,8 @@
 package com.dsh.android.p83;
 
 import android.app.Activity;
+import android.content.SharedPreferences;
+import com.dsh.android.p185.P185ManualVerificationState;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Looper;
@@ -9,6 +11,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -28,6 +31,11 @@ public final class P83HiddenBrowserPane {
   private final TextView status;
   private final Button hideButton;
   private final Button showButton;
+  private final Button startManualButton;
+  private final Button endManualButton;
+  private final CheckBox manualOptIn;
+  private final P185ManualVerificationState manual=new P185ManualVerificationState();
+  private final SharedPreferences manualPrefs;
   private final int originalIdentity;
   private boolean hidden;
   private int completed,total=6;
@@ -39,6 +47,8 @@ public final class P83HiddenBrowserPane {
        browser.getParent()!=null)
       throw new SecurityException("P83_TRUSTED_FOREGROUND_SIDECAR_ONLY");
     owner=activity;web=browser;
+    manualPrefs=activity.getSharedPreferences("p185_manual_challenge_option",0);
+    manual.setEnabled(manualPrefs.getBoolean("enabled",false));
     originalIdentity=System.identityHashCode(browser);
     root=new FrameLayout(activity);
     root.setBackgroundColor(Color.rgb(15,23,42));
@@ -72,6 +82,23 @@ public final class P83HiddenBrowserPane {
        ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
     consent.topMargin=36;
     chatOverlay.addView(confirmation,consent);
+    manualOptIn=new CheckBox(activity);
+    manualOptIn.setText("允许人工验证模式（可选）");
+    manualOptIn.setTextColor(Color.WHITE);
+    manualOptIn.setChecked(manual.isEnabled());
+    chatOverlay.addView(manualOptIn);
+    startManualButton=new Button(activity);
+    startManualButton.setText("在当前内置浏览器中人工验证");
+    startManualButton.setAllCaps(false);
+    startManualButton.setVisibility(manual.isEnabled()?View.VISIBLE:View.GONE);
+    startManualButton.setOnClickListener(v->beginManualVerification());
+    chatOverlay.addView(startManualButton);
+    manualOptIn.setOnCheckedChangeListener((v,checked)->{
+      requireMain();
+      manual.setEnabled(checked);
+      manualPrefs.edit().putBoolean("enabled",checked).apply();
+      startManualButton.setVisibility(checked?View.VISIBLE:View.GONE);
+    });
     showButton=new Button(activity);
     showButton.setText("打开浏览器");
     showButton.setAllCaps(false);
@@ -89,6 +116,16 @@ public final class P83HiddenBrowserPane {
       Gravity.TOP|Gravity.END);
     button.topMargin=24;button.rightMargin=16;
     root.addView(hideButton,button);
+    endManualButton=new Button(activity);
+    endManualButton.setText("结束人工操作 · 返回聊天");
+    endManualButton.setAllCaps(false);
+    endManualButton.setOnClickListener(v->endManualVerification());
+    FrameLayout.LayoutParams manualExit=new FrameLayout.LayoutParams(
+        ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT,
+        Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
+    manualExit.bottomMargin=16;
+    root.addView(endManualButton,manualExit);
+    endManualButton.setVisibility(View.GONE);
     chatOverlay.setVisibility(View.GONE);
     refresh();
   }
@@ -103,6 +140,9 @@ public final class P83HiddenBrowserPane {
   }
   public void hideBrowser(){
     requireMain();
+    // The person must keep the actual challenge page interactable until
+    // explicitly ending takeover. Do not cover the WebView automatically.
+    if(manual.isTakeover())return;
     hidden=true;
     // Never call WebView.setVisibility(GONE), onPause(), removeView(),
     // destroy(), loadUrl() or CookieManager clear functions.
@@ -118,6 +158,36 @@ public final class P83HiddenBrowserPane {
     hideButton.setVisibility(View.VISIBLE);
     web.setVisibility(View.VISIBLE);
     refresh();
+  }
+  /** Optional feature: opt-in only; preserves this exact WebView and page. */
+  public boolean beginManualVerification(){
+    requireMain();
+    if(web.getParent()!=root || !web.isAttachedToWindow() ||
+       System.identityHashCode(web)!=originalIdentity ||
+       !manual.beginFromUser())return false;
+    // Hide chat overlay, do NOT reload URL, reset cookies, change UA,
+    // inject challenge scripts, or claim to solve site verification.
+    showBrowser();
+    hideButton.setVisibility(View.GONE);
+    endManualButton.setVisibility(View.VISIBLE);
+    return true;
+  }
+  /** User may end the manual interaction; no site success is inferred. */
+  public boolean endManualVerification(){
+    requireMain();
+    if(!manual.endFromUser())return false;
+    endManualButton.setVisibility(View.GONE);
+    hideButton.setVisibility(View.VISIBLE);
+    hideBrowser();
+    return true;
+  }
+  /** The actual AI browser dispatcher MUST enforce this when integrated. */
+  public boolean isAutomationPaused(){return manual.isTakeover();}
+  public boolean isManualVerificationEnabled(){return manual.isEnabled();}
+  public void revokeManualVerification(){
+    requireMain();
+    manual.revoke();
+    endManualButton.setVisibility(View.GONE);
   }
   public void completedStep(int n,int max){
     requireMain();

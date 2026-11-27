@@ -1,0 +1,46 @@
+name: macOS ARM64 preinstalled Android guest capability (read-only)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/mac_arm64_android_preflight/**'
+      - '.github/workflows/mac-arm64-android-preflight.yml'
+permissions:
+  contents: read
+jobs:
+  mac-arm64-existing-guest-prerequisites:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: macos-15
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test hardware and image classifications without Android tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile host_candidate/mac_arm64_android_preflight/probe.py
+          python3 host_candidate/mac_arm64_android_preflight/probe.py --selftest
+      - name: Inspect preinstalled native ARM64 Android guest prerequisites only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 host_candidate/mac_arm64_android_preflight/probe.py --inspect | tee "$RUNNER_TEMP/mac-arm64-preflight.txt"
+          grep -Fxq 'MAC_ARM64_HOST=PASS' "$RUNNER_TEMP/mac-arm64-preflight.txt"
+          grep -Fxq 'MAC_ANDROID_GUEST_BOOTED=NO' "$RUNNER_TEMP/mac-arm64-preflight.txt"
+          grep -Fxq 'MAC_ORIGINAL_NODE_OR_ENGINEMANAGER_STARTED=NO' "$RUNNER_TEMP/mac-arm64-preflight.txt"
+          grep -Fxq 'MAC_SDK_INSTALL_OR_LICENSE_ACCEPTANCE=NOT_ATTEMPTED' "$RUNNER_TEMP/mac-arm64-preflight.txt"
+          grep -Fxq 'MAC_FIXED_SIGNED_V139=BLOCKED' "$RUNNER_TEMP/mac-arm64-preflight.txt"
+      - name: Keep explicit release and permissions boundary
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/mac-arm64-preflight.txt"
+          echo 'Runner checked: standard macos-15 ARM64; no -xlarge paid runner' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No SDK downloads/license acceptance, emulator guest, device, APK signing or release' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P47/P142 host fallback: DENY; P109 native sensitive tools: DENY_ALL' >> "$GITHUB_STEP_SUMMARY"
+          echo 'GS native screenshot: OFF; production v139: BLOCKED' >> "$GITHUB_STEP_SUMMARY"

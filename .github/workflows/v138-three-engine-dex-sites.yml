@@ -1,0 +1,72 @@
+name: Exact signed v138 three EngineManager spawns (static, fail closed)
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'host_candidate/production_engine_three_spawn_dex/**'
+      - '.github/workflows/v138-three-engine-dex-sites.yml'
+permissions:
+  contents: read
+jobs:
+  original-v138-triple-spawn:
+    if: >-
+      github.event.pull_request.number == 80 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'dsh/p96-original-engine-stream-owner-narrow-20261030'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Zero-APK parser positive and negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile host_candidate/production_engine_three_spawn_dex/audit.py
+          python3 host_candidate/production_engine_three_spawn_dex/audit.py --selftest
+          python3 -m pip install --no-cache-dir -r host_candidate/requirements.txt
+      - name: Pin and audit exact original signed-v138 DEX only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = "u2584604327-a11y/dshe"
+          mkdir -p .p178tmp
+          trap 'rm -rf .p178tmp' EXIT
+          gh release download dsh-baseline-v135dsh-baseline-v135 \
+            --repo "$GH_REPO" \
+            --pattern 'DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk' \
+            --dir .p178tmp
+          apk=.p178tmp/DSH-vc138-P0-OFFLINE-TEST-fixed-signature.apk
+          printf '%s  %s\n' \
+            3ca56655d79afc57431636e340823e7071bc830615ca615c485b0b9a30b6e3e5 "$apk" | sha256sum -c -
+          timeout 95s python3 host_candidate/production_engine_three_spawn_dex/audit.py \
+            --original "$apk" --report .p178tmp/report.json > .p178tmp/status.txt
+          grep -Fxq 'V138_TRIPLE_ENGINE_EXACT_THREE_DEX_SPAWNS=PASS_STATIC' .p178tmp/status.txt
+          python3 - <<'PY'
+          import json
+          r=json.load(open(".p178tmp/report.json"))
+          assert [x["mode"] for x in r["sites"]]==["probe","config","primary"]
+          assert r["original_process_or_binder_wired"] is False
+          assert r["original_node_ready"] is False
+          assert r["formal_v139_apk"]=="BLOCKED"
+          print("V138_TRIPLE_ENGINE_REPORT_VALIDATION=PASS_STATIC")
+          PY
+          echo 'Exact original-v138 three DEX spawn sites: STATIC ONLY' >> "$GITHUB_STEP_SUMMARY"
+      - name: Destroy disposable input; preserve production DENY
+        if: always()
+        shell: bash
+        run: |
+          rm -rf .p178tmp
+          echo 'Original APK, DEX or derived report uploaded: NO' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Original production Binder/EngineManager bridge: NOT_WIRED' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P47/P142 host ProcessBuilder fallback: DENY' >> "$GITHUB_STEP_SUMMARY"
+          echo 'P109 sensitive Android tools: DENY_ALL' >> "$GITHUB_STEP_SUMMARY"
+          echo 'GS screenshots: OFF' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Official signed v139 APK: BLOCKED' >> "$GITHUB_STEP_SUMMARY"

@@ -60,6 +60,31 @@ public final class P77TarAuditTest {
     check(good.members==1&&good.bytes==2&&good.addons==0,"synthetic_regular");
     check(good.treeSha256.matches("[0-9a-f]{64}"),"opaque_tree_hash");
     check(!good.isExactOriginal(),"synthetic_cannot_impersonate_source");
+    final ByteArrayOutputStream observed=new ByteArrayOutputStream();
+    final int[] events=new int[3];
+    P77TarAudit.Result streamed=P77TarAudit.inspectGzipTo(new ByteArrayInputStream(gzip(normal)),
+      new P77TarAudit.MemberSink(){
+        public void begin(String name,boolean dir,long size)throws IOException{
+          check("pkg/index.js".equals(name)&&!dir&&size==2,"sink_canonical_metadata");events[0]++;
+        }
+        public void accept(byte[] b,int off,int len)throws IOException{observed.write(b,off,len);}
+        public void endMember(){events[1]++;}
+        public void sealOriginal(P77TarAudit.Result r){
+          check(!r.isExactOriginal(),"sink_cannot_authorize_synthetic_tree");events[2]++;
+        }
+      });
+    check(streamed.treeSha256.equals(good.treeSha256)&&events[0]==1&&events[1]==1&&events[2]==1&&
+          "42".equals(new String(observed.toByteArray(),StandardCharsets.UTF_8)),"sink_exact_bytes_and_digest");
+    final boolean[] sealed={false};
+    try{
+      P77TarAudit.inspectGzipTo(new ByteArrayInputStream(gzip(normal)),new P77TarAudit.MemberSink(){
+        public void begin(String name,boolean dir,long size){}
+        public void accept(byte[] b,int off,int len)throws IOException{throw new IOException("STOP");}
+        public void endMember(){throw new AssertionError("aborted member ended");}
+        public void sealOriginal(P77TarAudit.Result r){sealed[0]=true;}
+      });
+      throw new AssertionError("sink failure ignored");
+    }catch(IOException expected){check(!sealed[0],"failed_transfer_cannot_seal");}
     ByteArrayOutputStream traversal=new ByteArrayOutputStream();
     file(traversal,"../escape","x".getBytes(StandardCharsets.UTF_8),'0');
     check(fails(gzip(traversal)),"traversal_denied");

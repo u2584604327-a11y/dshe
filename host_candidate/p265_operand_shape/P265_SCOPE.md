@@ -1,0 +1,7 @@
+# P265 operand SHAPE subcategories — source-only, no release
+
+P264 actual one-shot CI #43354981672 verified all original method categories. It found 1 structured operand divergence in a code-size-stable original method, with a candidate encoding-format opcode change, and classed the mismatch as OPERAND_SHAPE; none as confirmed register/literal/resolved-reference value differences. It also found 214 unsupported payload methods and 278 other unknown operand-format methods, which are NOT accepted as parity. The unchanged P245 original exception-semantics DENY persists.
+
+P265 never reveals method identity, register numbers, operand values, pool descriptors or instruction locations. It refines only P263's OPERAND_SHAPE result into normalized count/tag differences, or the shape/arity/tag sequence of private raw operand tuples when normalized operands are unavailable. Crucially a RAW_LAYOUT_SAME_UNATTESTED result is NOT semantic parity or raw-value parity: it only means the operand record *shape* matches. A normalized value change is also never recast as equivalent. P265 independently verifies the P263 shape-method count, and leaves all 492 unknown methods UNATTESTED.
+
+New 28 adversarial synthetic fixtures plus 303 earlier = 331. Hard gates original P245, P47, P181/P182, P192 child UID egress, B3/B4 browser slot safety unchanged. No APK build, install, emulator, user phone, signing, private traces or published artifact in this P265 stage. PR #80 stays Draft; v139 STRUCTURAL_BLOCKED.
