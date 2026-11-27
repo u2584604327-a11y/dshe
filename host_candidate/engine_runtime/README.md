@@ -395,10 +395,13 @@ main-start call at byte PC 3912 to pass the exact original `EngineManager`
 receiver already in register `v2`. The strict verifier pins the register
 encoding and the new wrapper body. An unarmed wrapper reaches the ordinary
 P47 refusal. A one-use offer belongs to the exact receiver, captured argv,
-cwd, environment, authenticated child session and current HTTP proof. The TEST
-activity exercises the wrapper directly and checks that a retired receiver or
-replay receives the P47 refusal. The full original coroutine still requires a
-production Supervisor and owner authorization.
+cwd, environment and authenticated child session. The bridge consumes that
+offer before it transfers the verified original modules or opens the loopback
+listener. It returns the Process after the current listener proves original
+authentication and frontend delivery. The TEST activity invokes the wrapper
+and checks the refusal for a retired receiver and for replay. The original
+coroutine still needs isolated preparation for its earlier Termux and Android
+integration steps before this activation path can be used in production.
 
 The TEST activity invokes the original `writeWorkspacePatch` and
 `buildEngineArgs` in its fresh owner directory. The launch adapter checks the

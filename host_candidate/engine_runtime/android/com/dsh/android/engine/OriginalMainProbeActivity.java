@@ -1,6 +1,6 @@
 package com.dsh.android.engine;
 import android.app.Activity;import android.content.*;import android.os.*;import android.widget.*;
-import com.dsh.android.p50.P50ModuleStream;import com.dsh.p37.P37RemoteProcess;
+import com.dsh.p37.P37RemoteProcess;
 import java.lang.Process;
 import java.io.*;import java.nio.charset.StandardCharsets;import java.nio.file.*;import java.nio.file.attribute.*;import java.security.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.*;
 
@@ -41,38 +41,41 @@ public final class OriginalMainProbeActivity extends Activity {
         Integer portOption=generation==0?HttpProcessTransport.originalWebPortOption():Integer.valueOf(port);
         OriginalAndroidWebLaunch launch=OriginalAndroidWebLaunch.prepare(this,portOption);
         if(closed.get())return;setStage(generation==0?"FIRST_BIND":"RESTART_BIND");
-        OriginalMainTestSession bound=new OriginalMainTestSession(this);session=bound;bound.bind();
+        OriginalMainTestSession bound=new OriginalMainTestSession(this,
+            sent->post("ORIGINAL_MAIN_RESOURCE_WIRE_BYTES_SENT="+sent));session=bound;bound.bind();
         P37RemoteProcess raw=bound.awaitChild();post("ORIGINAL_MAIN_AUTHENTICATED_ISOLATED_CHILD=PASS generation="+generation);
         try{
           try{bound.awaitChild();throw new IllegalStateException("MAIN_CHILD_REPLAY_ACCEPTED");}
           catch(IOException denied){require("MAIN_CHILD_CLAIM_DENIED".equals(denied.getMessage()),"MAIN_CHILD_REPLAY_RESULT");}
           post("ORIGINAL_MAIN_CHILD_HANDOFF_REPLAY=DENY generation="+generation);
-          setStage("RESOURCE_TRANSFER");OutputStream resource=new FilterOutputStream(raw.getOutputStream()){
-            long sent,next=32L*1024*1024;
-            @Override public void write(int value)throws IOException{out.write(value);advanced(1);}
-            @Override public void write(byte[] bytes,int offset,int length)throws IOException{out.write(bytes,offset,length);advanced(length);}
-            void advanced(int count){sent+=count;if(sent>=next){next=sent+32L*1024*1024;post("ORIGINAL_MAIN_RESOURCE_WIRE_BYTES_SENT="+sent);}}
-          };
-          try(InputStream original=getAssets().open("engine.bin")){P50ModuleStream.writeOriginalForService(original,resource);}
-          post("ORIGINAL_MAIN_RESOURCE_SOURCE=VERIFIED_COMPLETE");if(closed.get())return;
-          setStage("OWNED_STORAGE_AND_MAIN");DurableSessionSnapshot store=new DurableSessionSnapshot(root,owner);
-          HttpProcessTransport active;
-          try{active=bound.openLaunchTransport(raw,launch,store);}
-          catch(Exception bad){store.close();throw bad;}
-          transport=active;if(closed.get()){active.close();return;}
-          require(active.getErrorStream().read()==-1,"MAIN_MERGED_ERROR_STREAM");
-          OriginalMainStartup startup=OriginalMainStartup.await(active);port=startup.port();
-          post("ORIGINAL_MAIN_RUNCLI=INVOKED");setStage("AUTHENTICATION");
-          if(generation==1)startup.verifyRetiredCredentials(oldToken,oldCookie);
-          setStage("OWNED_HTTP_READY_PROOF");
-          String cookie=startup.verifyForReady();
-          post("ORIGINAL_MAIN_BROWSER_PANE_CLIENT_BYTES=PASS generation="+generation);
-          OriginalMainStartup.requireVerifiedReady(active,startup.privateUrl());
-          try(OriginalMainOwnerHandoff offer=OriginalMainOwnerHandoff.offer(launch,bound,active)){
+          if(closed.get())return;
+          setStage("OWNER_BRIDGE_ACTIVATION");
+          DurableSessionSnapshot store=new DurableSessionSnapshot(root,owner);
+          OriginalMainOwnerHandoff lease;
+          try{lease=OriginalMainOwnerHandoff.offer(launch,bound,raw,store);}
+          catch(IOException|RuntimeException denied){
+            try{store.close();}catch(IOException release){denied.addSuppressed(release);}
+            throw denied;
+          }
+          OriginalMainOwnerHandoff.VerifiedLaunch admitted;
+          try(OriginalMainOwnerHandoff offer=lease){
             if(retiredLaunch!=null)expectOwnedStartDenied(retiredLaunch);
-            require(invokeOwnedStart(launch)==active,"MAIN_OWNER_HANDOFF_EXACT_PROCESS");
+            Process launched=invokeOwnedStart(launch);
+            admitted=offer.verifiedLaunch();
+            transport=admitted.process;
+            require(launched==admitted.process,"MAIN_OWNER_HANDOFF_EXACT_PROCESS");
             expectOwnedStartDenied(launch);
           }
+          HttpProcessTransport active=admitted.process;
+          if(closed.get())return;
+          require(active.getErrorStream().read()==-1,"MAIN_MERGED_ERROR_STREAM");
+          OriginalMainStartup startup=admitted.startup;port=startup.port();
+          String cookie=admitted.cookie;
+          if(generation==1)startup.verifyRetiredCredentials(oldToken,oldCookie);
+          post("ORIGINAL_MAIN_RESOURCE_SOURCE=VERIFIED_COMPLETE");
+          post("ORIGINAL_MAIN_RUNCLI=INVOKED");
+          post("ORIGINAL_MAIN_BROWSER_PANE_CLIENT_BYTES=PASS generation="+generation);
+          post("ORIGINAL_MAIN_MOBILE_CLIENT_BYTES_AND_PRIVILEGE_FENCE=PASS generation="+generation);
           post("ORIGINAL_MAIN_OWNER_BOUND_BRIDGE=PASS generation="+generation);
           InputStream admittedOutput=active.getInputStream();
           require(OriginalMainStartup.permitsVerifiedAnnouncement(active,OriginalMainHttpChecks.line(admittedOutput)),"MAIN_VERIFIED_STDOUT_HANDOFF");
@@ -115,16 +118,20 @@ public final class OriginalMainProbeActivity extends Activity {
     }
     return hex(digest.digest());
   }
-  private Process invokeOwnedStart(OriginalAndroidWebLaunch launch)throws ReflectiveOperationException{
+  private Process invokeOwnedStart(OriginalAndroidWebLaunch launch)throws ReflectiveOperationException,IOException{
     Class<?> bridge=Class.forName("com.dsh.android.engine.OriginalStartupDiagnostics",true,getClassLoader());
-    return (Process)bridge.getMethod("startOwned",ProcessBuilder.class,launch.engine.getClass())
-        .invoke(null,launch.original,launch.engine);
+    try{return (Process)bridge.getMethod("startOwned",ProcessBuilder.class,launch.engine.getClass())
+        .invoke(null,launch.original,launch.engine);}
+    catch(java.lang.reflect.InvocationTargetException denied){
+      if(denied.getCause() instanceof IOException)throw (IOException)denied.getCause();
+      throw denied;
+    }
   }
   private void expectOwnedStartDenied(OriginalAndroidWebLaunch launch)throws Exception{
     try{invokeOwnedStart(launch);throw new IOException("MAIN_OWNER_HANDOFF_REPLAY_ACCEPTED");}
-    catch(java.lang.reflect.InvocationTargetException denied){
-      require(denied.getCause() instanceof IOException&&"P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK"
-          .equals(denied.getCause().getMessage()),"MAIN_OWNER_HANDOFF_REPLAY_RESULT");
+    catch(IOException denied){
+      require("P47_ISOLATED_SUPERVISOR_UNAVAILABLE_NO_HOST_FALLBACK"
+          .equals(denied.getMessage()),"MAIN_OWNER_HANDOFF_REPLAY_RESULT");
     }
   }
   private void checkReadyDiagnostics()throws ReflectiveOperationException,IOException{

@@ -1,17 +1,18 @@
 package com.dsh.android.engine;
 import android.content.*;import android.os.*;
 import com.dsh.android.p48.P48FixedIsolatedChild;
+import com.dsh.android.p50.P50ModuleStream;
 import com.dsh.android.p68.P68AndroidBinderIntake;
 import com.dsh.android.p68.P184ChildStartReceipt;
 import com.dsh.p37.P37RemoteProcess;
-import java.io.*;import java.security.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.*;
+import java.io.*;import java.security.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.*;import java.util.function.LongConsumer;
 
 /** One authenticated, separately named Android isolated instance, TEST ONLY.
  * No argv/path/owner supplied by an Intent or Binder payload; no production
  * P47 registration. The physical main test can reuse the exact runtime wire.
  */
 final class OriginalMainTestSession implements AutoCloseable {
-  private final Context context;private final Handler main=new Handler(Looper.getMainLooper());
+  private final Context context;private final LongConsumer progress;private final Handler main=new Handler(Looper.getMainLooper());
   private final AtomicBoolean closed=new AtomicBoolean();
   private final AtomicBoolean bindRequested=new AtomicBoolean(),childClaimed=new AtomicBoolean();
   private final CompletableFuture<P37RemoteProcess> started=new CompletableFuture<>();
@@ -55,7 +56,10 @@ final class OriginalMainTestSession implements AutoCloseable {
         },pipes,epoch);
         Bundle data=new Bundle();data.putString("session",session);data.putLong("epoch",epoch);data.putLong("request_seq",1);
         data.putLong("issued_ms",SystemClock.elapsedRealtime());data.putBundle("process_pipes",pipes.workerBundle());
-        Message request=Message.obtain(null,P48FixedIsolatedChild.START);request.setData(data);request.replyTo=inbox;worker.send(request);
+        Message request=Message.obtain(null,P48FixedIsolatedChild.START);request.setData(data);request.replyTo=inbox;
+        synchronized(OriginalMainTestSession.this){
+          if(!closed.get())worker.send(request);
+        }
       }catch(IOException|RemoteException|RuntimeException bad){reject("START_TRANSFER");}
       finally{if(pipes!=null){if(!pipes.closeWorkerCopies())reject("PIPE_OWNERSHIP");if(closed.get())pipes.close();}}
     }
@@ -63,12 +67,12 @@ final class OriginalMainTestSession implements AutoCloseable {
     @Override public void onBindingDied(ComponentName name){reject("BINDING_DIED");}
     @Override public void onNullBinding(ComponentName name){reject("NULL_BINDING");}
   };
-  OriginalMainTestSession(Context host){
+  OriginalMainTestSession(Context host,LongConsumer progress){
     if(host==null||Build.VERSION.SDK_INT<35||android.os.Process.isIsolated()||
        !"com.dsh.p51.networkprobe".equals(host.getPackageName())||
        host.checkSelfPermission("android.permission.INTERNET")!=android.content.pm.PackageManager.PERMISSION_GRANTED)
       throw new SecurityException("MAIN_TEST_CONTEXT_REQUIRED");
-    context=host.getApplicationContext();byte[] random=new byte[32];new SecureRandom().nextBytes(random);
+    context=host.getApplicationContext();this.progress=progress;byte[] random=new byte[32];new SecureRandom().nextBytes(random);
     StringBuilder id=new StringBuilder();for(byte b:random)id.append(String.format(Locale.ROOT,"%02x",b&255));session=id.toString();Arrays.fill(random,(byte)0);
   }
   void bind(){
@@ -98,26 +102,45 @@ final class OriginalMainTestSession implements AutoCloseable {
   HttpProcessTransport openLaunchTransport(P37RemoteProcess exact,OriginalAndroidWebLaunch launch,
       DurableSessionSnapshot store)throws IOException{
     synchronized(this){
-      if(closed.get()||!childClaimed.get()||exact==null||process!=exact||launch==null||transportOpened)
+      if(closed.get()||!handoffOffered||launchOwner!=launch||!ownsChild(exact)||transportOpened)
         throw new IOException("MAIN_LAUNCH_AUTHENTICATED_CHILD_REQUIRED");
       transportOpened=true;
     }
+    transferResources(exact);
+    if(closed.get()||!ownsChild(exact))throw new IOException("MAIN_TEST_SESSION_CLOSED");
     HttpProcessTransport transport=HttpProcessTransport.forOriginalWebLaunch(exact,session,epoch,launch.plan,store);
     synchronized(this){
       if(!closed.get()){
         launchTransport=transport;
-        launchOwner=launch;
         return transport;
       }
     }
     transport.close();
     throw new IOException("MAIN_TEST_SESSION_CLOSED");
   }
-  synchronized boolean ownsLaunch(OriginalAndroidWebLaunch owner,HttpProcessTransport transport){
-    return !closed.get()&&launchOwner==owner&&launchTransport==transport&&process!=null&&process.isAlive();
+  private void transferResources(P37RemoteProcess exact)throws IOException{
+    OutputStream output=new FilterOutputStream(exact.getOutputStream()){
+      private long sent,next=32L*1024*1024;
+      @Override public void write(int value)throws IOException{out.write(value);advanced(1);}
+      @Override public void write(byte[] bytes,int offset,int length)throws IOException{out.write(bytes,offset,length);advanced(length);}
+      private void advanced(int count){
+        sent+=count;
+        if(progress!=null&&sent>=next){next=sent+32L*1024*1024;progress.accept(sent);}
+      }
+    };
+    try(InputStream original=context.getAssets().open("engine.bin")){
+      P50ModuleStream.writeOriginalForService(original,output);
+    }
   }
-  synchronized boolean reserveHandoff(OriginalAndroidWebLaunch owner,HttpProcessTransport transport){
-    if(handoffOffered||!ownsLaunch(owner,transport)||!transport.hasCurrentReadyProof())return false;
+  private boolean ownsChild(P37RemoteProcess exact){
+    return childClaimed.get()&&exact!=null&&process==exact&&exact.isAlive();
+  }
+  synchronized boolean ownsLaunch(OriginalAndroidWebLaunch owner,HttpProcessTransport transport){
+    return !closed.get()&&launchOwner==owner&&launchTransport==transport&&ownsChild(process);
+  }
+  synchronized boolean reserveHandoff(OriginalAndroidWebLaunch owner,P37RemoteProcess exact){
+    if(closed.get()||handoffOffered||!ownsChild(exact))return false;
+    launchOwner=owner;
     handoffOffered=true;
     return true;
   }
@@ -127,10 +150,20 @@ final class OriginalMainTestSession implements AutoCloseable {
   }
   private void reject(String fixed){if(!closed.get())failure=fixed;started.completeExceptionally(new IOException("MAIN_TEST_SESSION_DENIED"));close();}
   @Override public void close(){
-    if(!closed.compareAndSet(false,true))return;
+    HttpProcessTransport active;
+    synchronized(this){
+      if(!closed.compareAndSet(false,true))return;
+      active=launchTransport;
+    }
     started.completeExceptionally(new IOException("MAIN_TEST_SESSION_CLOSED"));
     if(process!=null&&process.isAlive())process.destroyForcibly();
     if(pipes!=null)pipes.close();
+    if(active!=null){
+      if(Looper.myLooper()==Looper.getMainLooper()){
+        Thread release=new Thread(active::close,"dsh-owned-launch-revoke");
+        release.setDaemon(true);release.start();
+      }else active.close();
+    }
     main.post(()->{
       if(intake!=null)intake.disconnected();
       if(linked&&worker!=null){worker.getBinder().unlinkToDeath(died,0);linked=false;}

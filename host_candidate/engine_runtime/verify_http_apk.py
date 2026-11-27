@@ -21,6 +21,59 @@ def require(value,code):
     if not value:raise RuntimeError(code)
 
 
+def method_references(view,methods,owner,name):
+    matching=[method for key,method in methods.items() if key[0]==owner and key[1]==name]
+    require(len(matching)==1,'HTTP_VERIFY_METHOD_MISSING')
+    return [view.instruction(raw)[1] for raw in view.rows(matching[0]).values()]
+
+
+def require_call_order(refs,expected,code):
+    calls=[ref[:2] for ref in refs if isinstance(ref,tuple) and len(ref)==4 and ref[:2] in expected]
+    require(calls==list(expected),code)
+
+
+def verify_owner_activation(view,methods):
+    prefix='Lcom/dsh/android/engine/'
+    handoff=prefix+'OriginalMainOwnerHandoff;'
+    session=prefix+'OriginalMainTestSession;'
+    startup=prefix+'OriginalMainStartup;'
+    activity=prefix+'OriginalMainProbeActivity;'
+    transport=prefix+'HttpProcessTransport;'
+    plan=prefix+'OriginalWebLaunch;'
+    launch=prefix+'OriginalAndroidWebLaunch;'
+    store=prefix+'DurableSessionSnapshot;'
+    verified=prefix+'OriginalMainOwnerHandoff$VerifiedLaunch;'
+    child='Lcom/dsh/p37/P37RemoteProcess;'
+    builder='Ljava/lang/ProcessBuilder;'
+    process='Ljava/lang/Process;'
+    string='Ljava/lang/String;'
+    def reference(owner,name,returned,*parameters):
+        return owner.encode(),name.encode(),tuple(param.encode() for param in parameters),returned.encode()
+    def calls(owner,name,*expected):
+        selected={ref[:2] for ref in expected}
+        refs=method_references(view,methods,owner,name)
+        actual=tuple(ref for ref in refs if isinstance(ref,tuple) and len(ref)==4 and ref[:2] in selected)
+        require(actual==expected,'MAIN_TEST_OWNER_ACTIVATION_CALL_ORDER')
+    calls(activity,'verify',reference(handoff,'offer',handoff,launch,session,child,store),
+          reference(activity,'invokeOwnedStart',process,launch),reference(handoff,'verifiedLaunch',verified))
+    calls(handoff,'claimOrDeny',reference('Lcom/dsh/android/p47/P47LaunchGate;','startOrDeny',process,builder),
+          reference(handoff,'activate',process,builder))
+    calls(handoff,'activate',reference(plan,'requireSame','V',builder),
+          reference(session,'openLaunchTransport',transport,child,launch,store),
+          reference(startup,'await',startup,transport),reference(startup,'verifyForReady',string),
+          reference(startup,'requireVerifiedReady','V',process,string),
+          reference(session,'ownsLaunch','Z',launch,transport),reference(transport,'hasCurrentReadyProof','Z'))
+    calls(session,'openLaunchTransport',reference(session,'ownsChild','Z',child),
+          reference(session,'transferResources','V',child),reference(session,'ownsChild','Z',child),
+          reference(transport,'forOriginalWebLaunch',transport,process,string,'J',plan,store))
+    calls(session,'transferResources',reference('Lcom/dsh/android/p50/P50ModuleStream;','writeOriginalForService',
+          'Lcom/dsh/android/p77/P77TarAudit$Result;','Ljava/io/InputStream;','Ljava/io/OutputStream;'))
+    require(not any(ref[0] in (session.encode(),startup.encode()) and
+                    ref[1] in (b'openLaunchTransport',b'await',b'verifyForReady')
+                    for ref in method_references(view,methods,activity,'verify')
+                    if isinstance(ref,tuple) and len(ref)==4),'MAIN_TEST_ACTIVITY_STARTS_BEFORE_BRIDGE')
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('original',type=Path);parser.add_argument('candidate',type=Path)
@@ -50,24 +103,14 @@ def main():
                                      'Lcom/dsh/android/engine/OriginalAndroidWebLaunch;',
                                      'Lcom/dsh/android/engine/OriginalMainOwnerHandoff;']
         require(all(any(key[0]==name for key in methods) for name in needed),'HTTP_CLASSES_MISSING')
-        if main:
-            body=[method for key,method in methods.items()
-                  if key[0]=='Lcom/dsh/android/engine/OriginalMainProbeActivity;' and key[1]=='verify']
-            require(len(body)==1,'MAIN_TEST_VERIFICATION_METHOD')
-            refs=[view.instruction(raw)[1] for raw in view.rows(body[0]).values()]
-            expected=([b'await',b'verifyForReady',b'requireVerifiedReady'] if args.owned_ready or args.owner_bound else
-                      [b'await',b'authenticate',b'verifyFrontend'])
-            calls=[ref[1] for ref in refs if isinstance(ref,tuple) and len(ref)==4 and
-                   ref[0]==b'Lcom/dsh/android/engine/OriginalMainStartup;' and
-                   ref[1] in expected]
-            require(calls==expected,'MAIN_TEST_PRIVATE_STARTUP_CALLS')
         if args.owner_bound:
-            handoff=[method for key,method in methods.items() if key[0]==needed[-1] and key[1]=='claimOrDeny']
-            require(len(handoff)==1,'MAIN_TEST_OWNER_BOUND_WRAPPER')
-            refs=[view.instruction(raw)[1] for raw in view.rows(handoff[0]).values()]
-            require(refs.count((b'Lcom/dsh/android/p47/P47LaunchGate;',b'startOrDeny',
-                                (b'Ljava/lang/ProcessBuilder;',),b'Ljava/lang/Process;'))==1,
-                    'MAIN_TEST_OWNER_BOUND_FAIL_CLOSED')
+            verify_owner_activation(view,methods)
+        elif main:
+            refs=method_references(view,methods,'Lcom/dsh/android/engine/OriginalMainProbeActivity;','verify')
+            expected=([b'await',b'verifyForReady',b'requireVerifiedReady'] if args.owned_ready else
+                      [b'await',b'authenticate',b'verifyFrontend'])
+            require_call_order(refs,[(b'Lcom/dsh/android/engine/OriginalMainStartup;',name) for name in expected],
+                               'MAIN_TEST_PRIVATE_STARTUP_CALLS')
         for key,method in methods.items():
             if key[0] in ([needed[1]]+needed[5:]) and method.get_code():
                 require(not any(view.instruction(raw)[1]==(b'Ljava/lang/ProcessBuilder;',b'start',(),b'Ljava/lang/Process;')
@@ -99,6 +142,7 @@ def main():
     print('HTTP_TEST_ACTUAL_APK_BINDER_UID_FIXED_CHILD_AND_NO_HOST_EXEC=PASS_STATIC')
     print('HTTP_TEST_EXPLICIT_BOOTSTRAP_AND_DEFAULT_ALLOWLIST_NEGATIVES=PASS')
     if main:print('MAIN_TEST_PRIVATE_STARTUP_AUTH_AND_FRONTEND_CALLS_IN_ACTUAL_APK=PASS_STATIC')
+    if args.owner_bound:print('MAIN_TEST_OWNER_BRIDGE_ACTIVATES_VERIFIED_RESOURCES_AND_HTTP=PASS_STATIC')
     print('HTTP_TEST_ARM64_NODE_HTTP_RUNTIME=REQUIRES_DEVICE')
 
 

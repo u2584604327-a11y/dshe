@@ -1,38 +1,58 @@
 package com.dsh.android.engine;
 
+import android.os.Looper;
+
 import com.dsh.android.p47.P47LaunchGate;
+import com.dsh.p37.P37RemoteProcess;
 
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-/** One-use handoff for the exact original receiver in the separate TEST APK. */
+/** One-use activation for the exact original receiver in the separate TEST APK. */
 public final class OriginalMainOwnerHandoff implements AutoCloseable {
     private static final Map<Object, OriginalMainOwnerHandoff> pending = new IdentityHashMap<>();
     private static final long MAX_AGE = TimeUnit.SECONDS.toNanos(12);
 
+    static final class VerifiedLaunch {
+        final HttpProcessTransport process;
+        final OriginalMainStartup startup;
+        final String cookie;
+
+        private VerifiedLaunch(HttpProcessTransport process, OriginalMainStartup startup, String cookie) {
+            this.process = process;
+            this.startup = startup;
+            this.cookie = cookie;
+        }
+    }
+
     private final OriginalAndroidWebLaunch owner;
     private final OriginalMainTestSession session;
-    private final HttpProcessTransport process;
+    private final P37RemoteProcess child;
+    private final DurableSessionSnapshot store;
     private final long issuedAt = System.nanoTime();
     private boolean revoked;
+    private VerifiedLaunch verified;
 
     private OriginalMainOwnerHandoff(OriginalAndroidWebLaunch owner, OriginalMainTestSession session,
-            HttpProcessTransport process) {
+            P37RemoteProcess child, DurableSessionSnapshot store) {
         this.owner = owner;
         this.session = session;
-        this.process = process;
+        this.child = child;
+        this.store = store;
     }
 
     static OriginalMainOwnerHandoff offer(OriginalAndroidWebLaunch owner, OriginalMainTestSession session,
-            HttpProcessTransport process) throws IOException {
+            P37RemoteProcess child, DurableSessionSnapshot store) throws IOException {
+        if (store == null) throw new IOException("MAIN_OWNER_STORE_REQUIRED");
         owner.plan.requireSame(owner.original);
         synchronized (pending) {
-            if (pending.containsKey(owner.engine) || pending.size() >= 8 || !session.reserveHandoff(owner, process)) {
+            if (pending.containsKey(owner.engine) || pending.size() >= 8 || !session.reserveHandoff(owner, child)) {
                 throw new IOException("MAIN_OWNER_HANDOFF_UNAVAILABLE");
             }
-            OriginalMainOwnerHandoff handoff = new OriginalMainOwnerHandoff(owner, session, process);
+            OriginalMainOwnerHandoff handoff = new OriginalMainOwnerHandoff(owner, session, child, store);
             pending.put(owner.engine, handoff);
             return handoff;
         }
@@ -43,26 +63,60 @@ public final class OriginalMainOwnerHandoff implements AutoCloseable {
         OriginalMainOwnerHandoff handoff;
         synchronized (pending) { handoff = pending.remove(receiver); }
         if (handoff == null) return P47LaunchGate.startOrDeny(builder);
+        return handoff.activate(builder);
+    }
+
+    private Process activate(ProcessBuilder builder) throws IOException {
         boolean handedOff = false;
         try {
-            synchronized (handoff) {
-                handoff.owner.plan.requireSame(builder);
-                long age = System.nanoTime() - handoff.issuedAt;
-                if (handoff.revoked || age < 0 || age > MAX_AGE
-                        || !handoff.session.ownsLaunch(handoff.owner, handoff.process)
-                        || !handoff.process.hasCurrentReadyProof()) {
-                    throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
-                }
-                handedOff = true;
-                return handoff.process;
+            owner.plan.requireSame(builder);
+            synchronized (this) {
+                long age = System.nanoTime() - issuedAt;
+                if (revoked || age < 0 || age > MAX_AGE) throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
             }
+            if (Looper.myLooper() == Looper.getMainLooper()) throw new IOException("MAIN_OWNER_BACKGROUND_REQUIRED");
+            if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("MAIN_OWNER_START_INTERRUPTED");
+            HttpProcessTransport process = session.openLaunchTransport(child, owner, store);
+            OriginalMainStartup startup = OriginalMainStartup.await(process);
+            String cookie = startup.verifyForReady();
+            OriginalMainStartup.requireVerifiedReady(process, startup.privateUrl());
+            synchronized (this) {
+                if (revoked || !session.ownsLaunch(owner, process) || !process.hasCurrentReadyProof()) throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
+                verified = new VerifiedLaunch(process, startup, cookie);
+                handedOff = true;
+                return process;
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new InterruptedIOException("MAIN_OWNER_START_INTERRUPTED");
         } finally {
-            if (!handedOff) handoff.process.close();
+            if (!handedOff) disposeUnclaimed();
+        }
+    }
+
+    synchronized VerifiedLaunch verifiedLaunch() throws IOException {
+        if (revoked || verified == null || !session.ownsLaunch(owner, verified.process)
+                || !verified.process.hasCurrentReadyProof()) throw new IOException("MAIN_OWNER_HANDOFF_REVOKED");
+        return verified;
+    }
+
+    private void disposeUnclaimed() {
+        try {
+            session.close();
+        } finally {
+            try { store.close(); } catch (IOException ignored) { /* Preserve the activation failure. */ }
         }
     }
 
     @Override public void close() {
-        synchronized (this) { revoked = true; }
+        final boolean unclaimed;
+        synchronized (this) {
+            if (revoked) return;
+            revoked = true;
+            unclaimed = verified == null;
+            verified = null;
+        }
         synchronized (pending) { pending.remove(owner.engine, this); }
+        if (unclaimed) disposeUnclaimed();
     }
 }
